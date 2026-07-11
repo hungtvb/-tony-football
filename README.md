@@ -36,3 +36,11 @@ Toàn bộ game dùng Canvas 2D và Web Audio API, có ba cấp độ AI, stamin
 - Bóng có đổ bóng, phản sáng và vệt chuyển động
 - Camera bám bóng, zoom động, rung khi ghi bàn và vignette điện ảnh
 - HUD nâng cấp với scoreboard và hiệu ứng điểm số
+
+## Animation Sprint 2
+
+- Chu kỳ chạy thay đổi theo tốc độ thực của từng cầu thủ
+- Animation riêng cho nhận bóng, chuyền, sút và xoạc bóng
+- Thủ môn có trang phục, găng tay và tư thế bay người
+- Hiệu ứng tăng tốc, vòng va chạm và cỏ bắn khi tắc bóng
+- Bóng xoay theo cú sút và nhịp rê bóng
