@@ -8,6 +8,7 @@ Game bóng đá arcade 6v6 chạy trực tiếp trên trình duyệt, không c�
 - `J`: chuyền bóng hoặc tắc bóng
 - Giữ và thả `K`: sút bóng theo lực
 - `L`: tăng tốc
+- `Q`: giữ bóng sát chân và xoay trở chính xác
 - `Space`: đổi cầu thủ
 - `C`: chuyển camera Broadcast / Close Action / Tactical
 - `V`: chuyển thời tiết Clear / Rain
@@ -80,3 +81,13 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Luồng sáng thể tích từ bốn cột đèn tạo chiều sâu sân vận động
 - Lưới khung thành rung và giảm chấn sau mỗi bàn thắng
 - Canvas 2D dự phòng có lớp mưa và màu sân ướt tương ứng
+
+## Pro Controls — Sprint 6
+
+- Joystick analog có deadzone, response curve và tốc độ theo độ nghiêng thực
+- Gia tốc, giảm tốc và đổi hướng phụ thuộc quán tính thay vì chuyển động tức thời
+- Chuyền bóng ưu tiên đồng đội nằm trên hướng điều khiển đang giữ
+- Hỗ trợ ngắm dọc khung thành khi sút, giảm độ ngẫu nhiên cho người chơi
+- Đổi cầu thủ thông minh dựa trên quỹ đạo bóng, hướng di chuyển và vị trí phòng ngự
+- Giữ `Q` hoặc nút GIỮ BÓNG trên mobile để rê sát chân, xoay nhanh và tiết kiệm stamina
+- Cụm nút cảm ứng có phản hồi rung nhẹ trên thiết bị hỗ trợ
