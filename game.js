@@ -72,7 +72,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     goalSequence: null, goalScorer: null, weather: "rain"
   };
   let players = [];
-  const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0 };
+  const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0, marking: false, controlMode: "" };
 
   function createTeams() {
     for (const view of playerViews.values()) scene3D?.remove(view.root);
@@ -133,6 +133,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     }
     return best;
   }
+
+  function isAttacking() { return ball.owner?.team === HOME; }
 
   function switchPlayer() {
     if (ball.owner?.team === HOME) { game.selected = ball.owner; return; }
@@ -227,14 +229,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function updateUser(player, dt) {
-    const sprinting = input.keys.has("KeyL") || input.keys.has("ShiftLeft") || $("mobileSprint").classList.contains("active");
-    const precision=input.keys.has("KeyQ")||$("mobileControl").classList.contains("active");const hasMove=input.magnitude>.03;
+    const attacking=isAttacking();const sprinting=attacking&&(input.keys.has("KeyL")||input.keys.has("ShiftLeft")||$("mobileSprint").classList.contains("active"));
+    const precision=input.keys.has("KeyQ");const marking=!attacking&&(input.keys.has("KeyJ")||input.marking);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
+    if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
+    const hasMove=controlMagnitude>.03;
     const boost = sprinting && !precision && player.stamina > 2 ? 1.42 : 1;
     player.sprinting = sprinting && !precision && player.stamina > 2 && hasMove;
-    player.controlBoost=Math.max(0,player.controlBoost-dt);const speed=(precision?132:205)*boost*input.magnitude;
+    player.controlBoost=Math.max(0,player.controlBoost-dt);const speed=(marking?158:precision?132:205)*boost*controlMagnitude;
     if (hasMove) {
-      const current=normalize(player.vx||input.moveX,player.vy||input.moveY);const turnDot=current.x*input.aimX+current.y*input.aimY;const response=(precision?18:player.controlBoost>0?16:turnDot<-.15?8:12);player.vx=lerp(player.vx,input.aimX*speed,1-Math.exp(-dt*response));player.vy=lerp(player.vy,input.aimY*speed,1-Math.exp(-dt*response));
-      player.dirX=lerp(player.dirX,input.aimX,1-Math.exp(-dt*18));player.dirY=lerp(player.dirY,input.aimY,1-Math.exp(-dt*18));const facing=normalize(player.dirX,player.dirY);player.dirX=facing.x;player.dirY=facing.y;
+      const current=normalize(player.vx||controlX,player.vy||controlY);const turnDot=current.x*controlX+current.y*controlY;const response=(marking?14:precision?18:player.controlBoost>0?16:turnDot<-.15?8:12);player.vx=lerp(player.vx,controlX*speed,1-Math.exp(-dt*response));player.vy=lerp(player.vy,controlY*speed,1-Math.exp(-dt*response));
+      const face=marking&&markTarget?normalize(markTarget.x-player.x,markTarget.y-player.y):{x:controlX,y:controlY};player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*18));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*18));const facing=normalize(player.dirX,player.dirY);player.dirX=facing.x;player.dirY=facing.y;
       player.stamina=clamp(player.stamina-dt*(player.sprinting?11*input.magnitude:precision ? .35 : 1.1),0,100);
     } else { player.vx*=Math.pow(.0018,dt);player.vy*=Math.pow(.0018,dt);player.stamina=clamp(player.stamina+dt*(precision?6.2:5),0,100); }
   }
@@ -301,7 +305,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (ball.lock > 0) ball.lock -= dt;
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
-      const owner = ball.owner; const closeControl=owner===game.selected&&(input.keys.has("KeyQ")||$("mobileControl").classList.contains("active"));const lead=owner.radius+(closeControl?6:11); ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
+      const owner = ball.owner; const closeControl=owner===game.selected&&input.keys.has("KeyQ");const lead=owner.radius+(closeControl?6:11); ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
       ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
@@ -609,7 +613,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
-    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function updateParticleView() {
@@ -643,7 +647,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function drawFallbackPlayerDetail(player,pose,replayFrame) {
     const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
-    if(selected){ctx.strokeStyle="#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
+    if(selected){ctx.strokeStyle=!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
     ctx.rotate(Math.atan2(pose.dirY,pose.dirX)+Math.PI/2);ctx.lineCap="round";
     ctx.strokeStyle=sock;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-6,10);ctx.lineTo(-7+stride,25);ctx.moveTo(6,10);ctx.lineTo(7-stride,25);ctx.stroke();ctx.strokeStyle="#191c1b";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-10+stride,26);ctx.lineTo(-5+stride,26);ctx.moveTo(3-stride,26);ctx.lineTo(10-stride,26);ctx.stroke();
     ctx.fillStyle=shorts;ctx.beginPath();ctx.roundRect(-11,4,22,12,4);ctx.fill();ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(-13,-15,26,22,7);ctx.fill();ctx.fillStyle=home?"#161b19":"#e4f5f3";ctx.fillRect(-12,-5,24,3);
@@ -876,6 +880,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     game.weather=game.weather==="rain"?"clear":"rain";game.cameraNotice=1.8;ui.replayBadge.textContent=game.weather==="rain"?"WEATHER · RAIN":"WEATHER · CLEAR";ui.replayBadge.classList.add("show");announce(game.weather==="rain"?"Mưa bắt đầu — mặt sân đang trơn hơn!":"Trời quang — tốc độ trận đấu trở lại tối đa.");tone(game.weather==="rain"?330:560,.06,"sine",.02);
   }
 
+  function updateControlMode() {
+    const mode=isAttacking()?"attack":"defense";if(input.controlMode===mode)return;input.controlMode=mode;const pass=$("mobilePass");const shoot=$("mobileShoot");const sprint=$("mobileSprint");
+    if(mode==="attack"){pass.innerHTML="<small>J</small>CHUYỀN";shoot.innerHTML="<small>K</small>SÚT";sprint.innerHTML="<small>L</small>TỐC";}else{pass.innerHTML="<small>J</small>KÈM";shoot.innerHTML="<small>K</small>ĐỔI";sprint.innerHTML="<small>L</small>XOẠC";}
+    for(const button of [pass,shoot,sprint])button.classList.toggle("defense",mode==="defense");
+  }
+
   let audioContext = null;
   function ensureAudio() { if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
   function tone(frequency, duration, type = "sine", volume = .04, delay = 0) {
@@ -891,7 +901,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const dt = Math.min(.033, (now - game.lastTime) / 1000 || .016); game.lastTime = now; update(dt); render(now);
     if (game.messageTimer > 0) game.messageTimer -= dt;
     if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
-    updateUI(); requestAnimationFrame(loop);
+    updateControlMode(); updateUI(); requestAnimationFrame(loop);
   }
 
   function onKeyDown(event) {
@@ -900,15 +910,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     input.keys.add(event.code);
     if (event.code === "Escape") togglePause();
     if (game.state !== "playing") return;
-    if (event.code === "KeyJ") passBall(game.selected);
-    if (event.code === "KeyK" && ball.owner === game.selected) { input.shootStart = performance.now(); input.shootCharge = 0; }
+    if (event.code === "KeyJ" && isAttacking()) passBall(game.selected);
+    if (event.code === "KeyK") { if(isAttacking()&&ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;}else if(!isAttacking())switchPlayer(); }
+    if (event.code === "KeyL" && !isAttacking()) tackle(game.selected);
     if (event.code === "Space") switchPlayer();
     if (event.code === "KeyC") cycleCamera();
     if (event.code === "KeyV") cycleWeather();
   }
   function onKeyUp(event) {
     input.keys.delete(event.code);
-    if (event.code === "KeyK" && input.shootStart) { shootBall(game.selected, input.shootCharge); input.shootStart = 0; input.shootCharge = 0; }
+    if (event.code === "KeyK" && input.shootStart) { if(ball.owner===game.selected)shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0; }
   }
 
   function setupTouch() {
@@ -921,10 +932,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     joystick.addEventListener("pointermove", (event) => { if(event.pointerId===pointerId) moveJoystick(event); });
     const release = (event) => { if(event.pointerId!==pointerId)return; pointerId=null; input.touchX=input.touchY=0; knob.style.transform=""; };
     joystick.addEventListener("pointerup",release); joystick.addEventListener("pointercancel",release);
-    bindTouchButton($("mobilePass"), () => passBall(game.selected));
-    bindTouchButton($("mobileShoot"), null, () => { if(ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;} }, () => { if(input.shootStart){shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0;} });
-    bindTouchButton($("mobileSprint"));
-    bindTouchButton($("mobileControl"));
+    bindTouchButton($("mobilePass"),null,()=>{if(isAttacking())passBall(game.selected);else input.marking=true;},()=>{input.marking=false;});
+    bindTouchButton($("mobileShoot"),null,()=>{if(isAttacking()&&ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;}else if(!isAttacking())switchPlayer();},()=>{if(input.shootStart){if(ball.owner===game.selected)shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0;}});
+    bindTouchButton($("mobileSprint"),null,()=>{if(!isAttacking())tackle(game.selected);});
   }
 
   function bindTouchButton(button, tap, down, up) {
@@ -944,8 +954,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   $("playAgainButton").addEventListener("click", startMatch);
   $("soundButton").addEventListener("click", () => { game.sound = !game.sound; $("soundButton").textContent = game.sound ? "♪" : "×"; if(game.sound) tone(600,.08); });
   window.addEventListener("keydown", onKeyDown, { passive: false }); window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", () => { input.keys.clear(); if(game.state === "playing") togglePause(true); });
+  window.addEventListener("blur", () => { input.keys.clear(); input.marking=false; input.shootStart=0; input.shootCharge=0; if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
-  init3D(); createTeams(); setupTouch(); updateUI(); requestAnimationFrame(loop);
+  init3D(); createTeams(); setupTouch(); updateControlMode(); updateUI(); requestAnimationFrame(loop);
 })();
