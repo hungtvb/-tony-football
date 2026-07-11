@@ -18,11 +18,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
   const WORLD_SCALE = .1;
   const playerViews = new Map();
-  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView;
-  const ledViews = [];
+  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;
+  const ledViews = []; const goalNetViews = [];
   const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
+  const wetPitchColor = new THREE.Color(0xb7d8c8); const dryPitchColor = new THREE.Color(0xffffff);
 
   function seededNoise(seed) {
     const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -68,7 +69,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
     camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
-    goalSequence: null, goalScorer: null
+    goalSequence: null, goalScorer: null, weather: "rain"
   };
   let players = [];
   const input = { keys: new Set(), moveX: 0, moveY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0 };
@@ -302,7 +303,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
-      ball.x += ball.vx * dt; ball.y += ball.vy * dt; const friction = Math.pow(.22, dt); ball.vx *= friction; ball.vy *= friction;
+      ball.x += ball.vx * dt; ball.y += ball.vy * dt; const friction = Math.pow(game.weather === "rain" ? .36 : .22, dt); ball.vx *= friction; ball.vy *= friction;
       if (Math.hypot(ball.vx, ball.vy) < 4) ball.vx = ball.vy = 0;
       if (ball.lock <= 0) {
         let pickup = null; let best = 29;
@@ -441,7 +442,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     flood.shadow.bias = -.00035; scene3D.add(flood);
     const rim = new THREE.DirectionalLight(0x70dcff, 1.4); rim.position.set(48, 25, -35); scene3D.add(rim);
 
-    createPitch3D(); createStadium3D(); createGoals3D(); createBall3D(); createParticleView(); createChargeView();
+    createPitch3D(); createGrass3D(); createStadium3D(); createGoals3D(); createAtmosphere3D(); createBall3D(); createParticleView(); createChargeView();
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
     return true;
@@ -467,9 +468,20 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function createPitch3D() {
-    const pitch = new THREE.Mesh(new THREE.PlaneGeometry(W * WORLD_SCALE, H * WORLD_SCALE), new THREE.MeshStandardMaterial({ map: createPitchTexture3D(), roughness: .94, metalness: 0 }));
-    pitch.rotation.x = -Math.PI / 2; pitch.receiveShadow = true; scene3D.add(pitch);
+    pitchView = new THREE.Mesh(new THREE.PlaneGeometry(W * WORLD_SCALE, H * WORLD_SCALE), new THREE.MeshStandardMaterial({ map: createPitchTexture3D(), roughness: .94, metalness: 0 }));
+    pitchView.rotation.x = -Math.PI / 2; pitchView.receiveShadow = true; scene3D.add(pitchView);
     const base = new THREE.Mesh(new THREE.BoxGeometry(124, 1.2, 74), new THREE.MeshStandardMaterial({ color: 0x06130e, roughness: 1 })); base.position.y = -.7; base.receiveShadow = true; scene3D.add(base);
+  }
+
+  function createGrass3D() {
+    const count=lowPowerDevice?220:900; const bladeGeometry=new THREE.PlaneGeometry(.055,.42); bladeGeometry.translate(0,.21,0); const bladeMaterial=new THREE.MeshStandardMaterial({color:0x15915b,roughness:.92,side:THREE.DoubleSide}); grassView=new THREE.InstancedMesh(bladeGeometry,bladeMaterial,count); const dummy=new THREE.Object3D();
+    for(let i=0;i<count;i+=1){dummy.position.set(worldX(FIELD.left+seededNoise(i*2.13)*(FIELD.right-FIELD.left)),.015,worldZ(FIELD.top+seededNoise(i*5.71+3)*(FIELD.bottom-FIELD.top)));dummy.rotation.y=seededNoise(i*9.37)*Math.PI;const size=.65+seededNoise(i*4.43)*.7;dummy.scale.set(size,size,size);dummy.updateMatrix();grassView.setMatrixAt(i,dummy.matrix);} grassView.receiveShadow=true;grassView.frustumCulled=false;scene3D.add(grassView);
+  }
+
+  function createAtmosphere3D() {
+    const drops=lowPowerDevice?180:520;const positions=new Float32Array(drops*2*3);const speeds=new Float32Array(drops);
+    for(let i=0;i<drops;i+=1){const x=-67+seededNoise(i*3.17)*134;const y=2+seededNoise(i*7.43)*47;const z=-39+seededNoise(i*11.2)*78;const j=i*6;positions[j]=x;positions[j+1]=y;positions[j+2]=z;positions[j+3]=x-.1;positions[j+4]=y-.9;positions[j+5]=z+.14;speeds[i]=.65+seededNoise(i*13.7)*.85;}
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(positions,3));rainView=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0xbfe9f2,transparent:true,opacity:.34,depthWrite:false,blending:THREE.AdditiveBlending}));rainView.userData.speeds=speeds;scene3D.add(rainView);
   }
 
   function createStadium3D() {
@@ -491,6 +503,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     for (const x of [-49, 49]) for (const z of [-36, 36]) {
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(.28, .38, 21, 8), new THREE.MeshStandardMaterial({ color: 0x59615e, metalness: .8, roughness: .35 })); mast.position.set(x, 10, z); scene3D.add(mast);
       const lamp = new THREE.PointLight(0xe8fff5, 20, 70, 2); lamp.position.set(x, 20, z); scene3D.add(lamp);
+      const beam=new THREE.Mesh(new THREE.ConeGeometry(8,28,16,1,true),new THREE.MeshBasicMaterial({color:0xbdebdc,transparent:true,opacity:lowPowerDevice ? .018 : .035,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));beam.position.set(x,6,z);beam.rotation.z=Math.PI;scene3D.add(beam);
     }
   }
 
@@ -512,7 +525,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const netMaterial = new THREE.LineBasicMaterial({ color: 0xbfd1c8, transparent: true, opacity: .34 }); const netVertices = [];
     for (let z = -8.5; z <= 8.5; z += 1.7) netVertices.push(0,0,z,side*3,0,z, 0,3.5,z,side*3,2.8,z);
     for (let y = 0; y <= 3.5; y += .7) netVertices.push(0,y,-8.5,side*3,y*.8,-8.5, 0,y,8.5,side*3,y*.8,8.5, side*3,y*.8,-8.5,side*3,y*.8,8.5);
-    const netGeometry = new THREE.BufferGeometry(); netGeometry.setAttribute("position", new THREE.Float32BufferAttribute(netVertices, 3)); goal.add(new THREE.LineSegments(netGeometry, netMaterial)); scene3D.add(goal);
+    const netGeometry = new THREE.BufferGeometry(); netGeometry.setAttribute("position", new THREE.Float32BufferAttribute(netVertices, 3)); const net=new THREE.LineSegments(netGeometry, netMaterial); goal.add(net); goalNetViews.push(net); scene3D.add(goal);
   }
 
   function createLabelSprite(player, accent) {
@@ -543,7 +556,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function addHairStyle(body, player, hairMaterial) {
     const style = (player.index + player.team * 2) % 4; const segments = lowPowerDevice ? 8 : 14;
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(.74,segments,7,0,Math.PI*2,0,Math.PI*(style===1?.35:.48)),hairMaterial); cap.position.y=5.55; cap.scale.set(style===2?1.08:1,style===1?.72:1,1); body.add(cap);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(.74,segments,7,0,Math.PI*2,0,Math.PI*(style===1 ? .35 : .48)),hairMaterial); cap.position.y=5.55; cap.scale.set(style===2?1.08:1,style===1 ? .72 : 1,1); body.add(cap);
     if(style===2){for(let i=0;i<5;i+=1){const curl=new THREE.Mesh(new THREE.SphereGeometry(.22,7,5),hairMaterial);curl.position.set((i-2)*.25,5.98-Math.abs(i-2)*.04,.02+Math.abs(i-2)*.05);body.add(curl);}}
     if(style===3){const top=new THREE.Mesh(new THREE.BoxGeometry(.92,.42,1.05,2,1,2),hairMaterial);top.position.set(0,5.92,0);top.rotation.z=.08;body.add(top);}
   }
@@ -591,9 +604,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
     const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
-    view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running?.045:0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
+    view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
-    view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate?.72:.24;
+    view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
     view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
@@ -603,10 +616,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     particleView.geometry.setDrawRange(0,count);particleView.geometry.attributes.position.needsUpdate=true;particleView.geometry.attributes.color.needsUpdate=true;
   }
 
+  function updateAtmosphere3D(now) {
+    const raining=game.weather==="rain";rainView.visible=raining;const wetEase=.04;pitchView.material.roughness=lerp(pitchView.material.roughness,raining ? .42 : .94,wetEase);pitchView.material.metalness=lerp(pitchView.material.metalness,raining ? .08 : 0,wetEase);pitchView.material.color.lerp(raining?wetPitchColor:dryPitchColor,wetEase);
+    if(raining){const last=rainView.userData.lastTime||now;const dt=Math.min(.05,(now-last)/1000);rainView.userData.lastTime=now;const positions=rainView.geometry.attributes.position.array;const speeds=rainView.userData.speeds;for(let i=0;i<speeds.length;i+=1){const j=i*6;const fall=speeds[i]*30*dt;positions[j]-=2.6*dt;positions[j+3]-=2.6*dt;positions[j+1]-=fall;positions[j+4]-=fall;if(positions[j+1]<.5){positions[j+1]=48;positions[j+4]=47.1;}if(positions[j]<-70){positions[j]+=140;positions[j+3]+=140;}}rainView.geometry.attributes.position.needsUpdate=true;}else rainView.userData.lastTime=now;
+    for(const net of goalNetViews){const impact=game.goalSequence?Math.sin((3.65-game.goalSequence.timer)*22)*Math.exp(-(3.65-game.goalSequence.timer)*1.8):0;net.scale.x=1+Math.abs(impact)*.13;net.material.opacity=.34+Math.abs(impact)*.36;}
+  }
+
   function render3D(now) {
     const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
-    ballView.position.set(worldX(renderBall.x),.86,worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView();
+    ballView.position.set(worldX(renderBall.x),.86,worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
     if(input.shootStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.shootCharge);fill.position.x=-2.4+2.4*input.shootCharge;fill.material.color.set(input.shootCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
     const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
@@ -614,8 +633,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,66,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
     else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,26,38+targetZ*.18);cameraLook.set(targetX,0,targetZ);}
     else{cameraTarget.set(targetX,52+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),62+targetZ*.08);cameraLook.set(targetX,0,targetZ);}
-    camera3D.position.lerp(cameraTarget,replayFrame?.12:.055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
-    const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice?.3:.34)*stadiumPulse;crowdView.material.opacity=game.goalSequence?.98:.88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence?.75+.3*Math.sin(now*.022):.32;led.label.material.opacity=game.goalSequence?.8+.2*Math.sin(now*.018):1;}
+    camera3D.position.lerp(cameraTarget,replayFrame ? .12 : .055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
+    const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); renderer3D.render(scene3D,camera3D); drawRadar();
   }
 
@@ -640,6 +659,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame);
     ctx.fillStyle="white";ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#17201d";ctx.lineWidth=2;ctx.stroke();
     for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
+    if(game.weather==="rain"){ctx.fillStyle="rgba(135,190,196,.055)";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(195,235,242,.32)";ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<(lowPowerDevice?60:140);i+=1){const x=(seededNoise(i*3.7)*W+now*.11)%W;const y=(seededNoise(i*8.9)*H+now*.34*(.7+seededNoise(i)))%H;ctx.moveTo(x,y);ctx.lineTo(x-5,y+17);}ctx.stroke();}
     if(input.shootStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.shootCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.shootCharge,6);}
     if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}drawRadar();
   }
@@ -850,6 +870,10 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     ui.replayBadge.textContent = `CAMERA · ${labels[game.cameraMode]}`; ui.replayBadge.classList.add("show"); tone(460,.04,"sine",.018);
   }
 
+  function cycleWeather() {
+    game.weather=game.weather==="rain"?"clear":"rain";game.cameraNotice=1.8;ui.replayBadge.textContent=game.weather==="rain"?"WEATHER · RAIN":"WEATHER · CLEAR";ui.replayBadge.classList.add("show");announce(game.weather==="rain"?"Mưa bắt đầu — mặt sân đang trơn hơn!":"Trời quang — tốc độ trận đấu trở lại tối đa.");tone(game.weather==="rain"?330:560,.06,"sine",.02);
+  }
+
   let audioContext = null;
   function ensureAudio() { if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
   function tone(frequency, duration, type = "sine", volume = .04, delay = 0) {
@@ -870,7 +894,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function onKeyDown(event) {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
-    if (event.repeat && ["KeyJ","KeyK","KeyC","Space","Escape"].includes(event.code)) return;
+    if (event.repeat && ["KeyJ","KeyK","KeyC","KeyV","Space","Escape"].includes(event.code)) return;
     input.keys.add(event.code);
     if (event.code === "Escape") togglePause();
     if (game.state !== "playing") return;
@@ -878,6 +902,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (event.code === "KeyK" && ball.owner === game.selected) { input.shootStart = performance.now(); input.shootCharge = 0; }
     if (event.code === "Space") switchPlayer();
     if (event.code === "KeyC") cycleCamera();
+    if (event.code === "KeyV") cycleWeather();
   }
   function onKeyUp(event) {
     input.keys.delete(event.code);
