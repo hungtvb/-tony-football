@@ -89,5 +89,14 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Chuyền bóng ưu tiên đồng đội nằm trên hướng điều khiển đang giữ
 - Hỗ trợ ngắm dọc khung thành khi sút, giảm độ ngẫu nhiên cho người chơi
 - Đổi cầu thủ thông minh dựa trên quỹ đạo bóng, hướng di chuyển và vị trí phòng ngự
-- Giữ `Q` hoặc nút GIỮ BÓNG trên mobile để rê sát chân, xoay nhanh và tiết kiệm stamina
+- Giữ `Q` trên bàn phím để rê sát chân, xoay nhanh và tiết kiệm stamina
 - Cụm nút cảm ứng có phản hồi rung nhẹ trên thiết bị hỗ trợ
+
+## Dual Controls — Build 6.1
+
+- Cụm nút tự chuyển theo quyền kiểm soát bóng, không cần đổi chế độ thủ công
+- Tấn công gồm CHUYỀN, SÚT và TĂNG TỐC
+- Phòng thủ gồm KÈM NGƯỜI, ĐỔI NGƯỜI và XOẠC
+- Giữ KÈM để cầu thủ tự áp sát, giữ cự ly jockey và luôn hướng mặt về đối thủ
+- Vòng chọn cầu thủ đổi sang màu cyan khi chế độ kèm người đang hoạt động
+- Bàn phím dùng cùng ánh xạ `J / K / L` theo trạng thái tấn công hoặc phòng thủ
