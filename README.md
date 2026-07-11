@@ -9,6 +9,7 @@ Game bóng đá arcade 6v6 chạy trực tiếp trên trình duyệt, không c�
 - Giữ và thả `K`: sút bóng theo lực
 - `L`: tăng tốc
 - `Space`: đổi cầu thủ
+- `C`: chuyển camera Broadcast / Close Action / Tactical
 - `Escape`: tạm dừng
 - Trên điện thoại: joystick và cụm nút cảm ứng xuất hiện tự động
 
@@ -26,7 +27,7 @@ Mở `http://localhost:4173`.
 npm test
 ```
 
-Toàn bộ game dùng Canvas 2D và Web Audio API, có ba cấp độ AI, stamina, radar, thống kê trực tiếp, hiệu ứng ghi bàn và bố cục responsive.
+Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API, ba cấp độ AI, stamina, radar, thống kê trực tiếp, hiệu ứng ghi bàn và bố cục responsive.
 
 ## Đồ họa Sprint 1
 
@@ -52,3 +53,11 @@ Toàn bộ game dùng Canvas 2D và Web Audio API, có ba cấp độ AI, stamin
 - Camera truyền hình phối cảnh bám theo diễn biến trận đấu
 - Ánh sáng sân vận động, sương chiều sâu và hiệu ứng màu điện ảnh
 - Giữ nguyên gameplay 6v6, AI, vật lý bóng, radar và điều khiển cảm ứng
+
+## Matchday — Sprint 4
+
+- Camera Broadcast, Close Action và Tactical chuyển trực tiếp bằng phím `C`
+- Instant replay tự động phát lại diễn biến trước mỗi bàn thắng
+- Camera cinematic và animation ăn mừng theo đội ghi bàn
+- Khán giả cùng bảng LED phản ứng theo cao trào trận đấu
+- Tự giảm mật độ khán giả, độ phân giải và shadow trên thiết bị cấu hình thấp
