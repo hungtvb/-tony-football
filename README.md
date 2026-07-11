@@ -61,3 +61,12 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Camera cinematic và animation ăn mừng theo đội ghi bàn
 - Khán giả cùng bảng LED phản ứng theo cao trào trận đấu
 - Tự giảm mật độ khán giả, độ phân giải và shadow trên thiết bị cấu hình thấp
+
+## Player Detail — Build 4.1
+
+- Tỷ lệ đầu, cổ, vai, thân và chân tự nhiên hơn
+- Khuôn mặt, nhiều tông da cùng bốn kiểu tóc khác nhau
+- Áo đấu có cổ, sọc ngực và số áo ở cả mặt trước lẫn mặt sau
+- Tay chân chia khớp, tất, giày và găng thủ môn có hình khối riêng
+- Thân trên nghiêng, lắc vai và chuyển động đầu theo nhịp chạy, sút, xoạc, ăn mừng
+- Chế độ Canvas 2D dự phòng cũng dùng thiết kế cầu thủ chi tiết mới
