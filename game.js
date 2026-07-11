@@ -21,6 +21,10 @@
   const pitchTexture = document.createElement("canvas");
   pitchTexture.width = W; pitchTexture.height = H;
   const ptx = pitchTexture.getContext("2d");
+  const stadiumTexture = document.createElement("canvas");
+  stadiumTexture.width = W; stadiumTexture.height = H;
+  const stx = stadiumTexture.getContext("2d");
+  let stadiumTextureReady = false;
 
   function seededNoise(seed) {
     const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -97,7 +101,7 @@
   function resetMatch() {
     createTeams();
     game.time = MATCH_SECONDS; game.score = [0, 0]; game.stats = { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 };
-    game.particles.length = 0; game.flash = 0; kickoff(HOME); updateUI(true);
+    game.particles.length = 0; game.flash = 0; kickoff(HOME); updateUI();
   }
 
   function kickoff(team) {
@@ -393,26 +397,30 @@
   }
 
   function drawStadiumCrowd() {
-    ctx.fillStyle = "#111817"; ctx.fillRect(0, 0, W, FIELD.top - 7); ctx.fillRect(0, FIELD.bottom + 7, W, H - FIELD.bottom);
-    ctx.fillRect(0, 0, FIELD.left - 7, H); ctx.fillRect(FIELD.right + 7, 0, W - FIELD.right, H);
-    for (let i = 0; i < 280; i += 1) {
-      const edge = i % 4; const t = seededNoise(i * 3.19); const lane = 7 + seededNoise(i * 9.71) * 23;
-      let x; let y;
-      if (edge < 2) { x = t * W; y = edge === 0 ? lane : H - lane; }
-      else { x = edge === 2 ? lane : W - lane; y = t * H; }
-      const colorRoll = seededNoise(i * 14.2);
-      ctx.fillStyle = colorRoll > .94 ? "rgba(225,187,88,.65)" : colorRoll > .88 ? "rgba(71,201,212,.55)" : "rgba(225,235,230,.22)";
-      ctx.fillRect(x, y, 2.2, 2.2);
+    if (!stadiumTextureReady) {
+      stx.fillStyle = "#111817"; stx.fillRect(0, 0, W, FIELD.top - 7); stx.fillRect(0, FIELD.bottom + 7, W, H - FIELD.bottom);
+      stx.fillRect(0, 0, FIELD.left - 7, H); stx.fillRect(FIELD.right + 7, 0, W - FIELD.right, H);
+      for (let i = 0; i < 280; i += 1) {
+        const edge = i % 4; const t = seededNoise(i * 3.19); const lane = 7 + seededNoise(i * 9.71) * 23;
+        let x; let y;
+        if (edge < 2) { x = t * W; y = edge === 0 ? lane : H - lane; }
+        else { x = edge === 2 ? lane : W - lane; y = t * H; }
+        const colorRoll = seededNoise(i * 14.2);
+        stx.fillStyle = colorRoll > .94 ? "rgba(225,187,88,.65)" : colorRoll > .88 ? "rgba(71,201,212,.55)" : "rgba(225,235,230,.22)";
+        stx.fillRect(x, y, 2.2, 2.2);
+      }
+      drawLedBoard(stx, FIELD.left + 70, 15, 265, "TONY FOOTBALL MAX", "#e1bb58");
+      drawLedBoard(stx, W / 2 - 132, H - 32, 265, "PLAY BEAUTIFUL · PLAY TONY", "#47c9d4");
+      drawLedBoard(stx, FIELD.right - 335, 15, 265, "NEON NIGHT LEAGUE", "#47c9d4");
+      stadiumTextureReady = true;
     }
-    drawLedBoard(FIELD.left + 70, 15, 265, "TONY FOOTBALL MAX", "#e1bb58");
-    drawLedBoard(W / 2 - 132, H - 32, 265, "PLAY BEAUTIFUL · PLAY TONY", "#47c9d4");
-    drawLedBoard(FIELD.right - 335, 15, 265, "NEON NIGHT LEAGUE", "#47c9d4");
+    ctx.drawImage(stadiumTexture, 0, 0);
   }
 
-  function drawLedBoard(x, y, width, text, color) {
-    ctx.fillStyle = "#060908"; ctx.fillRect(x, y, width, 18); ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.strokeRect(x, y, width, 18);
-    ctx.shadowColor = color; ctx.shadowBlur = 7; ctx.fillStyle = color; ctx.font = "700 9px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(text, x + width / 2, y + 9.5); ctx.shadowBlur = 0;
+  function drawLedBoard(target, x, y, width, text, color) {
+    target.fillStyle = "#060908"; target.fillRect(x, y, width, 18); target.strokeStyle = "rgba(255,255,255,.12)"; target.strokeRect(x, y, width, 18);
+    target.shadowColor = color; target.shadowBlur = 7; target.fillStyle = color; target.font = "700 9px Inter"; target.textAlign = "center"; target.textBaseline = "middle";
+    target.fillText(text, x + width / 2, y + 9.5); target.shadowBlur = 0;
   }
 
   function drawBox(x, y, width, height, side) {
@@ -435,7 +443,7 @@
   function drawPlayer(player, now) {
     const selected = player === game.selected; const home = player.team === HOME; const running = Math.hypot(player.vx, player.vy) > 30;
     ctx.save(); ctx.translate(player.x, player.y);
-    ctx.fillStyle = "rgba(0,0,0,.34)"; ctx.filter = "blur(2px)"; ctx.beginPath(); ctx.ellipse(5, 14, player.radius + 9, player.radius * .52, 0, 0, Math.PI * 2); ctx.fill(); ctx.filter = "none";
+    ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(5, 14, player.radius + 9, player.radius * .52, 0, 0, Math.PI * 2); ctx.fill();
     if (selected) {
       const pulse = 1 + Math.sin(now * .006) * .07; ctx.strokeStyle = "#ffda70"; ctx.lineWidth = 3; ctx.shadowColor = "#ffcf52"; ctx.shadowBlur = 9;
       ctx.beginPath(); ctx.ellipse(0, 11, 27 * pulse, 13 * pulse, 0, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
@@ -592,5 +600,5 @@
   window.addEventListener("blur", () => { input.keys.clear(); if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
-  createTeams(); setupTouch(); updateUI(true); requestAnimationFrame(loop);
+  createTeams(); setupTouch(); updateUI(); requestAnimationFrame(loop);
 })();
