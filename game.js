@@ -18,6 +18,36 @@
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
 
+  const pitchTexture = document.createElement("canvas");
+  pitchTexture.width = W; pitchTexture.height = H;
+  const ptx = pitchTexture.getContext("2d");
+
+  function seededNoise(seed) {
+    const value = Math.sin(seed * 12.9898) * 43758.5453;
+    return value - Math.floor(value);
+  }
+
+  function buildPitchTexture() {
+    const grass = ptx.createLinearGradient(0, FIELD.top, 0, FIELD.bottom);
+    grass.addColorStop(0, "#087447"); grass.addColorStop(.5, "#096b42"); grass.addColorStop(1, "#075d39");
+    ptx.fillStyle = grass; ptx.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
+    const stripeWidth = (FIELD.right - FIELD.left) / 16;
+    for (let i = 0; i < 16; i += 1) {
+      ptx.fillStyle = i % 2 ? "rgba(255,255,255,.028)" : "rgba(0,22,11,.045)";
+      ptx.fillRect(FIELD.left + stripeWidth * i, FIELD.top, stripeWidth, FIELD.bottom - FIELD.top);
+    }
+    ptx.save(); ptx.beginPath(); ptx.rect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top); ptx.clip();
+    for (let i = 0; i < 2400; i += 1) {
+      const x = FIELD.left + seededNoise(i * 2.17) * (FIELD.right - FIELD.left);
+      const y = FIELD.top + seededNoise(i * 5.43 + 9) * (FIELD.bottom - FIELD.top);
+      ptx.fillStyle = seededNoise(i * 8.1) > .48 ? "rgba(255,255,220,.025)" : "rgba(0,20,8,.035)";
+      ptx.fillRect(x, y, 1, 1 + seededNoise(i) * 3);
+    }
+    ptx.restore();
+  }
+
+  buildPitchTexture();
+
   const ui = {
     homeScore: $("homeScore"), awayScore: $("awayScore"), gameClock: $("gameClock"), matchState: $("matchState"),
     start: $("startOverlay"), pause: $("pauseOverlay"), result: $("resultOverlay"), commentary: $("commentary"),
@@ -50,7 +80,8 @@
   const game = {
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
-    shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true
+    shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
+    camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }
   };
   let players = [];
   const input = { keys: new Set(), moveX: 0, moveY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0 };
@@ -289,7 +320,7 @@
   function goal(team) {
     game.score[team] += 1; game.flash = 1; game.shake = 18; ball.owner = null; goalSound();
     for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
-    announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(true);
+    announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(team);
     game.kickOffTimer = 2.1; setTimeout(() => { if (game.state === "playing") kickoff(team === HOME ? AWAY : HOME); }, 1800);
   }
 
@@ -303,8 +334,23 @@
     game.particles = game.particles.filter((particle) => particle.life > 0);
   }
 
+  function updateCamera(dt) {
+    const camera = game.camera;
+    const ballSpeed = Math.hypot(ball.vx, ball.vy);
+    camera.targetZoom = game.state === "playing" ? clamp(1.025 + ballSpeed / 9000, 1.025, 1.075) : 1;
+    const follow = game.state === "playing" ? .085 : 0;
+    const desiredX = lerp(W / 2, ball.x, follow);
+    const desiredY = lerp(H / 2, ball.y, follow);
+    const ease = 1 - Math.exp(-dt * 3.4);
+    camera.x = lerp(camera.x, desiredX, ease);
+    camera.y = lerp(camera.y, desiredY, ease);
+    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * 2.8));
+    const halfW = W / (camera.zoom * 2); const halfH = H / (camera.zoom * 2);
+    camera.x = clamp(camera.x, halfW, W - halfW); camera.y = clamp(camera.y, halfH, H - halfH);
+  }
+
   function update(dt) {
-    updateInput(); updateParticles(dt); game.flash = Math.max(0, game.flash - dt * 1.3); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateCamera(dt); game.flash = Math.max(0, game.flash - dt * 1.3); game.shake *= Math.pow(.04, dt);
     if (game.state !== "playing") return;
     if (game.kickOffTimer > 0) { game.kickOffTimer -= dt; return; }
     game.time -= dt; if (game.time <= 0) { game.time = 0; endMatch(); return; }
@@ -321,10 +367,20 @@
   }
 
   function drawPitch() {
-    ctx.fillStyle = "#075b39"; ctx.fillRect(0, 0, W, H);
-    for (let i = 0; i < 12; i += 1) { ctx.fillStyle = i % 2 ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.035)"; ctx.fillRect(FIELD.left + i * (FIELD.right - FIELD.left) / 12, FIELD.top, (FIELD.right - FIELD.left) / 12, FIELD.bottom - FIELD.top); }
-    const gradient = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, 650); gradient.addColorStop(0, "rgba(33,173,102,.14)"); gradient.addColorStop(1, "rgba(0,0,0,.2)"); ctx.fillStyle = gradient; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "rgba(235,246,239,.78)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    const stadium = ctx.createRadialGradient(W / 2, H / 2, 130, W / 2, H / 2, 720);
+    stadium.addColorStop(0, "#16241f"); stadium.addColorStop(.7, "#0a1110"); stadium.addColorStop(1, "#030706");
+    ctx.fillStyle = stadium; ctx.fillRect(0, 0, W, H);
+
+    drawStadiumCrowd();
+    ctx.save(); ctx.shadowColor = "rgba(0,0,0,.8)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 8;
+    ctx.fillStyle = "#075d39"; ctx.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top); ctx.restore();
+    ctx.drawImage(pitchTexture, 0, 0);
+
+    const flood = ctx.createRadialGradient(W / 2, H / 2, 30, W / 2, H / 2, 620);
+    flood.addColorStop(0, "rgba(190,255,221,.12)"); flood.addColorStop(.62, "rgba(75,190,125,.035)"); flood.addColorStop(1, "rgba(0,0,0,.24)");
+    ctx.fillStyle = flood; ctx.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
+
+    ctx.strokeStyle = "rgba(242,251,246,.9)"; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.shadowColor = "rgba(215,255,230,.22)"; ctx.shadowBlur = 3;
     ctx.strokeRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
     ctx.beginPath(); ctx.moveTo(W / 2, FIELD.top); ctx.lineTo(W / 2, FIELD.bottom); ctx.stroke();
     ctx.beginPath(); ctx.arc(W / 2, H / 2, 83, 0, Math.PI * 2); ctx.stroke();
@@ -333,6 +389,30 @@
     drawGoal(FIELD.left, FIELD.goalTop, -30, FIELD.goalBottom - FIELD.goalTop); drawGoal(FIELD.right, FIELD.goalTop, 30, FIELD.goalBottom - FIELD.goalTop);
     ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 2;
     [[FIELD.left, FIELD.top, 0, Math.PI/2],[FIELD.right, FIELD.top, Math.PI/2, Math.PI],[FIELD.right,FIELD.bottom,Math.PI,Math.PI*1.5],[FIELD.left,FIELD.bottom,Math.PI*1.5,Math.PI*2]].forEach(([x,y,s,e]) => { ctx.beginPath(); ctx.arc(x,y,18,s,e); ctx.stroke(); });
+    ctx.shadowBlur = 0;
+  }
+
+  function drawStadiumCrowd() {
+    ctx.fillStyle = "#111817"; ctx.fillRect(0, 0, W, FIELD.top - 7); ctx.fillRect(0, FIELD.bottom + 7, W, H - FIELD.bottom);
+    ctx.fillRect(0, 0, FIELD.left - 7, H); ctx.fillRect(FIELD.right + 7, 0, W - FIELD.right, H);
+    for (let i = 0; i < 280; i += 1) {
+      const edge = i % 4; const t = seededNoise(i * 3.19); const lane = 7 + seededNoise(i * 9.71) * 23;
+      let x; let y;
+      if (edge < 2) { x = t * W; y = edge === 0 ? lane : H - lane; }
+      else { x = edge === 2 ? lane : W - lane; y = t * H; }
+      const colorRoll = seededNoise(i * 14.2);
+      ctx.fillStyle = colorRoll > .94 ? "rgba(225,187,88,.65)" : colorRoll > .88 ? "rgba(71,201,212,.55)" : "rgba(225,235,230,.22)";
+      ctx.fillRect(x, y, 2.2, 2.2);
+    }
+    drawLedBoard(FIELD.left + 70, 15, 265, "TONY FOOTBALL MAX", "#e1bb58");
+    drawLedBoard(W / 2 - 132, H - 32, 265, "PLAY BEAUTIFUL · PLAY TONY", "#47c9d4");
+    drawLedBoard(FIELD.right - 335, 15, 265, "NEON NIGHT LEAGUE", "#47c9d4");
+  }
+
+  function drawLedBoard(x, y, width, text, color) {
+    ctx.fillStyle = "#060908"; ctx.fillRect(x, y, width, 18); ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.strokeRect(x, y, width, 18);
+    ctx.shadowColor = color; ctx.shadowBlur = 7; ctx.fillStyle = color; ctx.font = "700 9px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(text, x + width / 2, y + 9.5); ctx.shadowBlur = 0;
   }
 
   function drawBox(x, y, width, height, side) {
@@ -343,36 +423,51 @@
   }
 
   function drawGoal(x, y, depth, height) {
-    ctx.save(); ctx.strokeStyle = "rgba(245,249,247,.8)"; ctx.lineWidth = 2; ctx.strokeRect(depth < 0 ? x + depth : x, y, Math.abs(depth), height);
-    ctx.globalAlpha = .25;
-    for (let py = y + 10; py < y + height; py += 12) { ctx.beginPath(); ctx.moveTo(depth < 0 ? x + depth : x, py); ctx.lineTo(depth < 0 ? x : x + depth, py); ctx.stroke(); }
+    const front = x; const back = x + depth;
+    ctx.save(); ctx.strokeStyle = "rgba(242,248,245,.92)"; ctx.lineWidth = 2.5; ctx.shadowColor = "rgba(255,255,255,.4)"; ctx.shadowBlur = 4;
+    ctx.beginPath(); ctx.moveTo(front, y); ctx.lineTo(back, y + 7); ctx.lineTo(back, y + height - 7); ctx.lineTo(front, y + height); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(228,241,235,.3)"; ctx.lineWidth = 1;
+    for (let py = y + 9; py < y + height; py += 11) { ctx.beginPath(); ctx.moveTo(front, py); ctx.lineTo(back, py + (py < y + height / 2 ? 5 : -5)); ctx.stroke(); }
+    for (let k = 1; k < 4; k += 1) { const gx = lerp(front, back, k / 4); ctx.beginPath(); ctx.moveTo(gx, y + 3); ctx.lineTo(gx, y + height - 3); ctx.stroke(); }
     ctx.restore();
   }
 
   function drawPlayer(player, now) {
     const selected = player === game.selected; const home = player.team === HOME; const running = Math.hypot(player.vx, player.vy) > 30;
     ctx.save(); ctx.translate(player.x, player.y);
-    ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(4, 11, player.radius + 8, player.radius * .58, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,.34)"; ctx.filter = "blur(2px)"; ctx.beginPath(); ctx.ellipse(5, 14, player.radius + 9, player.radius * .52, 0, 0, Math.PI * 2); ctx.fill(); ctx.filter = "none";
     if (selected) {
-      const pulse = 1 + Math.sin(now * .006) * .08; ctx.strokeStyle = "#ffda70"; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, 8, 27 * pulse, 15 * pulse, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "#ffda70"; ctx.beginPath(); ctx.moveTo(-7, -35); ctx.lineTo(7, -35); ctx.lineTo(0, -25); ctx.closePath(); ctx.fill();
+      const pulse = 1 + Math.sin(now * .006) * .07; ctx.strokeStyle = "#ffda70"; ctx.lineWidth = 3; ctx.shadowColor = "#ffcf52"; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.ellipse(0, 11, 27 * pulse, 13 * pulse, 0, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffda70"; ctx.beginPath(); ctx.moveTo(-6, -42); ctx.lineTo(6, -42); ctx.lineTo(0, -32); ctx.closePath(); ctx.fill();
     }
-    const bob = running ? Math.sin(now * .014 + player.index) * 2 : 0;
-    ctx.translate(0, bob);
-    ctx.fillStyle = home ? "#f0c858" : "#45c7d3"; ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = home ? "#fff2bd" : "#b9f6fa"; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = home ? "#171a1a" : "#10272a"; ctx.beginPath(); ctx.arc(0, -3, player.radius * .67, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "white"; ctx.font = "700 12px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(player.number, 0, -2);
-    ctx.fillStyle = "rgba(7,10,10,.78)"; ctx.fillRect(-24, 22, 48, 13); ctx.fillStyle = "white"; ctx.font = "700 8px Inter"; ctx.fillText(player.name, 0, 28.5);
+    const phase = now * .014 + player.index * 1.7; const stride = running ? Math.sin(phase) * 5 : 0; const bob = running ? Math.abs(Math.sin(phase)) * -1.5 : 0;
+    const angle = Math.atan2(player.dirY, player.dirX) + Math.PI / 2; ctx.rotate(angle); ctx.translate(0, bob);
+    const jersey = home ? "#e2b64d" : "#36b8c6"; const jerseyLight = home ? "#ffe59a" : "#9cf4f4"; const shorts = home ? "#171b1a" : "#092e35";
+    ctx.strokeStyle = home ? "#e6c36a" : "#66d9e3"; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-5, 9); ctx.lineTo(-6 + stride * .45, 19); ctx.moveTo(5, 9); ctx.lineTo(6 - stride * .45, 19); ctx.stroke();
+    ctx.strokeStyle = "#121817"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-6 + stride * .45, 18); ctx.lineTo(-7 + stride, 25); ctx.moveTo(6 - stride * .45, 18); ctx.lineTo(7 - stride, 25); ctx.stroke();
+    ctx.fillStyle = shorts; ctx.beginPath(); ctx.roundRect(-10, 5, 20, 12, 4); ctx.fill();
+    const body = ctx.createLinearGradient(-12, -10, 12, 11); body.addColorStop(0, jerseyLight); body.addColorStop(.4, jersey); body.addColorStop(1, home ? "#a97b20" : "#16727d");
+    ctx.fillStyle = body; ctx.beginPath(); ctx.roundRect(-12, -13, 24, 22, 7); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.38)"; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.strokeStyle = jersey; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-10, -7); ctx.lineTo(-16 - stride * .28, 1); ctx.moveTo(10, -7); ctx.lineTo(16 + stride * .28, 1); ctx.stroke();
+    ctx.fillStyle = "#d89d78"; ctx.beginPath(); ctx.arc(0, -20, 7.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#241b18"; ctx.beginPath(); ctx.arc(0, -22.5, 7, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "800 10px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(player.number, 0, -2);
+    ctx.restore();
+    ctx.save(); ctx.translate(player.x, player.y); ctx.fillStyle = "rgba(5,8,8,.84)"; ctx.beginPath(); ctx.roundRect(-25, 31, 50, 13, 3); ctx.fill();
+    ctx.strokeStyle = home ? "rgba(225,187,88,.7)" : "rgba(71,201,212,.7)"; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = "white"; ctx.font = "700 8px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(player.name, 0, 37.5);
     ctx.restore();
   }
 
   function drawBall() {
     ctx.save();
     for (let i = ball.trail.length - 1; i >= 0; i -= 1) { const point = ball.trail[i]; ctx.globalAlpha = (1 - i / ball.trail.length) * .08; ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(point.x, point.y, ball.radius * (1 - i / 12), 0, Math.PI * 2); ctx.fill(); }
-    ctx.globalAlpha = 1; ctx.fillStyle = "rgba(0,0,0,.32)"; ctx.beginPath(); ctx.ellipse(ball.x + 4, ball.y + 8, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#f8faf7"; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#17201d"; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#17201d"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 3.4, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.globalAlpha = 1; ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(ball.x + 5, ball.y + 9, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+    const ballShade = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, ball.radius + 2); ballShade.addColorStop(0, "#fff"); ballShade.addColorStop(.65, "#eef2ef"); ballShade.addColorStop(1, "#87908b");
+    ctx.fillStyle = ballShade; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#17201d"; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = "#17201d"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 3.2, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 5; i += 1) { const angle = i * Math.PI * 2 / 5; ctx.beginPath(); ctx.arc(ball.x + Math.cos(angle) * 6, ball.y + Math.sin(angle) * 6, 1.3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
   }
 
   function drawEffects() {
@@ -383,12 +478,23 @@
       const grad = ctx.createLinearGradient(x - 30, 0, x + 30, 0); grad.addColorStop(0, "#e1bb58"); grad.addColorStop(1, input.shootCharge > .82 ? "#ff5b45" : "#ffdc78");
       ctx.fillStyle = grad; ctx.fillRect(x - 30, y + 1, 60 * input.shootCharge, 6);
     }
-    if (game.flash > 0) { ctx.fillStyle = `rgba(255,225,126,${game.flash * .18})`; ctx.fillRect(0,0,W,H); ctx.fillStyle = `rgba(255,255,255,${game.flash})`; ctx.font = "800 104px Barlow Condensed"; ctx.textAlign = "center"; ctx.fillText("GOAL!", W/2, 150); }
+  }
+
+  function drawScreenEffects() {
+    const vignette = ctx.createRadialGradient(W / 2, H / 2, H * .28, W / 2, H / 2, H * .78);
+    vignette.addColorStop(0, "rgba(0,0,0,0)"); vignette.addColorStop(.76, "rgba(0,0,0,.04)"); vignette.addColorStop(1, "rgba(0,0,0,.43)");
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+    const topLight = ctx.createLinearGradient(0, 0, 0, 135); topLight.addColorStop(0, "rgba(210,255,233,.08)"); topLight.addColorStop(1, "rgba(210,255,233,0)"); ctx.fillStyle = topLight; ctx.fillRect(0, 0, W, 135);
+    if (game.flash > 0) {
+      ctx.fillStyle = `rgba(255,225,126,${game.flash * .16})`; ctx.fillRect(0,0,W,H); ctx.shadowColor = "#e1bb58"; ctx.shadowBlur = 28;
+      ctx.fillStyle = `rgba(255,255,255,${game.flash})`; ctx.font = "800 104px Barlow Condensed"; ctx.textAlign = "center"; ctx.fillText("GOAL!", W/2, 150); ctx.shadowBlur = 0;
+    }
   }
 
   function render(now) {
-    ctx.save(); if (game.shake > .5) ctx.translate((Math.random() - .5) * game.shake, (Math.random() - .5) * game.shake);
-    drawPitch(); [...players].sort((a,b) => a.y-b.y).forEach((player) => drawPlayer(player, now)); drawBall(); drawEffects(); ctx.restore();
+    ctx.clearRect(0, 0, W, H); ctx.save(); if (game.shake > .5) ctx.translate((Math.random() - .5) * game.shake, (Math.random() - .5) * game.shake);
+    const camera = game.camera; ctx.translate(W / 2, H / 2); ctx.scale(camera.zoom, camera.zoom); ctx.translate(-camera.x, -camera.y);
+    drawPitch(); [...players].sort((a,b) => a.y-b.y).forEach((player) => drawPlayer(player, now)); drawBall(); drawEffects(); ctx.restore(); drawScreenEffects();
     drawRadar();
   }
 
@@ -399,7 +505,7 @@
     rctx.fillStyle = "white"; rctx.beginPath(); rctx.arc(ball.x/W*rw,ball.y/H*rh,2.2,0,Math.PI*2); rctx.fill();
   }
 
-  function updateUI(force = false) {
+  function updateUI(scoringTeam = null) {
     const elapsed = MATCH_SECONDS - game.time; const matchMinute = Math.min(90, Math.floor(elapsed / MATCH_SECONDS * 90)); const seconds = Math.floor((elapsed / MATCH_SECONDS * 90 - matchMinute) * 60);
     ui.gameClock.textContent = `${String(matchMinute).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
     ui.homeScore.textContent = game.score[HOME]; ui.awayScore.textContent = game.score[AWAY];
@@ -412,7 +518,10 @@
     ui.possessionStat.textContent = `${homePossession}%`; ui.possessionBar.style.width = `${homePossession}%`;
     ui.homeShots.textContent = game.stats.shots[HOME]; ui.awayShots.textContent = game.stats.shots[AWAY];
     ui.passStat.textContent = `${game.stats.passes ? Math.round(game.stats.completed / game.stats.passes * 100) : 0}%`;
-    if (force) { ui.homeScore.classList.add("score-pop"); setTimeout(() => ui.homeScore.classList.remove("score-pop"), 250); }
+    if (scoringTeam !== null) {
+      const score = scoringTeam === HOME ? ui.homeScore : ui.awayScore;
+      score.classList.add("score-pop"); setTimeout(() => score.classList.remove("score-pop"), 420);
+    }
   }
 
   function announce(message) { ui.commentary.textContent = message; game.messageTimer = 3; }
