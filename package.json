@@ -7,6 +7,9 @@
     "start": "node server.mjs",
     "test": "node --check game.js && node --check server.mjs"
   },
+  "dependencies": {
+    "three": "0.185.1"
+  },
   "engines": {
     "node": ">=18"
   }
