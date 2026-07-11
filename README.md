@@ -44,3 +44,11 @@ Toàn bộ game dùng Canvas 2D và Web Audio API, có ba cấp độ AI, stamin
 - Thủ môn có trang phục, găng tay và tư thế bay người
 - Hiệu ứng tăng tốc, vòng va chạm và cỏ bắn khi tắc bóng
 - Bóng xoay theo cú sút và nhịp rê bóng
+
+## WebGL 3D — Sprint 3
+
+- Sân vận động, khán đài, bảng LED và khung thành dựng bằng mesh 3D
+- Cầu thủ low-poly có khớp tay chân, bóng 3D và bóng đổ thời gian thực
+- Camera truyền hình phối cảnh bám theo diễn biến trận đấu
+- Ánh sáng sân vận động, sương chiều sâu và hiệu ứng màu điện ảnh
+- Giữ nguyên gameplay 6v6, AI, vật lý bóng, radar và điều khiển cảm ứng
