@@ -10,6 +10,7 @@ Game bóng đá arcade 6v6 chạy trực tiếp trên trình duyệt, không c�
 - `L`: tăng tốc
 - `Space`: đổi cầu thủ
 - `C`: chuyển camera Broadcast / Close Action / Tactical
+- `V`: chuyển thời tiết Clear / Rain
 - `Escape`: tạm dừng
 - Trên điện thoại: joystick và cụm nút cảm ứng xuất hiện tự động
 
@@ -70,3 +71,12 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Tay chân chia khớp, tất, giày và găng thủ môn có hình khối riêng
 - Thân trên nghiêng, lắc vai và chuyển động đầu theo nhịp chạy, sút, xoạc, ăn mừng
 - Chế độ Canvas 2D dự phòng cũng dùng thiết kế cầu thủ chi tiết mới
+
+## Stadium Atmosphere — Sprint 5
+
+- Hàng trăm cụm cỏ 3D xuất hiện rõ ở camera cận cảnh
+- Mưa động thích ứng theo cấu hình thiết bị và có chế độ Clear / Rain
+- Mặt sân chuyển dần sang trạng thái ướt, tối và phản sáng dưới đèn
+- Luồng sáng thể tích từ bốn cột đèn tạo chiều sâu sân vận động
+- Lưới khung thành rung và giảm chấn sau mỗi bàn thắng
+- Canvas 2D dự phòng có lớp mưa và màu sân ướt tương ứng
