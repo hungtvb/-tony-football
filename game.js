@@ -1,4 +1,11 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js";
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -18,7 +25,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
   const WORLD_SCALE = .1;
   const playerViews = new Map();
-  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;
+  let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;
   const ledViews = []; const goalNetViews = [];
   const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
@@ -431,24 +438,26 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function init3D() {
     try {
-      renderer3D = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+      renderer3D = new THREE.WebGLRenderer({ canvas, antialias: lowPowerDevice, alpha: false, powerPreference: "high-performance" });
     } catch (error) {
       use3D = false; ctx = canvas.getContext("2d"); ui.commentary.textContent = "WebGL không khả dụng · Đang chạy chế độ tương thích 2D"; return false;
     }
-    renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPowerDevice ? 1.1 : 1.65));
+    renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPowerDevice ? 1.1 : 2));
     renderer3D.setSize(W, H, false); renderer3D.shadowMap.enabled = !lowPowerDevice; renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer3D.outputColorSpace = THREE.SRGBColorSpace; renderer3D.toneMapping = THREE.ACESFilmicToneMapping; renderer3D.toneMappingExposure = 1.12;
 
     scene3D = new THREE.Scene(); scene3D.background = new THREE.Color(0x050a09); scene3D.fog = new THREE.FogExp2(0x07110e, .011);
-    camera3D = new THREE.PerspectiveCamera(43, W / H, .1, 260); camera3D.position.set(0, 54, 63); camera3D.lookAt(0, 0, 0);
+    camera3D = new THREE.PerspectiveCamera(lowPowerDevice?43:39, W / H, .1, 260); camera3D.position.set(0, lowPowerDevice?54:45, lowPowerDevice?63:52); camera3D.lookAt(0, 0, 0);
+    if(!lowPowerDevice){const pmrem=new THREE.PMREMGenerator(renderer3D);const environment=new RoomEnvironment();scene3D.environment=pmrem.fromScene(environment,.04).texture;scene3D.environmentIntensity=.62;environment.dispose();pmrem.dispose();}
 
     const hemisphere = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45); scene3D.add(hemisphere);
     const flood = new THREE.DirectionalLight(0xffffff, 3.4); flood.position.set(-28, 62, 30); flood.castShadow = true;
-    flood.shadow.mapSize.set(lowPowerDevice ? 512 : 1024, lowPowerDevice ? 512 : 1024); flood.shadow.camera.left = -72; flood.shadow.camera.right = 72; flood.shadow.camera.top = 50; flood.shadow.camera.bottom = -50;
+    flood.shadow.mapSize.set(lowPowerDevice ? 512 : 2048, lowPowerDevice ? 512 : 2048); flood.shadow.camera.left = -72; flood.shadow.camera.right = 72; flood.shadow.camera.top = 50; flood.shadow.camera.bottom = -50;
     flood.shadow.bias = -.00035; scene3D.add(flood);
     const rim = new THREE.DirectionalLight(0x70dcff, 1.4); rim.position.set(48, 25, -35); scene3D.add(rim);
 
     createPitch3D(); createGrass3D(); createStadium3D(); createGoals3D(); createAtmosphere3D(); createBall3D(); createParticleView(); createChargeView();
+    if(!lowPowerDevice){composer3D=new EffectComposer(renderer3D);composer3D.setPixelRatio(Math.min(window.devicePixelRatio||1,2));composer3D.setSize(W,H);composer3D.addPass(new RenderPass(scene3D,camera3D));const ssao=new SSAOPass(scene3D,camera3D,W,H,24);ssao.kernelRadius=10;ssao.minDistance=.002;ssao.maxDistance=.12;composer3D.addPass(ssao);const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.16,.48,.88);composer3D.addPass(bloom);composer3D.addPass(new SMAAPass(W*(window.devicePixelRatio||1),H*(window.devicePixelRatio||1)));composer3D.addPass(new OutputPass());}
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
     return true;
@@ -470,7 +479,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     paint.beginPath(); paint.moveTo(W / 2, FIELD.top); paint.lineTo(W / 2, FIELD.bottom); paint.stroke();
     paint.beginPath(); paint.arc(W / 2, H / 2, 83, 0, Math.PI * 2); paint.stroke(); paint.fillStyle = "white"; paint.beginPath(); paint.arc(W / 2, H / 2, 5, 0, Math.PI * 2); paint.fill();
     paint.strokeRect(FIELD.left, 175, 180, 350); paint.strokeRect(FIELD.left, 267, 83, 166); paint.strokeRect(FIELD.right - 180, 175, 180, 350); paint.strokeRect(FIELD.right - 83, 267, 83, 166);
-    const texture = new THREE.CanvasTexture(textureCanvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = Math.min(8, renderer3D.capabilities.getMaxAnisotropy()); return texture;
+    const texture = new THREE.CanvasTexture(textureCanvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = Math.min(lowPowerDevice?4:16, renderer3D.capabilities.getMaxAnisotropy()); return texture;
   }
 
   function createPitch3D() {
@@ -480,12 +489,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function createGrass3D() {
-    const count=lowPowerDevice?220:900; const bladeGeometry=new THREE.PlaneGeometry(.055,.42); bladeGeometry.translate(0,.21,0); const bladeMaterial=new THREE.MeshStandardMaterial({color:0x15915b,roughness:.92,side:THREE.DoubleSide}); grassView=new THREE.InstancedMesh(bladeGeometry,bladeMaterial,count); const dummy=new THREE.Object3D();
+    const count=lowPowerDevice?220:1800; const bladeGeometry=new THREE.PlaneGeometry(.055,.42); bladeGeometry.translate(0,.21,0); const bladeMaterial=new THREE.MeshStandardMaterial({color:0x15915b,roughness:.88,side:THREE.DoubleSide}); grassView=new THREE.InstancedMesh(bladeGeometry,bladeMaterial,count); const dummy=new THREE.Object3D();
     for(let i=0;i<count;i+=1){dummy.position.set(worldX(FIELD.left+seededNoise(i*2.13)*(FIELD.right-FIELD.left)),.015,worldZ(FIELD.top+seededNoise(i*5.71+3)*(FIELD.bottom-FIELD.top)));dummy.rotation.y=seededNoise(i*9.37)*Math.PI;const size=.65+seededNoise(i*4.43)*.7;dummy.scale.set(size,size,size);dummy.updateMatrix();grassView.setMatrixAt(i,dummy.matrix);} grassView.receiveShadow=true;grassView.frustumCulled=false;scene3D.add(grassView);
   }
 
   function createAtmosphere3D() {
-    const drops=lowPowerDevice?180:520;const positions=new Float32Array(drops*2*3);const speeds=new Float32Array(drops);
+    const drops=lowPowerDevice?180:820;const positions=new Float32Array(drops*2*3);const speeds=new Float32Array(drops);
     for(let i=0;i<drops;i+=1){const x=-67+seededNoise(i*3.17)*134;const y=2+seededNoise(i*7.43)*47;const z=-39+seededNoise(i*11.2)*78;const j=i*6;positions[j]=x;positions[j+1]=y;positions[j+2]=z;positions[j+3]=x-.1;positions[j+4]=y-.9;positions[j+5]=z+.14;speeds[i]=.65+seededNoise(i*13.7)*.85;}
     const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(positions,3));rainView=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0xbfe9f2,transparent:true,opacity:.34,depthWrite:false,blending:THREE.AdditiveBlending}));rainView.userData.speeds=speeds;scene3D.add(rainView);
   }
@@ -495,7 +504,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const stands = [[0, 4, -41, 126, 8, 12], [-67, 4, 0, 10, 8, 78], [67, 4, 0, 10, 8, 78], [0, 2, 40, 126, 4, 9]];
     for (const [x,y,z,w,h,d] of stands) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), standMaterial); mesh.position.set(x,y,z); mesh.receiveShadow = true; scene3D.add(mesh); }
     const crowdPositions = []; const crowdColors = [];
-    const crowdCount = lowPowerDevice ? 320 : 650;
+    const crowdCount = lowPowerDevice ? 320 : 1200;
     for (let i = 0; i < crowdCount; i += 1) {
       const edge = i % 4; const row = 1 + Math.floor(seededNoise(i * 8.3) * 4); let x; let z;
       if (edge < 2) { x = -61 + seededNoise(i * 2.8) * 122; z = edge === 0 ? -36 - row * 1.4 : 36 + row * .9; }
@@ -570,8 +579,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function createPlayerView(player) {
     const home = player.team === HOME; const keeper = player.role === "GK"; const accent = home ? "#e1bb58" : "#47c9d4";
     const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
-    const jerseyColor = keeper ? (home ? 0x8a62dd : 0xed6757) : (home ? 0xe1bb58 : 0x34b8c7); const jersey = new THREE.MeshStandardMaterial({ color: jerseyColor, roughness: .62, metalness: .02 });
-    const skinTones=[0xd89d78,0xb97958,0x8f5a3d,0xe5b08b]; const skin = new THREE.MeshStandardMaterial({ color:skinTones[(player.index+player.team)%skinTones.length], roughness:.78 });
+    const jerseyColor = keeper ? (home ? 0x8a62dd : 0xed6757) : (home ? 0xe1bb58 : 0x34b8c7); const jersey = lowPowerDevice?new THREE.MeshStandardMaterial({color:jerseyColor,roughness:.62,metalness:.02}):new THREE.MeshPhysicalMaterial({color:jerseyColor,roughness:.48,metalness:.01,sheen:1,sheenColor:new THREE.Color(home?0xffe4a3:0xbaf7ff),sheenRoughness:.7,clearcoat:.08,clearcoatRoughness:.72});
+    const skinTones=[0xd89d78,0xb97958,0x8f5a3d,0xe5b08b]; const skin = lowPowerDevice?new THREE.MeshStandardMaterial({color:skinTones[(player.index+player.team)%skinTones.length],roughness:.78}):new THREE.MeshPhysicalMaterial({color:skinTones[(player.index+player.team)%skinTones.length],roughness:.62,clearcoat:.06,clearcoatRoughness:.8});
     const dark = new THREE.MeshStandardMaterial({ color: keeper ? 0x20212c : (home ? 0x171b1a : 0x092e35), roughness:.72 }); const sock = new THREE.MeshStandardMaterial({color:home?0xe9d58f:0xb8eff3,roughness:.82});
     const boot = new THREE.MeshStandardMaterial({color:(player.index%3===0?0xf25b48:player.index%3===1?0xe8e9e6:0x171a1a),roughness:.38,metalness:.12}); const hairMaterial=new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.92});
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(.82,1.08,2.45,lowPowerDevice?8:12),jersey); torso.position.y=3.48; torso.scale.z=.88; torso.castShadow=true; body.add(torso);
@@ -636,12 +645,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
-    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,66,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
-    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,26,38+targetZ*.18);cameraLook.set(targetX,0,targetZ);}
-    else{cameraTarget.set(targetX,52+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),62+targetZ*.08);cameraLook.set(targetX,0,targetZ);}
+    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,lowPowerDevice?66:60,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
+    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,lowPowerDevice?26:20,lowPowerDevice?38:31+targetZ*.18);cameraLook.set(targetX,1.2,targetZ);}
+    else{cameraTarget.set(targetX,(lowPowerDevice?52:44)+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),(lowPowerDevice?62:52)+targetZ*.08);cameraLook.set(targetX,.7,targetZ);}
     camera3D.position.lerp(cameraTarget,replayFrame ? .12 : .055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
-    screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); renderer3D.render(scene3D,camera3D); drawRadar();
+    screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
   }
 
   function drawFallbackPlayerDetail(player,pose,replayFrame) {
