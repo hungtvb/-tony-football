@@ -35,6 +35,7 @@
       <section class="game-layout">
         <div class="pitch-panel">
           <canvas id="gameCanvas" width="1200" height="700" aria-label="Sân bóng Tony Football Max"></canvas>
+          <div id="replayBadge" class="replay-badge" aria-live="polite">● INSTANT REPLAY</div>
 
           <div id="startOverlay" class="game-overlay show">
             <div class="overlay-card hero-card">
@@ -108,6 +109,7 @@
             <p><kbd>K</kbd><span>Giữ & thả để sút</span></p>
             <p><kbd>L</kbd><span>Tăng tốc</span></p>
             <p><kbd>SPACE</kbd><span>Đổi cầu thủ</span></p>
+            <p><kbd>C</kbd><span>Đổi góc camera</span></p>
           </section>
         </aside>
       </section>
@@ -115,11 +117,11 @@
       <footer class="statusbar">
         <span><i class="status-dot"></i> ARCADE ENGINE ONLINE</span>
         <span id="commentary">Chào mừng đến Tony Football Max.</span>
-        <span>BUILD 3.0 · WEBGL</span>
+        <span>BUILD 4.0 · MATCHDAY</span>
       </footer>
     </main>
 
     <div id="rotateHint" class="rotate-hint">↻<strong>XOAY NGANG ĐỂ CHƠI TỐT NHẤT</strong></div>
-    <script type="module" src="game.js?v=3.0.1"></script>
+    <script type="module" src="game.js?v=4.0.0"></script>
   </body>
 </html>

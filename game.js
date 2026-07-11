@@ -18,7 +18,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
   const WORLD_SCALE = .1;
   const playerViews = new Map();
-  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true;
+  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView;
+  const ledViews = [];
+  const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
 
@@ -33,7 +35,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     start: $("startOverlay"), pause: $("pauseOverlay"), result: $("resultOverlay"), commentary: $("commentary"),
     staminaBar: $("staminaBar"), staminaText: $("staminaText"), playerName: $("playerName"),
     playerNumber: $("playerNumber"), playerRating: $("playerRating"), possessionStat: $("possessionStat"),
-    possessionBar: $("possessionBar"), homeShots: $("homeShots"), awayShots: $("awayShots"), passStat: $("passStat")
+    possessionBar: $("possessionBar"), homeShots: $("homeShots"), awayShots: $("awayShots"), passStat: $("passStat"),
+    replayBadge: $("replayBadge")
   };
 
   const formations = {
@@ -63,7 +66,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
-    camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }
+    camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
+    replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
+    goalSequence: null, goalScorer: null
   };
   let players = [];
   const input = { keys: new Set(), moveX: 0, moveY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0 };
@@ -82,7 +87,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function resetMatch() {
     createTeams();
     game.time = MATCH_SECONDS; game.score = [0, 0]; game.stats = { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 };
-    game.particles.length = 0; game.flash = 0; kickoff(HOME); updateUI();
+    game.particles.length = 0; game.flash = 0; game.goalSequence = null; game.goalScorer = null;
+    game.replay.buffer.length = 0; game.replay.frames.length = 0; game.replay.active = false; game.replay.elapsed = 0; game.replay.accumulator = 0;
+    ui.replayBadge.classList.remove("show"); kickoff(HOME); updateUI();
   }
 
   function kickoff(team) {
@@ -318,10 +325,43 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function goal(team) {
-    game.score[team] += 1; game.flash = 1; game.shake = 18; ball.owner = null; goalSound();
+    if (game.goalSequence) return;
+    const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
+    game.score[team] += 1; game.flash = 1; game.shake = 18; ball.owner = null; game.goalScorer = scorer; goalSound();
+    game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
+    game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: 3.65 };
+    for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", 3.65, player === scorer ? 1 : .65);
     for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
     announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(team);
-    game.kickOffTimer = 2.1; setTimeout(() => { if (game.state === "playing") kickoff(team === HOME ? AWAY : HOME); }, 1800);
+    ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.toggle("show", game.replay.active);
+  }
+
+  function captureReplayFrame() {
+    return {
+      ball: { x: ball.x, y: ball.y, angle: ball.angle },
+      players: players.map((player) => ({ x: player.x, y: player.y, vx: player.vx, vy: player.vy, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: player.anim, animTime: player.animTime, animDuration: player.animDuration, animPower: player.animPower }))
+    };
+  }
+
+  function recordReplay(dt) {
+    game.replay.accumulator += dt;
+    if (game.replay.accumulator < 1 / 15) return;
+    game.replay.accumulator %= 1 / 15; game.replay.buffer.push(captureReplayFrame());
+    if (game.replay.buffer.length > 66) game.replay.buffer.shift();
+  }
+
+  function updateReplay(dt) {
+    if (!game.replay.active) return;
+    game.replay.elapsed += dt;
+    if (game.replay.elapsed >= game.replay.duration) {
+      game.replay.active = false; ui.replayBadge.classList.remove("show");
+    }
+  }
+
+  function currentReplayFrame() {
+    if (!game.replay.active || !game.replay.frames.length) return null;
+    const progress = clamp(game.replay.elapsed / game.replay.duration, 0, .999);
+    return game.replay.frames[Math.floor(progress * game.replay.frames.length)];
   }
 
   function spawnParticle(x, y, color, energy = 1) {
@@ -350,22 +390,30 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function update(dt) {
-    updateInput(); updateParticles(dt); updateCamera(dt); game.flash = Math.max(0, game.flash - dt * 1.3); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); game.flash = Math.max(0, game.flash - dt * 1.3); game.shake *= Math.pow(.04, dt);
+    game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
+    for (const player of players) {
+      player.animTime = Math.max(0, player.animTime - dt);
+      if (player.animTime === 0) { player.anim = "idle"; player.animPower = 0; }
+    }
+    if (game.goalSequence) {
+      game.goalSequence.timer -= dt;
+      if (game.goalSequence.timer <= 0) { const nextTeam = game.goalSequence.nextTeam; game.goalSequence = null; game.replay.active = false; ui.replayBadge.classList.remove("show"); kickoff(nextTeam); }
+      return;
+    }
     if (game.kickOffTimer > 0) { game.kickOffTimer -= dt; return; }
     game.time -= dt; if (game.time <= 0) { game.time = 0; endMatch(); return; }
 
     for (const player of players) {
       player.cooldown = Math.max(0, player.cooldown - dt);
       player.diveCooldown = Math.max(0, player.diveCooldown - dt);
-      player.animTime = Math.max(0, player.animTime - dt);
-      if (player.animTime === 0) { player.anim = "idle"; player.animPower = 0; }
       if (player === game.selected) updateUser(player, dt); else updateAI(player, dt);
       if (player !== game.selected) player.sprinting = Math.hypot(player.vx, player.vy) > 185;
       player.stepPhase += dt * (.035 * Math.hypot(player.vx, player.vy) + 2.2);
       player.x += player.vx * dt; player.y += player.vy * dt; keepPlayerInBounds(player);
     }
-    resolvePlayerCollisions(); updateBall(dt);
+    resolvePlayerCollisions(); updateBall(dt); if (!game.goalSequence) recordReplay(dt);
     if (!ball.owner || ball.owner.team !== HOME) {
       const nearest = closestPlayer(HOME, ball, false); if (game.selected && distance(game.selected, ball) > distance(nearest, ball) + 145) game.selected = nearest;
     }
@@ -380,8 +428,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     } catch (error) {
       use3D = false; ctx = canvas.getContext("2d"); ui.commentary.textContent = "WebGL không khả dụng · Đang chạy chế độ tương thích 2D"; return false;
     }
-    renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-    renderer3D.setSize(W, H, false); renderer3D.shadowMap.enabled = true; renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPowerDevice ? 1.1 : 1.65));
+    renderer3D.setSize(W, H, false); renderer3D.shadowMap.enabled = !lowPowerDevice; renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer3D.outputColorSpace = THREE.SRGBColorSpace; renderer3D.toneMapping = THREE.ACESFilmicToneMapping; renderer3D.toneMappingExposure = 1.12;
 
     scene3D = new THREE.Scene(); scene3D.background = new THREE.Color(0x050a09); scene3D.fog = new THREE.FogExp2(0x07110e, .011);
@@ -389,7 +437,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
     const hemisphere = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45); scene3D.add(hemisphere);
     const flood = new THREE.DirectionalLight(0xffffff, 3.4); flood.position.set(-28, 62, 30); flood.castShadow = true;
-    flood.shadow.mapSize.set(1024, 1024); flood.shadow.camera.left = -72; flood.shadow.camera.right = 72; flood.shadow.camera.top = 50; flood.shadow.camera.bottom = -50;
+    flood.shadow.mapSize.set(lowPowerDevice ? 512 : 1024, lowPowerDevice ? 512 : 1024); flood.shadow.camera.left = -72; flood.shadow.camera.right = 72; flood.shadow.camera.top = 50; flood.shadow.camera.bottom = -50;
     flood.shadow.bias = -.00035; scene3D.add(flood);
     const rim = new THREE.DirectionalLight(0x70dcff, 1.4); rim.position.set(48, 25, -35); scene3D.add(rim);
 
@@ -429,7 +477,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const stands = [[0, 4, -41, 126, 8, 12], [-67, 4, 0, 10, 8, 78], [67, 4, 0, 10, 8, 78], [0, 2, 40, 126, 4, 9]];
     for (const [x,y,z,w,h,d] of stands) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), standMaterial); mesh.position.set(x,y,z); mesh.receiveShadow = true; scene3D.add(mesh); }
     const crowdPositions = []; const crowdColors = [];
-    for (let i = 0; i < 650; i += 1) {
+    const crowdCount = lowPowerDevice ? 320 : 650;
+    for (let i = 0; i < crowdCount; i += 1) {
       const edge = i % 4; const row = 1 + Math.floor(seededNoise(i * 8.3) * 4); let x; let z;
       if (edge < 2) { x = -61 + seededNoise(i * 2.8) * 122; z = edge === 0 ? -36 - row * 1.4 : 36 + row * .9; }
       else { x = edge === 2 ? -61 - row * 1.3 : 61 + row * 1.3; z = -33 + seededNoise(i * 4.7) * 66; }
@@ -437,7 +486,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       const roll = seededNoise(i * 12.7); const color = new THREE.Color(roll > .93 ? 0xe1bb58 : roll > .86 ? 0x47c9d4 : 0x9ca9a3); crowdColors.push(color.r, color.g, color.b);
     }
     const crowdGeometry = new THREE.BufferGeometry(); crowdGeometry.setAttribute("position", new THREE.Float32BufferAttribute(crowdPositions, 3)); crowdGeometry.setAttribute("color", new THREE.Float32BufferAttribute(crowdColors, 3));
-    const crowd = new THREE.Points(crowdGeometry, new THREE.PointsMaterial({ size: .34, vertexColors: true, sizeAttenuation: true })); scene3D.add(crowd);
+    crowdView = new THREE.Points(crowdGeometry, new THREE.PointsMaterial({ size: .34, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: .9 })); scene3D.add(crowdView);
     createLedBoard3D(0, -35.1, "TONY FOOTBALL MAX", 0xe1bb58); createLedBoard3D(0, 35.2, "PLAY BEAUTIFUL · PLAY TONY", 0x47c9d4);
     for (const x of [-49, 49]) for (const z of [-36, 36]) {
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(.28, .38, 21, 8), new THREE.MeshStandardMaterial({ color: 0x59615e, metalness: .8, roughness: .35 })); mast.position.set(x, 10, z); scene3D.add(mast);
@@ -448,7 +497,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function createLedBoard3D(x, z, text, color) {
     const board = new THREE.Mesh(new THREE.BoxGeometry(35, 1.7, .45), new THREE.MeshStandardMaterial({ color: 0x030706, emissive: color, emissiveIntensity: .32, metalness: .35, roughness: .35 })); board.position.set(x, 1.1, z); scene3D.add(board);
     const labelCanvas = document.createElement("canvas"); labelCanvas.width = 1024; labelCanvas.height = 64; const paint = labelCanvas.getContext("2d"); paint.fillStyle = "#050908"; paint.fillRect(0,0,1024,64); paint.fillStyle = `#${color.toString(16).padStart(6,"0")}`; paint.font = "700 28px Inter"; paint.textAlign = "center"; paint.textBaseline = "middle"; paint.fillText(text,512,34);
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(34.5, 1.5), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(labelCanvas), toneMapped: false })); label.position.set(x, 1.1, z + (z > 0 ? -.24 : .24)); label.rotation.y = z > 0 ? Math.PI : 0; scene3D.add(label);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(34.5, 1.5), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(labelCanvas), toneMapped: false, transparent: true })); label.position.set(x, 1.1, z + (z > 0 ? -.24 : .24)); label.rotation.y = z > 0 ? Math.PI : 0; scene3D.add(label); ledViews.push({ board, label });
   }
 
   function createGoals3D() {
@@ -508,12 +557,13 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     chargeView = new THREE.Group(); const bg=new THREE.Mesh(new THREE.BoxGeometry(5,.22,.28),new THREE.MeshBasicMaterial({color:0x080b0a,transparent:true,opacity:.8})); const fill=new THREE.Mesh(new THREE.BoxGeometry(4.8,.24,.3),new THREE.MeshBasicMaterial({color:0xffcf58,toneMapped:false})); fill.position.y=.02; fill.userData.baseWidth=4.8; chargeView.add(bg,fill); chargeView.userData.fill=fill; chargeView.visible=false; scene3D.add(chargeView);
   }
 
-  function updatePlayerView(player, now) {
-    const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(player.vx,player.vy); const running=speed>30; const stride=running?Math.sin(player.stepPhase)*clamp(speed/185,.35,1.25):0;
-    const progress=player.animDuration?1-player.animTime/player.animDuration:1; const wave=player.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(player.anim==="shoot"||player.anim==="pass")?wave:0; const tackle=player.anim==="tackle"?wave:0; const dive=player.anim==="dive"?wave:0;
-    view.root.position.set(worldX(player.x),0,worldZ(player.y)); view.root.rotation.y=Math.atan2(player.dirX,player.dirY); view.body.position.y=running?Math.abs(Math.sin(player.stepPhase))*.12:0; view.body.rotation.z=dive*player.animPower*.9; view.body.rotation.x=tackle*.6;
-    view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(player.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=-stride*.62-kick*.45; view.rightArm.rotation.x=stride*.62+kick*.72;
-    view.marker.visible=player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);} view.label.visible=player===game.selected||speed<10;
+  function updatePlayerView(player, now, pose = player) {
+    const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
+    const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
+    view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9; view.body.rotation.x=tackle*.6;
+    view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
+    view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate?.72:.24;
+    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function updateParticleView() {
@@ -523,20 +573,29 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function render3D(now) {
-    for(const player of players)updatePlayerView(player,now);
-    ballView.position.set(worldX(ball.x),.86,worldZ(ball.y)); ballView.rotation.set(ball.angle*.7,ball.angle,ball.angle*.35); updateParticleView();
+    const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
+    players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
+    ballView.position.set(worldX(renderBall.x),.86,worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView();
     if(input.shootStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.shootCharge);fill.position.x=-2.4+2.4*input.shootCharge;fill.material.color.set(input.shootCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
-    const targetX=worldX(lerp(W/2,ball.x,.34));const targetZ=worldZ(lerp(H/2,ball.y,.18));cameraTarget.set(targetX,52+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),62+targetZ*.08);cameraLook.set(targetX,0,targetZ);
-    camera3D.position.lerp(cameraTarget,.055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
+    const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
+    if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
+    else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
+    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,66,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
+    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,26,38+targetZ*.18);cameraLook.set(targetX,0,targetZ);}
+    else{cameraTarget.set(targetX,52+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),62+targetZ*.08);cameraLook.set(targetX,0,targetZ);}
+    camera3D.position.lerp(cameraTarget,replayFrame?.12:.055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
+    const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice?.3:.34)*stadiumPulse;crowdView.material.opacity=game.goalSequence?.98:.88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence?.75+.3*Math.sin(now*.022):.32;led.label.material.opacity=game.goalSequence?.8+.2*Math.sin(now*.018):1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); renderer3D.render(scene3D,camera3D); drawRadar();
   }
 
   function renderFallback2D(now) {
+    const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||ball;
     ctx.clearRect(0,0,W,H); ctx.fillStyle="#075d39"; ctx.fillRect(0,0,W,H);
     for(let i=0;i<14;i+=1){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,20,8,.04)";ctx.fillRect(FIELD.left+i*(FIELD.right-FIELD.left)/14,FIELD.top,(FIELD.right-FIELD.left)/14,FIELD.bottom-FIELD.top);}
     ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();
-    for(const player of [...players].sort((a,b)=>a.y-b.y)){const selected=player===game.selected;const home=player.team===HOME;const speed=Math.hypot(player.vx,player.vy);const bob=speed>30?Math.abs(Math.sin(player.stepPhase))*-2:0;ctx.save();ctx.translate(player.x,player.y+bob);ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,16,22,9,0,0,Math.PI*2);ctx.fill();if(selected){ctx.strokeStyle="#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,12,27,14,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=player.role==="GK"?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4");ctx.beginPath();ctx.roundRect(-12,-15,24,28,7);ctx.fill();ctx.fillStyle="#d89d78";ctx.beginPath();ctx.arc(0,-22,8,0,Math.PI*2);ctx.fill();ctx.fillStyle="white";ctx.font="800 10px Inter";ctx.textAlign="center";ctx.fillText(player.number,0,2);ctx.restore();}
-    ctx.fillStyle="white";ctx.beginPath();ctx.arc(ball.x,ball.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#17201d";ctx.lineWidth=2;ctx.stroke();
+    const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||player})).sort((a,b)=>a.pose.y-b.pose.y);
+    for(const {base:player,pose} of fallbackPlayers){const selected=!replayFrame&&player===game.selected;const home=player.team===HOME;const speed=Math.hypot(pose.vx,pose.vy);const bob=speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0;ctx.save();ctx.translate(pose.x,pose.y+bob);ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,16,22,9,0,0,Math.PI*2);ctx.fill();if(selected){ctx.strokeStyle="#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,12,27,14,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=player.role==="GK"?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4");ctx.beginPath();ctx.roundRect(-12,-15,24,28,7);ctx.fill();ctx.fillStyle="#d89d78";ctx.beginPath();ctx.arc(0,-22,8,0,Math.PI*2);ctx.fill();ctx.fillStyle="white";ctx.font="800 10px Inter";ctx.textAlign="center";ctx.fillText(player.number,0,2);ctx.restore();}
+    ctx.fillStyle="white";ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#17201d";ctx.lineWidth=2;ctx.stroke();
     for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
     if(input.shootStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.shootCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.shootCharge,6);}
     if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}drawRadar();
@@ -742,6 +801,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function announce(message) { ui.commentary.textContent = message; game.messageTimer = 3; }
 
+  function cycleCamera() {
+    const modes = ["broadcast", "close", "tactical"]; const labels = { broadcast: "BROADCAST", close: "CLOSE ACTION", tactical: "TACTICAL" };
+    game.cameraMode = modes[(modes.indexOf(game.cameraMode) + 1) % modes.length]; game.cameraNotice = 1.6;
+    ui.replayBadge.textContent = `CAMERA · ${labels[game.cameraMode]}`; ui.replayBadge.classList.add("show"); tone(460,.04,"sine",.018);
+  }
+
   let audioContext = null;
   function ensureAudio() { if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
   function tone(frequency, duration, type = "sine", volume = .04, delay = 0) {
@@ -755,18 +820,21 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function loop(now) {
     const dt = Math.min(.033, (now - game.lastTime) / 1000 || .016); game.lastTime = now; update(dt); render(now);
-    if (game.messageTimer > 0) game.messageTimer -= dt; updateUI(); requestAnimationFrame(loop);
+    if (game.messageTimer > 0) game.messageTimer -= dt;
+    if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
+    updateUI(); requestAnimationFrame(loop);
   }
 
   function onKeyDown(event) {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
-    if (event.repeat && ["KeyJ","KeyK","Space","Escape"].includes(event.code)) return;
+    if (event.repeat && ["KeyJ","KeyK","KeyC","Space","Escape"].includes(event.code)) return;
     input.keys.add(event.code);
     if (event.code === "Escape") togglePause();
     if (game.state !== "playing") return;
     if (event.code === "KeyJ") passBall(game.selected);
     if (event.code === "KeyK" && ball.owner === game.selected) { input.shootStart = performance.now(); input.shootCharge = 0; }
     if (event.code === "Space") switchPlayer();
+    if (event.code === "KeyC") cycleCamera();
   }
   function onKeyUp(event) {
     input.keys.delete(event.code);
