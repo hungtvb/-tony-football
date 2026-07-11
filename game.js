@@ -18,7 +18,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
   const WORLD_SCALE = .1;
   const playerViews = new Map();
-  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx;
+  let renderer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true;
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
 
@@ -378,8 +378,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     try {
       renderer3D = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
     } catch (error) {
-      ui.commentary.textContent = "Thiết bị không hỗ trợ WebGL. Hãy bật tăng tốc phần cứng để chơi bản 3D.";
-      throw error;
+      use3D = false; ctx = canvas.getContext("2d"); ui.commentary.textContent = "WebGL không khả dụng · Đang chạy chế độ tương thích 2D"; return false;
     }
     renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer3D.setSize(W, H, false); renderer3D.shadowMap.enabled = true; renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -397,6 +396,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     createPitch3D(); createStadium3D(); createGoals3D(); createBall3D(); createParticleView(); createChargeView();
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
+    return true;
   }
 
   function createPitchTexture3D() {
@@ -529,6 +529,17 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const targetX=worldX(lerp(W/2,ball.x,.34));const targetZ=worldZ(lerp(H/2,ball.y,.18));cameraTarget.set(targetX,52+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),62+targetZ*.08);cameraLook.set(targetX,0,targetZ);
     camera3D.position.lerp(cameraTarget,.055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); renderer3D.render(scene3D,camera3D); drawRadar();
+  }
+
+  function renderFallback2D(now) {
+    ctx.clearRect(0,0,W,H); ctx.fillStyle="#075d39"; ctx.fillRect(0,0,W,H);
+    for(let i=0;i<14;i+=1){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,20,8,.04)";ctx.fillRect(FIELD.left+i*(FIELD.right-FIELD.left)/14,FIELD.top,(FIELD.right-FIELD.left)/14,FIELD.bottom-FIELD.top);}
+    ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();
+    for(const player of [...players].sort((a,b)=>a.y-b.y)){const selected=player===game.selected;const home=player.team===HOME;const speed=Math.hypot(player.vx,player.vy);const bob=speed>30?Math.abs(Math.sin(player.stepPhase))*-2:0;ctx.save();ctx.translate(player.x,player.y+bob);ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,16,22,9,0,0,Math.PI*2);ctx.fill();if(selected){ctx.strokeStyle="#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,12,27,14,0,0,Math.PI*2);ctx.stroke();}ctx.fillStyle=player.role==="GK"?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4");ctx.beginPath();ctx.roundRect(-12,-15,24,28,7);ctx.fill();ctx.fillStyle="#d89d78";ctx.beginPath();ctx.arc(0,-22,8,0,Math.PI*2);ctx.fill();ctx.fillStyle="white";ctx.font="800 10px Inter";ctx.textAlign="center";ctx.fillText(player.number,0,2);ctx.restore();}
+    ctx.fillStyle="white";ctx.beginPath();ctx.arc(ball.x,ball.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#17201d";ctx.lineWidth=2;ctx.stroke();
+    for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
+    if(input.shootStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.shootCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.shootCharge,6);}
+    if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}drawRadar();
   }
 
   function drawPitch() {
@@ -700,7 +711,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   }
 
   function render(now) {
-    render3D(now);
+    if (use3D) render3D(now); else renderFallback2D(now);
   }
 
   function drawRadar() {
