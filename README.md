@@ -27,3 +27,12 @@ npm test
 ```
 
 Toàn bộ game dùng Canvas 2D và Web Audio API, có ba cấp độ AI, stamina, radar, thống kê trực tiếp, hiệu ứng ghi bàn và bố cục responsive.
+
+## Đồ họa Sprint 1
+
+- Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
+- Khán đài, bảng LED và khung thành giả lập chiều sâu
+- Cầu thủ 2.5D xoay theo hướng chạy, có chuyển động tay chân
+- Bóng có đổ bóng, phản sáng và vệt chuyển động
+- Camera bám bóng, zoom động, rung khi ghi bàn và vignette điện ảnh
+- HUD nâng cấp với scoreboard và hiệu ứng điểm số
