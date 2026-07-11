@@ -100,3 +100,15 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Giữ KÈM để cầu thủ tự áp sát, giữ cự ly jockey và luôn hướng mặt về đối thủ
 - Vòng chọn cầu thủ đổi sang màu cyan khi chế độ kèm người đang hoạt động
 - Bàn phím dùng cùng ánh xạ `J / K / L` theo trạng thái tấn công hoặc phòng thủ
+
+## Desktop Ultra — Sprint 7
+
+- Pipeline hậu kỳ EffectComposer dành riêng cho máy tính
+- SSAO tăng contact shadow ở chân cầu thủ, khớp cơ thể và vật thể trên sân
+- Bloom nhẹ, SMAA và OutputPass tạo hình ảnh sạch, có chiều sâu nhưng không lóa
+- Ánh sáng môi trường PBR qua RoomEnvironment và PMREM
+- Vật liệu áo đấu có sheen vải; da có roughness và phản sáng tự nhiên hơn
+- Shadow map nâng từ 1024 lên 2048, render scale tối đa 2x và texture anisotropy 16x
+- Camera Broadcast / Close hạ thấp để nhìn rõ cầu thủ và chuyển động
+- Mật độ cỏ, mưa và khán giả tăng gần gấp đôi trên desktop
+- Thiết bị cấu hình thấp vẫn tự bỏ post-processing và dùng pipeline nhẹ
