@@ -58,7 +58,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       this.vx = 0; this.vy = 0; this.dirX = team === HOME ? 1 : -1; this.dirY = 0;
       this.radius = this.role === "GK" ? 20 : 17; this.stamina = 100; this.cooldown = 0;
       this.anim = "idle"; this.animTime = 0; this.animDuration = 1; this.animPower = 0; this.stepPhase = index * 1.7;
-      this.sprinting = false; this.diveCooldown = 0;
+      this.sprinting = false; this.diveCooldown = 0; this.controlBoost = 0;
     }
   }
 
@@ -72,7 +72,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     goalSequence: null, goalScorer: null, weather: "rain"
   };
   let players = [];
-  const input = { keys: new Set(), moveX: 0, moveY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0 };
+  const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0 };
 
   function createTeams() {
     for (const view of playerViews.values()) scene3D?.remove(view.root);
@@ -96,7 +96,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function kickoff(team) {
     players.forEach((player) => {
       player.x = player.baseX; player.y = player.baseY; player.vx = player.vy = 0; player.stamina = Math.max(55, player.stamina);
-      player.anim = "idle"; player.animTime = 0; player.sprinting = false; player.diveCooldown = 0;
+      player.anim = "idle"; player.animTime = 0; player.sprinting = false; player.diveCooldown = 0; player.controlBoost = 0;
     });
     const taker = team === HOME ? players[4] : players[10];
     taker.x = W / 2 + (team === HOME ? -26 : 26); taker.y = H / 2;
@@ -136,8 +136,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function switchPlayer() {
     if (ball.owner?.team === HOME) { game.selected = ball.owner; return; }
-    const candidates = players.filter((player) => player.team === HOME && player.role !== "GK").sort((a, b) => distance(a, ball) - distance(b, ball));
-    game.selected = candidates.find((player) => player !== game.selected) || candidates[0];
+    const target=ball.owner?.team===AWAY?ball.owner:{x:ball.x+ball.vx*.2,y:ball.y+ball.vy*.2};
+    const candidates=players.filter((player)=>player.team===HOME&&player.role!=="GK"&&player!==game.selected).map((player)=>{const toTarget=normalize(target.x-player.x,target.y-player.y);const intent=input.magnitude>.12?toTarget.x*input.aimX+toTarget.y*input.aimY:0;const rolePenalty=player.role==="FW"&&target.x<W*.52?35:0;return{player,score:distance(player,target)-intent*55+rolePenalty};}).sort((a,b)=>a.score-b.score);
+    game.selected=candidates[0]?.player||closestPlayer(HOME,target,false);
     tone(520, .035, "sine", .025);
   }
 
@@ -146,7 +147,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       if (player.team === HOME) game.stats.completed += 1;
       ball.pendingPass = null;
     } else if (ball.pendingPass && player.team !== ball.pendingPass.team) ball.pendingPass = null;
-    ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;
+    ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0; player.controlBoost=.28;
     triggerAnimation(player, "receive", .2);
     if (player.team === HOME && player.role !== "GK") game.selected = player;
   }
@@ -168,13 +169,13 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function passBall(player) {
     if (ball.owner !== player) { tackle(player); return; }
     const teammates = players.filter((p) => p.team === player.team && p !== player && p.role !== "GK");
-    const facing = normalize(player.dirX || (player.team === HOME ? 1 : -1), player.dirY);
+    const hasIntent=player===game.selected&&input.magnitude>.12;const facing=hasIntent?normalize(input.aimX,input.aimY):normalize(player.dirX||(player.team===HOME?1:-1),player.dirY);
     let target = teammates[0]; let best = -Infinity;
     for (const candidate of teammates) {
       const dx = candidate.x - player.x; const dy = candidate.y - player.y; const d = length(dx, dy);
       const forward = (dx / d) * facing.x + (dy / d) * facing.y;
       const attack = player.team === HOME ? dx : -dx;
-      const score = forward * 220 + attack * .25 - d * .18;
+      const lane=Math.abs((candidate.y-player.y)/d);const score=forward*360+attack*.18-d*.2-lane*18;
       if (score > best) { target = candidate; best = score; }
     }
     const leadX = target.x + target.vx * .18; const leadY = target.y + target.vy * .18;
@@ -188,7 +189,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const targetX = player.team === HOME ? FIELD.right + 45 : FIELD.left - 45;
     const keeper = players.find((p) => p.team !== player.team && p.role === "GK");
     const openY = keeper.y < H / 2 ? FIELD.goalBottom - 34 : FIELD.goalTop + 34;
-    const aimY = lerp(openY, player.y + player.dirY * 120, .28) + (Math.random() - .5) * (34 / game.ai);
+    const userAim=player===game.selected&&player.team===HOME&&input.magnitude>.12;const directedY=userAim?H/2+input.aimY*145:player.y+player.dirY*120;
+    const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
     const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, 620 + power * 430, "shot");
     game.stats.shots[player.team] += 1; announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
@@ -211,7 +213,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (input.keys.has("KeyD") || input.keys.has("ArrowRight")) x += 1;
     if (input.keys.has("KeyW") || input.keys.has("ArrowUp")) y -= 1;
     if (input.keys.has("KeyS") || input.keys.has("ArrowDown")) y += 1;
-    const n = length(x, y); input.moveX = n > 1 ? x / n : x; input.moveY = n > 1 ? y / n : y;
+    const raw=Math.hypot(x,y);const keyboard=input.keys.has("KeyA")||input.keys.has("KeyD")||input.keys.has("KeyW")||input.keys.has("KeyS")||input.keys.has("ArrowLeft")||input.keys.has("ArrowRight")||input.keys.has("ArrowUp")||input.keys.has("ArrowDown");
+    if(raw<.1){input.moveX=0;input.moveY=0;input.magnitude=0;}else{const direction=normalize(x,y);const analog=keyboard?1:Math.pow(clamp((raw-.1)/.9,0,1),.78);input.moveX=direction.x*analog;input.moveY=direction.y*analog;input.magnitude=analog;if(analog>.12){input.aimX=direction.x;input.aimY=direction.y;}}
     if (input.shootStart) input.shootCharge = clamp((performance.now() - input.shootStart) / 900, 0, 1);
   }
 
@@ -225,16 +228,15 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function updateUser(player, dt) {
     const sprinting = input.keys.has("KeyL") || input.keys.has("ShiftLeft") || $("mobileSprint").classList.contains("active");
-    const hasMove = Math.abs(input.moveX) + Math.abs(input.moveY) > .05;
-    const boost = sprinting && player.stamina > 2 ? 1.42 : 1;
-    player.sprinting = sprinting && player.stamina > 2 && hasMove;
-    const speed = 205 * boost;
+    const precision=input.keys.has("KeyQ")||$("mobileControl").classList.contains("active");const hasMove=input.magnitude>.03;
+    const boost = sprinting && !precision && player.stamina > 2 ? 1.42 : 1;
+    player.sprinting = sprinting && !precision && player.stamina > 2 && hasMove;
+    player.controlBoost=Math.max(0,player.controlBoost-dt);const speed=(precision?132:205)*boost*input.magnitude;
     if (hasMove) {
-      player.vx = lerp(player.vx, input.moveX * speed, 1 - Math.exp(-dt * 12));
-      player.vy = lerp(player.vy, input.moveY * speed, 1 - Math.exp(-dt * 12));
-      player.dirX = input.moveX; player.dirY = input.moveY;
-      player.stamina = clamp(player.stamina - dt * (sprinting ? 12 : 1.2), 0, 100);
-    } else { player.vx *= Math.pow(.0008, dt); player.vy *= Math.pow(.0008, dt); player.stamina = clamp(player.stamina + dt * 5, 0, 100); }
+      const current=normalize(player.vx||input.moveX,player.vy||input.moveY);const turnDot=current.x*input.aimX+current.y*input.aimY;const response=(precision?18:player.controlBoost>0?16:turnDot<-.15?8:12);player.vx=lerp(player.vx,input.aimX*speed,1-Math.exp(-dt*response));player.vy=lerp(player.vy,input.aimY*speed,1-Math.exp(-dt*response));
+      player.dirX=lerp(player.dirX,input.aimX,1-Math.exp(-dt*18));player.dirY=lerp(player.dirY,input.aimY,1-Math.exp(-dt*18));const facing=normalize(player.dirX,player.dirY);player.dirX=facing.x;player.dirY=facing.y;
+      player.stamina=clamp(player.stamina-dt*(player.sprinting?11*input.magnitude:precision ? .35 : 1.1),0,100);
+    } else { player.vx*=Math.pow(.0018,dt);player.vy*=Math.pow(.0018,dt);player.stamina=clamp(player.stamina+dt*(precision?6.2:5),0,100); }
   }
 
   function updateAI(player, dt) {
@@ -299,7 +301,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (ball.lock > 0) ball.lock -= dt;
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
-      const owner = ball.owner; const lead = owner.radius + 11; ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
+      const owner = ball.owner; const closeControl=owner===game.selected&&(input.keys.has("KeyQ")||$("mobileControl").classList.contains("active"));const lead=owner.radius+(closeControl?6:11); ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
       ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
@@ -922,10 +924,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     bindTouchButton($("mobilePass"), () => passBall(game.selected));
     bindTouchButton($("mobileShoot"), null, () => { if(ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;} }, () => { if(input.shootStart){shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0;} });
     bindTouchButton($("mobileSprint"));
+    bindTouchButton($("mobileControl"));
   }
 
   function bindTouchButton(button, tap, down, up) {
-    button.addEventListener("pointerdown", (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); button.classList.add("active"); down?.(); tap?.(); });
+    button.addEventListener("pointerdown", (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); button.classList.add("active"); navigator.vibrate?.(12); down?.(); tap?.(); });
     const release = () => { button.classList.remove("active"); up?.(); };
     button.addEventListener("pointerup", release); button.addEventListener("pointercancel", release);
   }
