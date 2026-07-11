@@ -77,10 +77,12 @@
       this.team = team; this.index = index; this.x = this.baseX; this.y = this.baseY;
       this.vx = 0; this.vy = 0; this.dirX = team === HOME ? 1 : -1; this.dirY = 0;
       this.radius = this.role === "GK" ? 20 : 17; this.stamina = 100; this.cooldown = 0;
+      this.anim = "idle"; this.animTime = 0; this.animDuration = 1; this.animPower = 0; this.stepPhase = index * 1.7;
+      this.sprinting = false; this.diveCooldown = 0;
     }
   }
 
-  const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null };
+  const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0 };
   const game = {
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
@@ -107,10 +109,11 @@
   function kickoff(team) {
     players.forEach((player) => {
       player.x = player.baseX; player.y = player.baseY; player.vx = player.vy = 0; player.stamina = Math.max(55, player.stamina);
+      player.anim = "idle"; player.animTime = 0; player.sprinting = false; player.diveCooldown = 0;
     });
     const taker = team === HOME ? players[4] : players[10];
     taker.x = W / 2 + (team === HOME ? -26 : 26); taker.y = H / 2;
-    ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null;
+    ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null; ball.angle = 0; ball.spin = 0;
     game.selected = team === HOME ? taker : closestPlayer(HOME, ball, false);
     game.kickOffTimer = 1.25; announce(team === HOME ? "Tony FC giao bóng!" : "Neon United giao bóng!");
   }
@@ -157,14 +160,21 @@
       ball.pendingPass = null;
     } else if (ball.pendingPass && player.team !== ball.pendingPass.team) ball.pendingPass = null;
     ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;
+    triggerAnimation(player, "receive", .2);
     if (player.team === HOME && player.role !== "GK") game.selected = player;
+  }
+
+  function triggerAnimation(player, name, duration, power = 0) {
+    player.anim = name; player.animTime = duration; player.animDuration = duration; player.animPower = power;
   }
 
   function releaseBall(player, dx, dy, speed, type) {
     const n = normalize(dx, dy); ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : .2;
     ball.x = player.x + n.x * (player.radius + 10); ball.y = player.y + n.y * (player.radius + 10);
     ball.vx = n.x * speed + player.vx * .25; ball.vy = n.y * speed + player.vy * .25;
+    ball.spin = (player.team === HOME ? 1 : -1) * speed * .012;
     player.cooldown = .18; kickSound(type === "shot" ? .9 : .55);
+    triggerAnimation(player, type === "shot" ? "shoot" : "pass", type === "shot" ? .34 : .24, clamp((speed - 400) / 650, 0, 1));
     for (let i = 0; i < (type === "shot" ? 9 : 4); i += 1) spawnParticle(ball.x, ball.y, type === "shot" ? "#f5d067" : "#f4f7f5", 1.2);
   }
 
@@ -200,7 +210,8 @@
     if (player.cooldown > 0) return;
     const opponent = ball.owner && ball.owner.team !== player.team ? ball.owner : closestPlayer(player.team === HOME ? AWAY : HOME, player);
     if (!opponent || distance(player, opponent) > 48) return;
-    player.cooldown = .7; const chance = .48 + (player.rating - opponent.rating) * .012;
+    player.cooldown = .7; triggerAnimation(player, "tackle", .38); const chance = .48 + (player.rating - opponent.rating) * .012;
+    for (let i = 0; i < 5; i += 1) spawnParticle(player.x + player.dirX * 14, player.y + player.dirY * 14, i % 2 ? "#b7cf75" : "#5d8a49", .5);
     if (ball.owner === opponent && Math.random() < chance) {
       ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
       ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; announce(`${player.name} đoạt bóng!`); kickSound(.3);
@@ -229,6 +240,7 @@
     const sprinting = input.keys.has("KeyL") || input.keys.has("ShiftLeft") || $("mobileSprint").classList.contains("active");
     const hasMove = Math.abs(input.moveX) + Math.abs(input.moveY) > .05;
     const boost = sprinting && player.stamina > 2 ? 1.42 : 1;
+    player.sprinting = sprinting && player.stamina > 2 && hasMove;
     const speed = 205 * boost;
     if (hasMove) {
       player.vx = lerp(player.vx, input.moveX * speed, 1 - Math.exp(-dt * 12));
@@ -246,6 +258,9 @@
 
     if (player.role === "GK") {
       const gx = team === HOME ? 82 : 1118; const danger = team === HOME ? ball.x < 270 : ball.x > 930;
+      if (danger && !ball.owner && Math.hypot(ball.vx, ball.vy) > 480 && Math.abs(ball.y - player.y) < 145 && player.diveCooldown <= 0) {
+        triggerAnimation(player, "dive", .46, Math.sign(ball.y - player.y)); player.diveCooldown = 1.1;
+      }
       moveToward(player, danger && !ball.owner ? clamp(ball.x, team === HOME ? 66 : 1040, team === HOME ? 160 : 1134) : gx, clamp(ball.y, FIELD.goalTop + 25, FIELD.goalBottom - 25), aiSpeed * .78, dt);
       if (hasBall && player.cooldown <= 0) {
         const target = players.find((p) => p.team === team && p.role === "DF");
@@ -293,10 +308,12 @@
   }
 
   function updateBall(dt) {
+    ball.angle += ball.spin * dt; ball.spin *= Math.pow(.55, dt);
     if (ball.lock > 0) ball.lock -= dt;
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
       const owner = ball.owner; const lead = owner.radius + 11; ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
+      ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
       ball.x += ball.vx * dt; ball.y += ball.vy * dt; const friction = Math.pow(.22, dt); ball.vx *= friction; ball.vy *= friction;
@@ -361,7 +378,12 @@
 
     for (const player of players) {
       player.cooldown = Math.max(0, player.cooldown - dt);
+      player.diveCooldown = Math.max(0, player.diveCooldown - dt);
+      player.animTime = Math.max(0, player.animTime - dt);
+      if (player.animTime === 0) { player.anim = "idle"; player.animPower = 0; }
       if (player === game.selected) updateUser(player, dt); else updateAI(player, dt);
+      if (player !== game.selected) player.sprinting = Math.hypot(player.vx, player.vy) > 185;
+      player.stepPhase += dt * (.035 * Math.hypot(player.vx, player.vy) + 2.2);
       player.x += player.vx * dt; player.y += player.vy * dt; keepPlayerInBounds(player);
     }
     resolvePlayerCollisions(); updateBall(dt);
@@ -441,24 +463,45 @@
   }
 
   function drawPlayer(player, now) {
-    const selected = player === game.selected; const home = player.team === HOME; const running = Math.hypot(player.vx, player.vy) > 30;
+    const selected = player === game.selected; const home = player.team === HOME; const speed = Math.hypot(player.vx, player.vy); const running = speed > 30;
+    const actionProgress = player.animDuration ? 1 - player.animTime / player.animDuration : 1;
+    const actionWave = player.animTime > 0 ? Math.sin(clamp(actionProgress, 0, 1) * Math.PI) : 0;
+    const charging = selected && input.shootStart && ball.owner === player;
+    const kickPose = player.anim === "shoot" || player.anim === "pass" ? actionWave : 0;
+    const tacklePose = player.anim === "tackle" ? actionWave : 0;
+    const receivePose = player.anim === "receive" ? actionWave : 0;
+    const divePose = player.anim === "dive" ? actionWave : 0;
     ctx.save(); ctx.translate(player.x, player.y);
-    ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(5, 14, player.radius + 9, player.radius * .52, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(0,0,0,${.3 - divePose * .1})`; ctx.beginPath(); ctx.ellipse(5 + divePose * 8, 14, player.radius + 9 + divePose * 8, player.radius * (.52 - divePose * .12), 0, 0, Math.PI * 2); ctx.fill();
     if (selected) {
       const pulse = 1 + Math.sin(now * .006) * .07; ctx.strokeStyle = "#ffda70"; ctx.lineWidth = 3; ctx.shadowColor = "#ffcf52"; ctx.shadowBlur = 9;
       ctx.beginPath(); ctx.ellipse(0, 11, 27 * pulse, 13 * pulse, 0, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
       ctx.fillStyle = "#ffda70"; ctx.beginPath(); ctx.moveTo(-6, -42); ctx.lineTo(6, -42); ctx.lineTo(0, -32); ctx.closePath(); ctx.fill();
     }
-    const phase = now * .014 + player.index * 1.7; const stride = running ? Math.sin(phase) * 5 : 0; const bob = running ? Math.abs(Math.sin(phase)) * -1.5 : 0;
-    const angle = Math.atan2(player.dirY, player.dirX) + Math.PI / 2; ctx.rotate(angle); ctx.translate(0, bob);
-    const jersey = home ? "#e2b64d" : "#36b8c6"; const jerseyLight = home ? "#ffe59a" : "#9cf4f4"; const shorts = home ? "#171b1a" : "#092e35";
+    const strideScale = clamp(speed / 170, .45, 1.3); const stride = running ? Math.sin(player.stepPhase) * 5.5 * strideScale : 0;
+    const bob = running ? Math.abs(Math.sin(player.stepPhase)) * -1.8 : 0;
+    const angle = Math.atan2(player.dirY, player.dirX) + Math.PI / 2;
+    if (divePose) ctx.rotate(player.animPower * divePose * .72);
+    ctx.rotate(angle); ctx.translate(0, bob - kickPose * 1.5); ctx.scale(1 + receivePose * .06, 1 - receivePose * .08);
+    const keeper = player.role === "GK";
+    const jersey = keeper ? (home ? "#8a62dd" : "#ed6757") : (home ? "#e2b64d" : "#36b8c6");
+    const jerseyLight = keeper ? (home ? "#c7a7ff" : "#ffb0a5") : (home ? "#ffe59a" : "#9cf4f4");
+    const shorts = keeper ? "#20212c" : (home ? "#171b1a" : "#092e35");
+    const legReach = (player.anim === "shoot" ? 42 : 30) * kickPose;
+    const tackleReach = 34 * tacklePose;
+    const windup = charging ? input.shootCharge * 9 : 0;
     ctx.strokeStyle = home ? "#e6c36a" : "#66d9e3"; ctx.lineWidth = 5; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(-5, 9); ctx.lineTo(-6 + stride * .45, 19); ctx.moveTo(5, 9); ctx.lineTo(6 - stride * .45, 19); ctx.stroke();
-    ctx.strokeStyle = "#121817"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-6 + stride * .45, 18); ctx.lineTo(-7 + stride, 25); ctx.moveTo(6 - stride * .45, 18); ctx.lineTo(7 - stride, 25); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-5, 9); ctx.lineTo(-6 + stride * .45, 19 - tackleReach * .45); ctx.moveTo(5, 9); ctx.lineTo(6 - stride * .45, 19 - legReach * .5 + windup); ctx.stroke();
+    ctx.strokeStyle = "#121817"; ctx.lineWidth = 4; ctx.beginPath();
+    ctx.moveTo(-6 + stride * .45, 18 - tackleReach * .45); ctx.lineTo(-7 + stride * (1 - tacklePose), 25 - tackleReach);
+    ctx.moveTo(6 - stride * .45, 18 - legReach * .5 + windup); ctx.lineTo(7 - stride * (1 - kickPose), 25 - legReach + windup); ctx.stroke();
     ctx.fillStyle = shorts; ctx.beginPath(); ctx.roundRect(-10, 5, 20, 12, 4); ctx.fill();
-    const body = ctx.createLinearGradient(-12, -10, 12, 11); body.addColorStop(0, jerseyLight); body.addColorStop(.4, jersey); body.addColorStop(1, home ? "#a97b20" : "#16727d");
+    const body = ctx.createLinearGradient(-12, -10, 12, 11); body.addColorStop(0, jerseyLight); body.addColorStop(.4, jersey); body.addColorStop(1, keeper ? "#3b315d" : (home ? "#a97b20" : "#16727d"));
     ctx.fillStyle = body; ctx.beginPath(); ctx.roundRect(-12, -13, 24, 22, 7); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.38)"; ctx.lineWidth = 1.3; ctx.stroke();
-    ctx.strokeStyle = jersey; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-10, -7); ctx.lineTo(-16 - stride * .28, 1); ctx.moveTo(10, -7); ctx.lineTo(16 + stride * .28, 1); ctx.stroke();
+    const armSwing = stride * .32; ctx.strokeStyle = jersey; ctx.lineWidth = 5; ctx.beginPath();
+    ctx.moveTo(-10, -7); ctx.lineTo(-16 - armSwing - divePose * 8, 1 - kickPose * 5);
+    ctx.moveTo(10, -7); ctx.lineTo(16 + armSwing + divePose * 8, 1 + kickPose * 3); ctx.stroke();
+    if (keeper) { ctx.fillStyle = "#f4f6f5"; ctx.beginPath(); ctx.arc(-17 - armSwing - divePose * 8, 1 - kickPose * 5, 3.2, 0, Math.PI * 2); ctx.arc(17 + armSwing + divePose * 8, 1 + kickPose * 3, 3.2, 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = "#d89d78"; ctx.beginPath(); ctx.arc(0, -20, 7.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#241b18"; ctx.beginPath(); ctx.arc(0, -22.5, 7, Math.PI, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#fff"; ctx.font = "800 10px Inter"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(player.number, 0, -2);
     ctx.restore();
@@ -471,14 +514,32 @@
     ctx.save();
     for (let i = ball.trail.length - 1; i >= 0; i -= 1) { const point = ball.trail[i]; ctx.globalAlpha = (1 - i / ball.trail.length) * .08; ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(point.x, point.y, ball.radius * (1 - i / 12), 0, Math.PI * 2); ctx.fill(); }
     ctx.globalAlpha = 1; ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(ball.x + 5, ball.y + 9, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
-    const ballShade = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, ball.radius + 2); ballShade.addColorStop(0, "#fff"); ballShade.addColorStop(.65, "#eef2ef"); ballShade.addColorStop(1, "#87908b");
-    ctx.fillStyle = ballShade; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#17201d"; ctx.lineWidth = 1.2; ctx.stroke();
-    ctx.fillStyle = "#17201d"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 3.2, 0, Math.PI * 2); ctx.fill();
-    for (let i = 0; i < 5; i += 1) { const angle = i * Math.PI * 2 / 5; ctx.beginPath(); ctx.arc(ball.x + Math.cos(angle) * 6, ball.y + Math.sin(angle) * 6, 1.3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.translate(ball.x, ball.y); ctx.rotate(ball.angle);
+    const ballShade = ctx.createRadialGradient(-3, -4, 1, 0, 0, ball.radius + 2); ballShade.addColorStop(0, "#fff"); ballShade.addColorStop(.65, "#eef2ef"); ballShade.addColorStop(1, "#87908b");
+    ctx.fillStyle = ballShade; ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#17201d"; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = "#17201d"; ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 5; i += 1) { const angle = i * Math.PI * 2 / 5; ctx.beginPath(); ctx.arc(Math.cos(angle) * 6, Math.sin(angle) * 6, 1.3, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore();
   }
 
   function drawEffects() {
+    for (const player of players) {
+      if ((player.anim === "shoot" || player.anim === "pass") && player.animTime > 0) {
+        const progress = 1 - player.animTime / player.animDuration; const wave = Math.sin(progress * Math.PI);
+        if (wave > .62) {
+          const fx = player.x + player.dirX * 27; const fy = player.y + player.dirY * 27;
+          ctx.strokeStyle = `rgba(255,240,180,${(wave - .62) * 1.8})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(fx, fy, 8 + wave * 8, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+      if (!player.sprinting || Math.hypot(player.vx, player.vy) < 220) continue;
+      const direction = normalize(player.vx, player.vy); const alpha = clamp((Math.hypot(player.vx, player.vy) - 190) / 150, 0, .34);
+      ctx.save(); ctx.strokeStyle = player.team === HOME ? `rgba(255,220,120,${alpha})` : `rgba(115,235,245,${alpha})`; ctx.lineWidth = 2; ctx.lineCap = "round";
+      for (let i = 0; i < 3; i += 1) {
+        const side = (i - 1) * 9; const sideX = -direction.y * side; const sideY = direction.x * side; const length = 18 + i * 6;
+        ctx.beginPath(); ctx.moveTo(player.x - direction.x * 15 + sideX, player.y - direction.y * 15 + sideY); ctx.lineTo(player.x - direction.x * (15 + length) + sideX, player.y - direction.y * (15 + length) + sideY); ctx.stroke();
+      }
+      ctx.restore();
+    }
     for (const particle of game.particles) { ctx.globalAlpha = clamp(particle.life / particle.max, 0, 1); ctx.fillStyle = particle.color; ctx.fillRect(particle.x, particle.y, particle.size, particle.size); }
     ctx.globalAlpha = 1;
     if (input.shootStart && ball.owner === game.selected) {
