@@ -68,7 +68,8 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
       this.vx = 0; this.vy = 0; this.dirX = team === HOME ? 1 : -1; this.dirY = 0;
       this.radius = this.role === "GK" ? 20 : 17; this.stamina = 100; this.cooldown = 0;
       this.anim = "idle"; this.animTime = 0; this.animDuration = 1; this.animPower = 0; this.stepPhase = index * 1.7;
-      this.sprinting = false; this.diveCooldown = 0; this.controlBoost = 0;
+      this.sprinting = false; this.diveCooldown = 0; this.controlBoost = 0; this.motionYaw = Math.atan2(this.dirX, this.dirY);
+      this.turnLean = 0; this.strideBlend = 0; this.dribbleSide = index % 2 ? 1 : -1;
     }
   }
 
@@ -107,6 +108,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     players.forEach((player) => {
       player.x = player.baseX; player.y = player.baseY; player.vx = player.vy = 0; player.stamina = Math.max(55, player.stamina);
       player.anim = "idle"; player.animTime = 0; player.sprinting = false; player.diveCooldown = 0; player.controlBoost = 0;
+      player.motionYaw=Math.atan2(player.dirX,player.dirY);player.turnLean=0;player.strideBlend=0;
     });
     const taker = team === HOME ? players[4] : players[10];
     taker.x = W / 2 + (team === HOME ? -26 : 26); taker.y = H / 2;
@@ -269,7 +271,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     player.sprinting = sprinting && !precision && player.stamina > 2 && hasMove;
     player.controlBoost=Math.max(0,player.controlBoost-dt);const speed=(marking?158:precision?132:205)*boost*controlMagnitude;
     if (hasMove) {
-      const current=normalize(player.vx||controlX,player.vy||controlY);const turnDot=current.x*controlX+current.y*controlY;const response=(marking?14:precision?18:player.controlBoost>0?16:turnDot<-.15?8:12);player.vx=lerp(player.vx,controlX*speed,1-Math.exp(-dt*response));player.vy=lerp(player.vy,controlY*speed,1-Math.exp(-dt*response));
+      const current=normalize(player.vx||controlX,player.vy||controlY);const turnDot=current.x*controlX+current.y*controlY;const response=(marking?14:precision?18:player.controlBoost>0?16:turnDot<-.15?8:12);const turnGrip=clamp(.72+(turnDot+1)*.14,.72,1);player.vx=lerp(player.vx,controlX*speed*turnGrip,1-Math.exp(-dt*response));player.vy=lerp(player.vy,controlY*speed*turnGrip,1-Math.exp(-dt*response));
       const face=marking&&markTarget?normalize(markTarget.x-player.x,markTarget.y-player.y):{x:controlX,y:controlY};player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*18));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*18));const facing=normalize(player.dirX,player.dirY);player.dirX=facing.x;player.dirY=facing.y;
       player.stamina=clamp(player.stamina-dt*(player.sprinting?11*input.magnitude:precision ? .35 : 1.1),0,100);
     } else { player.vx*=Math.pow(.0018,dt);player.vy*=Math.pow(.0018,dt);player.stamina=clamp(player.stamina+dt*(precision?6.2:5),0,100); }
@@ -337,7 +339,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if (ball.lock > 0) ball.lock -= dt;
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
-      const owner = ball.owner; const closeControl=owner===game.selected&&!owner.sprinting;const lead=owner.radius+(closeControl?7:12); ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
+      const owner=ball.owner;const closeControl=owner===game.selected&&!owner.sprinting;const speed=Math.hypot(owner.vx,owner.vy);const touch=Math.sin(owner.stepPhase);if(Math.abs(touch)>.82)owner.dribbleSide=touch>0?1:-1;const lead=owner.radius+(closeControl?7:12)+clamp(speed/110,0,2.8)*Math.max(0,touch);const lateral=(speed>35?owner.dribbleSide:0)*(closeControl?2.3:3.8);const targetX=owner.x+owner.dirX*lead-owner.dirY*lateral;const targetY=owner.y+owner.dirY*lead+owner.dirX*lateral;const follow=1-Math.exp(-dt*(closeControl?28:20));ball.x=lerp(ball.x,targetX,follow);ball.y=lerp(ball.y,targetY,follow);ball.vx=owner.vx;ball.vy=owner.vy;
       ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
@@ -449,6 +451,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
       player.diveCooldown = Math.max(0, player.diveCooldown - dt);
       if (player === game.selected) updateUser(player, dt); else updateAI(player, dt);
       if (player !== game.selected) player.sprinting = Math.hypot(player.vx, player.vy) > 185;
+      updateMotionState(player,dt);
       player.stepPhase += dt * (.035 * Math.hypot(player.vx, player.vy) + 2.2);
       player.x += player.vx * dt; player.y += player.vy * dt; keepPlayerInBounds(player);
     }
@@ -456,6 +459,11 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if (!ball.owner || ball.owner.team !== HOME) {
       const nearest = closestPlayer(HOME, ball, false); if (game.selected && distance(game.selected, ball) > distance(nearest, ball) + 145) game.selected = nearest;
     }
+  }
+
+  function updateMotionState(player,dt) {
+    const speed=Math.hypot(player.vx,player.vy);const moving=speed>18;const target=moving?Math.atan2(player.vx,player.vy):player.motionYaw;const delta=Math.atan2(Math.sin(target-player.motionYaw),Math.cos(target-player.motionYaw));
+    player.motionYaw=smoothAngle(player.motionYaw,target,1-Math.exp(-dt*(player.sprinting?7.5:10.5)));player.turnLean=lerp(player.turnLean,clamp(delta*1.35,-.72,.72),1-Math.exp(-dt*9));player.strideBlend=lerp(player.strideBlend,moving?clamp(speed/205,0,1.35):0,1-Math.exp(-dt*(moving?10:7)));
   }
 
   function worldX(value) { return (value - W / 2) * WORLD_SCALE; }
@@ -636,7 +644,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     attach("spine_01",new THREE.CylinderGeometry(.28,.34,.5,16),jersey,new THREE.Vector3(0,.2,0));attach("upperarm_l",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("upperarm_r",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("pelvis",new THREE.BoxGeometry(.57,.3,.34),shorts,new THREE.Vector3(0,.08,0));
     for(const side of ["l","r"]){attach(`calf_${side}`,new THREE.CylinderGeometry(.095,.12,.29,12),socks,new THREE.Vector3(0,.3,0));attach(`foot_${side}`,new THREE.BoxGeometry(.17,.29,.13),boots,new THREE.Vector3(0,.08,.015));}
     const head=model.getObjectByName("Head");if(head){const hair=new THREE.Mesh(new THREE.SphereGeometry(.115,14,7,0,Math.PI*2,0,Math.PI*.48),new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.9}));hair.position.y=.055;hair.scale.set(1,1,.93);hair.castShadow=true;head.add(hair);}
-    return{head,spine:model.getObjectByName("spine_03"),rightThigh:model.getObjectByName("thigh_r"),rightCalf:model.getObjectByName("calf_r")};
+    return{head,spine:model.getObjectByName("spine_03"),leftThigh:model.getObjectByName("thigh_l"),rightThigh:model.getObjectByName("thigh_r"),rightCalf:model.getObjectByName("calf_r"),leftArm:model.getObjectByName("upperarm_l"),rightArm:model.getObjectByName("upperarm_r")};
   }
 
   function upgradePlayerView(player) {
@@ -647,7 +655,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function switchRigAnimation(view,state,immediate=false) {
-    const rig=view.rig;if(!rig||rig.state===state)return;const next=rig.actions[state]||rig.actions.Idle_Loop;if(!next)return;const looping=state.endsWith("_Loop")||state==="Dance_Loop";const fade=immediate?0:(looping ? .24 : .12);next.reset();next.enabled=true;next.setLoop(looping?THREE.LoopRepeat:THREE.LoopOnce,looping?Infinity:1);next.clampWhenFinished=!looping;next.fadeIn(fade).play();if(rig.active&&rig.active!==next)rig.active.fadeOut(fade);rig.active=next;rig.state=state;
+    const rig=view.rig;if(!rig||rig.state===state)return;const next=rig.actions[state]||rig.actions.Idle_Loop;if(!next)return;const looping=state.endsWith("_Loop")||state==="Dance_Loop";const fade=immediate?0:(looping ? .32 : .16);next.reset();next.enabled=true;next.setLoop(looping?THREE.LoopRepeat:THREE.LoopOnce,looping?Infinity:1);next.clampWhenFinished=!looping;next.fadeIn(fade).play();if(rig.active&&rig.active!==next)rig.active.fadeOut(fade);rig.active=next;rig.state=state;
   }
 
   function rigAnimationState(player,speed,current) {
@@ -657,10 +665,11 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   function smoothAngle(current,target,ease) {return current+Math.atan2(Math.sin(target-current),Math.cos(target-current))*ease;}
 
   function updateRigPlayer(player,pose,view,now,speed) {
-    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const moving=speed>62;const desired=moving?Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY):Math.atan2(ballDirection.x,ballDirection.y);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*9));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
+    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const moving=speed>42;const desired=moving?(pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY)):Math.atan2(ballDirection.x,ballDirection.y);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;rig.model.rotation.z=lerp(rig.model.rotation.z,-(pose.turnLean||0)*.14,1-Math.exp(-dt*12));
     switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
-    const actionProgress=pose.animDuration?1-pose.animTime/pose.animDuration:1;const wave=pose.animTime>0?Math.sin(clamp(actionProgress,0,1)*Math.PI):0;if((pose.anim==="shoot"||pose.anim==="pass")&&rig.rightThigh){rig.rightThigh.rotation.x-=(pose.anim==="shoot"?1.15:.72)*wave;if(rig.rightCalf)rig.rightCalf.rotation.x+=wave*.58;}
-    if(rig.head){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.spine&&speed<75){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;}
+    const actionProgress=pose.animDuration?1-pose.animTime/pose.animDuration:1;const wave=pose.animTime>0?Math.sin(clamp(actionProgress,0,1)*Math.PI):0;if((pose.anim==="shoot"||pose.anim==="pass")&&rig.rightThigh){const power=pose.anim==="shoot"?1.2:.76;rig.rightThigh.rotation.x-=power*wave;if(rig.rightCalf)rig.rightCalf.rotation.x+=wave*.62;if(rig.leftArm)rig.leftArm.rotation.x-=wave*.34;if(rig.rightArm)rig.rightArm.rotation.x+=wave*.42;}
+    if(ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
+    if(rig.head){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.spine){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
     view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&input.keys.has("KeyS")?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
@@ -684,7 +693,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
     if(view.rig){updateRigPlayer(player,pose,view,now,speed);return;}
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
-    const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
+    const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=pose.motionYaw??Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025-(pose.turnLean||0)*.16; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
