@@ -1,19 +1,18 @@
 # Tony Football Max
 
-Game bóng đá arcade 6v6 chạy trực tiếp trên trình duyệt, không cần tải asset hay cài framework.
+Game bóng đá arcade 6v6 dành cho PC, chạy trực tiếp trên trình duyệt.
 
 ## Điều khiển
 
-- `WASD` / phím mũi tên: di chuyển
-- `J`: chuyền bóng hoặc tắc bóng
-- Giữ và thả `K`: sút bóng theo lực
-- `L`: tăng tốc
-- `Q`: giữ bóng sát chân và xoay trở chính xác
-- `Space`: đổi cầu thủ
+- Phím mũi tên: di chuyển và chọn hướng chuyền/sút
+- `S`: chuyền sệt / kèm người
+- `W`: chọc khe / đổi cầu thủ
+- Giữ và thả `D`: sút theo lực / tranh bóng đứng
+- `A`: tạt bóng / soạc bóng
+- `E`: chạy nhanh khi tấn công hoặc phòng thủ
 - `C`: chuyển camera Broadcast / Close Action / Tactical
 - `V`: chuyển thời tiết Clear / Rain
 - `Escape`: tạm dừng
-- Trên điện thoại: joystick và cụm nút cảm ứng xuất hiện tự động
 
 ## Chạy local
 
@@ -30,6 +29,17 @@ npm test
 ```
 
 Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API, ba cấp độ AI, stamina, radar, thống kê trực tiếp, hiệu ứng ghi bàn và bố cục responsive.
+
+## PC Controls — Sprint 9
+
+- Chuyển hoàn toàn sang định hướng PC-first; loại bỏ joystick và nút cảm ứng
+- Điều hướng mặc định bằng bốn phím mũi tên
+- Bộ phím hành động kiểu PES/FIFA: `S / W / D / A / E`
+- Chuyền sệt ưu tiên đồng đội theo hướng đang giữ
+- Chọc khe đưa bóng vào khoảng trống phía trước đà chạy
+- Tạt bóng có lực và tầm chuyền lớn hơn chuyền sệt
+- Phòng thủ có kèm người, đổi cầu thủ, tranh bóng đứng và soạc bóng riêng
+- Tăng tốc hoạt động ở cả hai trạng thái tấn công và phòng thủ
 
 ## Đồ họa Sprint 1
 

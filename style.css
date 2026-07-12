@@ -142,23 +142,6 @@ kbd { display: inline-flex; justify-content: center; padding: 5px 7px; border: 1
 .status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: #45d88c; box-shadow: 0 0 8px #45d88c; }
 #commentary { color: #9ba6a1; text-align: center; }
 
-.mobile-controls { display: none; position: absolute; inset: auto 0 0; height: 42%; pointer-events: none; }
-.joystick { position: absolute; left: 5%; bottom: 12%; width: 116px; height: 116px; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: rgba(8,12,13,.48); pointer-events: auto; touch-action: none; }
-.joystick-knob { position: absolute; left: 31px; top: 31px; width: 54px; height: 54px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: rgba(225,187,88,.6); box-shadow: 0 5px 18px rgba(0,0,0,.3); }
-.action-cluster { position: absolute; right: 4%; bottom: 10%; width: 190px; height: 130px; pointer-events: auto; }
-.control-button { position: absolute; width: 68px; height: 68px; border: 1px solid rgba(255,255,255,.25); border-radius: 50%; color: white; background: rgba(12,17,18,.72); font: 700 9px Inter; touch-action: none; }
-.control-button small { display: block; color: var(--gold); font: 800 20px "Barlow Condensed"; }
-.control-button.shoot { right: 0; top: 0; width: 76px; height: 76px; border-color: rgba(225,187,88,.6); }
-.control-button.pass { left: 24px; bottom: 0; }
-.control-button.sprint { right: 8px; bottom: 0; transform: scale(.78); }
-.control-button.active { background: rgba(225,187,88,.5); transform: scale(.94); }
-.control-button.sprint.active { transform: scale(.72); }
-.control-button.defense { border-color: rgba(71,201,212,.58); background: rgba(7,35,39,.76); }
-.control-button.defense small { color: var(--cyan); }
-.control-button.defense.active { background: rgba(71,201,212,.42); }
-
-.rotate-hint { display: none; position: fixed; inset: 0; z-index: 20; place-items: center; align-content: center; gap: 15px; color: var(--gold); background: var(--bg); font: 800 44px "Barlow Condensed"; }
-.rotate-hint strong { font-size: 18px; letter-spacing: .08em; }
 @keyframes panelIn { from { transform: translateY(12px) scale(.98); opacity: 0; } }
 @keyframes scorePop { 0% { transform: scale(1); filter: brightness(1); } 42% { transform: scale(1.42); filter: brightness(1.8); text-shadow: 0 0 22px currentColor; } 100% { transform: scale(1); filter: brightness(1); } }
 @keyframes goal3d { 0% { transform: scale(.72) translateY(-12px); opacity: 0; } 28% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: .85; } }
@@ -174,8 +157,7 @@ kbd { display: inline-flex; justify-content: center; padding: 5px 7px; border: 1
   .brand p { display: none; }
 }
 
-@media (pointer: coarse), (max-width: 820px) {
-  .mobile-controls { display: block; }
+@media (max-width: 820px) {
   .command-rail, .statusbar { display: none; }
   .app-shell { padding: 0; }
   .topbar { height: 52px; border: 0; border-radius: 0; padding: 0 10px; }
@@ -196,10 +178,6 @@ kbd { display: inline-flex; justify-content: center; padding: 5px 7px; border: 1
   .difficulty-picker button { padding: 9px 4px; }
   .primary-button { min-height: 50px; font-size: 19px; }
   .replay-badge { top: 10px; left: 10px; padding: 6px 9px; font-size: 9px; }
-}
-
-@media (orientation: portrait) and (pointer: coarse) {
-  .rotate-hint { display: grid; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -82,7 +82,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     goalSequence: null, goalScorer: null, weather: "rain"
   };
   let players = [];
-  const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, touchX: 0, touchY: 0, shootStart: 0, shootCharge: 0, marking: false, controlMode: "" };
+  const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, shootStart: 0, shootCharge: 0, marking: false };
 
   function createTeams() {
     for (const view of playerViews.values()) scene3D?.remove(view.root);
@@ -193,7 +193,24 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const leadX = target.x + target.vx * .18; const leadY = target.y + target.vy * .18;
     const d = distance(player, target); releaseBall(player, leadX - player.x, leadY - player.y, clamp(430 + d * .35, 480, 650), "pass");
     if (player.team === HOME) game.stats.passes += 1;
-    ball.pendingPass = { team: player.team, timer: 1.8 }; announce(`${player.name} chọc khe!`);
+    ball.pendingPass = { team: player.team, timer: 1.8 }; announce(`${player.name} chuyền bóng!`);
+  }
+
+  function throughBall(player) {
+    if (ball.owner !== player) return;
+    const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
+    const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
+    for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const aligned=dx/d*facing.x+dy/d*facing.y;const progress=dx*attackDirection;const score=aligned*310+progress*.42-d*.12;if(score>best){best=score;target=candidate;}}
+    if(!target)return;const runX=target.vx*.58+attackDirection*58;const runY=target.vy*.58;const d=distance(player,target);releaseBall(player,target.x+runX-player.x,target.y+runY-player.y,clamp(540+d*.42,580,760),"pass");
+    if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.1};announce(`${player.name} chọc khe vào khoảng trống!`);
+  }
+
+  function loftBall(player) {
+    if(ball.owner!==player)return;const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
+    const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
+    for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const wide=Math.abs(dy);const aligned=dx/d*facing.x+dy/d*facing.y;const score=aligned*240+dx*attackDirection*.25+wide*.12-d*.08;if(score>best){best=score;target=candidate;}}
+    if(!target)return;releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp(610+distance(player,target)*.3,650,820),"pass");
+    if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.2};announce(`${player.name} tạt bóng!`);
   }
 
   function shootBall(player, charge = .5) {
@@ -219,14 +236,19 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     }
   }
 
+  function slideTackle(player) {
+    if(player.cooldown>0)return;const previous=player.cooldown;tackle(player);if(player.cooldown===previous)return;
+    player.cooldown=1.05;player.vx+=player.dirX*105;player.vy+=player.dirY*105;triggerAnimation(player,"tackle",.52,1);announce(`${player.name} soạc bóng!`);
+  }
+
   function updateInput() {
-    let x = input.touchX; let y = input.touchY;
-    if (input.keys.has("KeyA") || input.keys.has("ArrowLeft")) x -= 1;
-    if (input.keys.has("KeyD") || input.keys.has("ArrowRight")) x += 1;
-    if (input.keys.has("KeyW") || input.keys.has("ArrowUp")) y -= 1;
-    if (input.keys.has("KeyS") || input.keys.has("ArrowDown")) y += 1;
-    const raw=Math.hypot(x,y);const keyboard=input.keys.has("KeyA")||input.keys.has("KeyD")||input.keys.has("KeyW")||input.keys.has("KeyS")||input.keys.has("ArrowLeft")||input.keys.has("ArrowRight")||input.keys.has("ArrowUp")||input.keys.has("ArrowDown");
-    if(raw<.1){input.moveX=0;input.moveY=0;input.magnitude=0;}else{const direction=normalize(x,y);const analog=keyboard?1:Math.pow(clamp((raw-.1)/.9,0,1),.78);input.moveX=direction.x*analog;input.moveY=direction.y*analog;input.magnitude=analog;if(analog>.12){input.aimX=direction.x;input.aimY=direction.y;}}
+    let x = 0; let y = 0;
+    if (input.keys.has("ArrowLeft")) x -= 1;
+    if (input.keys.has("ArrowRight")) x += 1;
+    if (input.keys.has("ArrowUp")) y -= 1;
+    if (input.keys.has("ArrowDown")) y += 1;
+    const raw=Math.hypot(x,y);
+    if(raw<.1){input.moveX=0;input.moveY=0;input.magnitude=0;}else{const direction=normalize(x,y);input.moveX=direction.x;input.moveY=direction.y;input.magnitude=1;input.aimX=direction.x;input.aimY=direction.y;}
     if (input.shootStart) input.shootCharge = clamp((performance.now() - input.shootStart) / 900, 0, 1);
   }
 
@@ -239,8 +261,8 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function updateUser(player, dt) {
-    const attacking=isAttacking();const sprinting=attacking&&(input.keys.has("KeyL")||input.keys.has("ShiftLeft")||$("mobileSprint").classList.contains("active"));
-    const precision=input.keys.has("KeyQ");const marking=!attacking&&(input.keys.has("KeyJ")||input.marking);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
+    const attacking=isAttacking();const sprinting=input.keys.has("KeyE");
+    const precision=false;const marking=!attacking&&input.keys.has("KeyS");let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
     if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
     const hasMove=controlMagnitude>.03;
     const boost = sprinting && !precision && player.stamina > 2 ? 1.42 : 1;
@@ -315,7 +337,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if (ball.lock > 0) ball.lock -= dt;
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
-      const owner = ball.owner; const closeControl=owner===game.selected&&input.keys.has("KeyQ");const lead=owner.radius+(closeControl?6:11); ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
+      const owner = ball.owner; const closeControl=owner===game.selected&&!owner.sprinting;const lead=owner.radius+(closeControl?7:12); ball.x = owner.x + owner.dirX * lead; ball.y = owner.y + owner.dirY * lead; ball.vx = owner.vx; ball.vy = owner.vy;
       ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
@@ -639,7 +661,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
     const actionProgress=pose.animDuration?1-pose.animTime/pose.animDuration:1;const wave=pose.animTime>0?Math.sin(clamp(actionProgress,0,1)*Math.PI):0;if((pose.anim==="shoot"||pose.anim==="pass")&&rig.rightThigh){rig.rightThigh.rotation.x-=(pose.anim==="shoot"?1.15:.72)*wave;if(rig.rightCalf)rig.rightCalf.rotation.x+=wave*.58;}
     if(rig.head){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.spine&&speed<75){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;}
-    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&input.keys.has("KeyS")?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function createBall3D() {
@@ -666,7 +688,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
-    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&input.keys.has("KeyS")?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function updateParticleView() {
@@ -700,7 +722,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   function drawFallbackPlayerDetail(player,pose,replayFrame) {
     const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
-    if(selected){ctx.strokeStyle=!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
+    if(selected){ctx.strokeStyle=!isAttacking()&&input.keys.has("KeyS")?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
     ctx.rotate(Math.atan2(pose.dirY,pose.dirX)+Math.PI/2);ctx.lineCap="round";
     ctx.strokeStyle=sock;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-6,10);ctx.lineTo(-7+stride,25);ctx.moveTo(6,10);ctx.lineTo(7-stride,25);ctx.stroke();ctx.strokeStyle="#191c1b";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-10+stride,26);ctx.lineTo(-5+stride,26);ctx.moveTo(3-stride,26);ctx.lineTo(10-stride,26);ctx.stroke();
     ctx.fillStyle=shorts;ctx.beginPath();ctx.roundRect(-11,4,22,12,4);ctx.fill();ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(-13,-15,26,22,7);ctx.fill();ctx.fillStyle=home?"#161b19":"#e4f5f3";ctx.fillRect(-12,-5,24,3);
@@ -933,12 +955,6 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     game.weather=game.weather==="rain"?"clear":"rain";game.cameraNotice=1.8;ui.replayBadge.textContent=game.weather==="rain"?"WEATHER · RAIN":"WEATHER · CLEAR";ui.replayBadge.classList.add("show");announce(game.weather==="rain"?"Mưa bắt đầu — mặt sân đang trơn hơn!":"Trời quang — tốc độ trận đấu trở lại tối đa.");tone(game.weather==="rain"?330:560,.06,"sine",.02);
   }
 
-  function updateControlMode() {
-    const mode=isAttacking()?"attack":"defense";if(input.controlMode===mode)return;input.controlMode=mode;const pass=$("mobilePass");const shoot=$("mobileShoot");const sprint=$("mobileSprint");
-    if(mode==="attack"){pass.innerHTML="<small>J</small>CHUYỀN";shoot.innerHTML="<small>K</small>SÚT";sprint.innerHTML="<small>L</small>TỐC";}else{pass.innerHTML="<small>J</small>KÈM";shoot.innerHTML="<small>K</small>ĐỔI";sprint.innerHTML="<small>L</small>XOẠC";}
-    for(const button of [pass,shoot,sprint])button.classList.toggle("defense",mode==="defense");
-  }
-
   let audioContext = null;
   function ensureAudio() { if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
   function tone(frequency, duration, type = "sine", volume = .04, delay = 0) {
@@ -954,46 +970,25 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const dt = Math.min(.033, (now - game.lastTime) / 1000 || .016); game.lastTime = now; update(dt); render(now);
     if (game.messageTimer > 0) game.messageTimer -= dt;
     if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
-    updateControlMode(); updateUI(); requestAnimationFrame(loop);
+    updateUI(); requestAnimationFrame(loop);
   }
 
   function onKeyDown(event) {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
-    if (event.repeat && ["KeyJ","KeyK","KeyC","KeyV","Space","Escape"].includes(event.code)) return;
+    if (event.repeat && ["KeyS","KeyW","KeyD","KeyA","KeyC","KeyV","Escape"].includes(event.code)) return;
     input.keys.add(event.code);
     if (event.code === "Escape") togglePause();
     if (game.state !== "playing") return;
-    if (event.code === "KeyJ" && isAttacking()) passBall(game.selected);
-    if (event.code === "KeyK") { if(isAttacking()&&ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;}else if(!isAttacking())switchPlayer(); }
-    if (event.code === "KeyL" && !isAttacking()) tackle(game.selected);
-    if (event.code === "Space") switchPlayer();
+    if (event.code === "KeyS" && isAttacking()) passBall(game.selected);
+    if (event.code === "KeyW") { if(isAttacking())throughBall(game.selected);else switchPlayer(); }
+    if (event.code === "KeyD") { if(isAttacking()&&ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;}else if(!isAttacking())tackle(game.selected); }
+    if (event.code === "KeyA") { if(isAttacking())loftBall(game.selected);else slideTackle(game.selected); }
     if (event.code === "KeyC") cycleCamera();
     if (event.code === "KeyV") cycleWeather();
   }
   function onKeyUp(event) {
     input.keys.delete(event.code);
-    if (event.code === "KeyK" && input.shootStart) { if(ball.owner===game.selected)shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0; }
-  }
-
-  function setupTouch() {
-    const joystick = $("joystick"); const knob = $("joystickKnob"); let pointerId = null;
-    const moveJoystick = (event) => {
-      const rect = joystick.getBoundingClientRect(); const x = event.clientX - rect.left - rect.width/2; const y = event.clientY - rect.top - rect.height/2; const max = rect.width*.32; const d = Math.hypot(x,y) || 1; const scale = Math.min(1,max/d);
-      knob.style.transform = `translate(${x*scale}px,${y*scale}px)`; input.touchX = clamp(x/max,-1,1); input.touchY = clamp(y/max,-1,1);
-    };
-    joystick.addEventListener("pointerdown", (event) => { pointerId = event.pointerId; joystick.setPointerCapture(pointerId); moveJoystick(event); });
-    joystick.addEventListener("pointermove", (event) => { if(event.pointerId===pointerId) moveJoystick(event); });
-    const release = (event) => { if(event.pointerId!==pointerId)return; pointerId=null; input.touchX=input.touchY=0; knob.style.transform=""; };
-    joystick.addEventListener("pointerup",release); joystick.addEventListener("pointercancel",release);
-    bindTouchButton($("mobilePass"),null,()=>{if(isAttacking())passBall(game.selected);else input.marking=true;},()=>{input.marking=false;});
-    bindTouchButton($("mobileShoot"),null,()=>{if(isAttacking()&&ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;}else if(!isAttacking())switchPlayer();},()=>{if(input.shootStart){if(ball.owner===game.selected)shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0;}});
-    bindTouchButton($("mobileSprint"),null,()=>{if(!isAttacking())tackle(game.selected);});
-  }
-
-  function bindTouchButton(button, tap, down, up) {
-    button.addEventListener("pointerdown", (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); button.classList.add("active"); navigator.vibrate?.(12); down?.(); tap?.(); });
-    const release = () => { button.classList.remove("active"); up?.(); };
-    button.addEventListener("pointerup", release); button.addEventListener("pointercancel", release);
+    if (event.code === "KeyD" && input.shootStart) { if(ball.owner===game.selected)shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0; }
   }
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
@@ -1010,5 +1005,5 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   window.addEventListener("blur", () => { input.keys.clear(); input.marking=false; input.shootStart=0; input.shootCharge=0; if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
-  init3D(); createTeams(); setupTouch(); updateControlMode(); updateUI(); requestAnimationFrame(loop);
+  init3D(); createTeams(); updateUI(); requestAnimationFrame(loop);
 })();
