@@ -73,7 +73,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     }
   }
 
-  const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0 };
+  const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, height: 0, vz: 0, curve: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0 };
   const game = {
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
@@ -112,7 +112,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     });
     const taker = team === HOME ? players[4] : players[10];
     taker.x = W / 2 + (team === HOME ? -26 : 26); taker.y = H / 2;
-    ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null; ball.angle = 0; ball.spin = 0;
+    ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.height=0;ball.vz=0;ball.curve=0;ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null; ball.angle = 0; ball.spin = 0;
     game.selected = team === HOME ? taker : closestPlayer(HOME, ball, false);
     game.kickOffTimer = 1.25; announce(team === HOME ? "Tony FC giao bóng!" : "Neon United giao bóng!");
   }
@@ -161,7 +161,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
       if (player.team === HOME) game.stats.completed += 1;
       ball.pendingPass = null;
     } else if (ball.pendingPass && player.team !== ball.pendingPass.team) ball.pendingPass = null;
-    ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0; player.controlBoost=.28;
+    ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;ball.height=0;ball.vz=0;ball.curve=0;player.controlBoost=.28;
     triggerAnimation(player, "receive", .2);
     if (player.team === HOME && player.role !== "GK") game.selected = player;
   }
@@ -171,12 +171,12 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function releaseBall(player, dx, dy, speed, type) {
-    const n = normalize(dx, dy); ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : .2;
+    const n = normalize(dx, dy); ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : type === "loft" ? .3 : .2;
     ball.x = player.x + n.x * (player.radius + 10); ball.y = player.y + n.y * (player.radius + 10);
     ball.vx = n.x * speed + player.vx * .25; ball.vy = n.y * speed + player.vy * .25;
-    ball.spin = (player.team === HOME ? 1 : -1) * speed * .012;
+    ball.height=0;ball.vz=type==="loft"?10.8:type==="shot"?1.8:0;ball.curve=type==="shot"?clamp(n.y*1.45,-1.05,1.05):0;ball.spin = (player.team === HOME ? 1 : -1) * speed * .012;
     player.cooldown = .18; kickSound(type === "shot" ? .9 : .55);
-    triggerAnimation(player, type === "shot" ? "shoot" : "pass", type === "shot" ? .34 : .24, clamp((speed - 400) / 650, 0, 1));
+    triggerAnimation(player, type === "shot" ? "shoot" : "pass", type === "shot" ? .34 : type === "loft" ? .3 : .24, clamp((speed - 400) / 650, 0, 1));
     for (let i = 0; i < (type === "shot" ? 9 : 4); i += 1) spawnParticle(ball.x, ball.y, type === "shot" ? "#f5d067" : "#f4f7f5", 1.2);
   }
 
@@ -189,7 +189,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
       const dx = candidate.x - player.x; const dy = candidate.y - player.y; const d = length(dx, dy);
       const forward = (dx / d) * facing.x + (dy / d) * facing.y;
       const attack = player.team === HOME ? dx : -dx;
-      const lane=Math.abs((candidate.y-player.y)/d);const score=forward*360+attack*.18-d*.2-lane*18;
+      const lane=Math.abs((candidate.y-player.y)/d);const risk=passingLaneRisk(player,candidate,player.team);const score=forward*360+attack*.18-d*.2-lane*18-risk*170;
       if (score > best) { target = candidate; best = score; }
     }
     const leadX = target.x + target.vx * .18; const leadY = target.y + target.vy * .18;
@@ -211,7 +211,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if(ball.owner!==player)return;const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
     const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
     for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const wide=Math.abs(dy);const aligned=dx/d*facing.x+dy/d*facing.y;const score=aligned*240+dx*attackDirection*.25+wide*.12-d*.08;if(score>best){best=score;target=candidate;}}
-    if(!target)return;releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp(610+distance(player,target)*.3,650,820),"pass");
+    if(!target)return;releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp(610+distance(player,target)*.3,650,820),"loft");
     if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.2};announce(`${player.name} tạt bóng!`);
   }
 
@@ -262,6 +262,16 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if (Math.abs(player.vx) + Math.abs(player.vy) > 4) { const dir = normalize(player.vx, player.vy); player.dirX = dir.x; player.dirY = dir.y; }
   }
 
+  function passingLaneRisk(from,to,team) {
+    const dx=to.x-from.x;const dy=to.y-from.y;const lengthSq=dx*dx+dy*dy||1;let risk=0;
+    for(const defender of players){if(defender.team===team)continue;const t=clamp(((defender.x-from.x)*dx+(defender.y-from.y)*dy)/lengthSq,0,1);const laneX=from.x+dx*t;const laneY=from.y+dy*t;const gap=Math.hypot(defender.x-laneX,defender.y-laneY);if(gap<58)risk=Math.max(risk,(58-gap)/58*(.45+t*.55));}
+    return risk;
+  }
+
+  function projectedGoalY(team) {
+    const goalX=team===HOME?FIELD.left:FIELD.right;const towardGoal=team===HOME?ball.vx<0:ball.vx>0;if(!towardGoal||Math.abs(ball.vx)<30)return ball.y;const time=clamp((goalX-ball.x)/ball.vx,0,1.4);return ball.y+ball.vy*time+ball.curve*Math.hypot(ball.vx,ball.vy)*time*time*.08;
+  }
+
   function updateUser(player, dt) {
     const attacking=isAttacking();const sprinting=input.keys.has("KeyE");
     const precision=false;const marking=!attacking&&input.keys.has("KeyS");let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
@@ -284,11 +294,11 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const aiSpeed = 168 * (team === AWAY ? game.ai : .96);
 
     if (player.role === "GK") {
-      const gx = team === HOME ? 82 : 1118; const danger = team === HOME ? ball.x < 270 : ball.x > 930;
-      if (danger && !ball.owner && Math.hypot(ball.vx, ball.vy) > 480 && Math.abs(ball.y - player.y) < 145 && player.diveCooldown <= 0) {
-        triggerAnimation(player, "dive", .46, Math.sign(ball.y - player.y)); player.diveCooldown = 1.1;
+      const gx=team===HOME?82:1118;const danger=team===HOME?ball.x<330:ball.x>870;const projectedY=clamp(projectedGoalY(team),FIELD.goalTop+18,FIELD.goalBottom-18);const shotIncoming=!ball.owner&&(team===HOME?ball.vx<0:ball.vx>0)&&Math.hypot(ball.vx,ball.vy)>360;
+      if(shotIncoming&&danger&&Math.abs(projectedY-player.y)>24&&Math.abs(projectedY-player.y)<155&&player.diveCooldown<=0&&ball.height<3.1){
+        triggerAnimation(player,"dive",.5,Math.sign(projectedY-player.y));player.diveCooldown=1.05;
       }
-      moveToward(player, danger && !ball.owner ? clamp(ball.x, team === HOME ? 66 : 1040, team === HOME ? 160 : 1134) : gx, clamp(ball.y, FIELD.goalTop + 25, FIELD.goalBottom - 25), aiSpeed * .78, dt);
+      const stepX=shotIncoming?(team===HOME?104:1096):gx;const targetY=shotIncoming?projectedY:clamp(ball.y,FIELD.goalTop+25,FIELD.goalBottom-25);moveToward(player,danger?stepX:gx,targetY,aiSpeed*(shotIncoming?1.04:.78),dt);
       if (hasBall && player.cooldown <= 0) {
         const target = players.find((p) => p.team === team && p.role === "DF");
         releaseBall(player, target.x - player.x, target.y - player.y, 520, "pass"); player.cooldown = 1;
@@ -303,7 +313,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
         shootBall(player, .58 + Math.random() * .38); return;
       }
       const pressure = players.some((p) => p.team !== team && distance(p, player) < 85);
-      if (pressure && Math.random() < dt * .85 * game.ai) { passBall(player); return; }
+      if(pressure&&Math.random()<dt*.85*game.ai){const runners=players.filter((p)=>p.team===team&&p!==player&&p.role!=="GK").sort((a,b)=>passingLaneRisk(player,a,team)-passingLaneRisk(player,b,team));if(runners[0]&&passingLaneRisk(player,runners[0],team)<.48&&Math.random()<.42)throughBall(player);else passBall(player);return;}
       const weave = Math.sin(performance.now() * .0017 + player.index) * 105;
       moveToward(player, goalX, clamp(H / 2 + weave, 130, H - 130), aiSpeed * 1.03, dt); return;
     }
@@ -312,8 +322,8 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if (shouldChase) { moveToward(player, ball.x, ball.y, aiSpeed * 1.08, dt); return; }
 
     let tx = player.baseX + (ball.x - W / 2) * .26; let ty = player.baseY + (ball.y - H / 2) * .2;
-    if (ball.owner?.team === team) { tx += attackDirection * (player.role === "FW" ? 120 : 55); ty += Math.sin(performance.now() * .001 + player.index) * 25; }
-    if (ball.owner?.team !== team) tx = lerp(tx, ownGoalX, player.role === "DF" ? .15 : .05);
+    if(ball.owner?.team===team){const owner=ball.owner;const laneSide=player.index%2?1:-1;tx+=attackDirection*(player.role==="FW"?145:player.role==="MF"?78:28);ty+=laneSide*(player.role==="FW"?42:24);if(player.role==="FW"&&Math.abs(player.y-owner.y)<54)ty+=laneSide*48;}
+    if(ball.owner?.team!==team){tx=lerp(tx,ownGoalX,player.role==="DF"?.2:.07);if(player.role==="DF")ty=lerp(ty,H/2,.08);}
     moveToward(player, clamp(tx, FIELD.left + 45, FIELD.right - 45), clamp(ty, FIELD.top + 45, FIELD.bottom - 45), aiSpeed * .82, dt);
   }
 
@@ -335,30 +345,32 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function updateBall(dt) {
-    ball.angle += ball.spin * dt; ball.spin *= Math.pow(.55, dt);
+    ball.angle += ball.spin * dt; ball.spin *= Math.pow(.55, dt);ball.curve*=Math.pow(.3,dt);
     if (ball.lock > 0) ball.lock -= dt;
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
-      const owner=ball.owner;const closeControl=owner===game.selected&&!owner.sprinting;const speed=Math.hypot(owner.vx,owner.vy);const touch=Math.sin(owner.stepPhase);if(Math.abs(touch)>.82)owner.dribbleSide=touch>0?1:-1;const lead=owner.radius+(closeControl?7:12)+clamp(speed/110,0,2.8)*Math.max(0,touch);const lateral=(speed>35?owner.dribbleSide:0)*(closeControl?2.3:3.8);const targetX=owner.x+owner.dirX*lead-owner.dirY*lateral;const targetY=owner.y+owner.dirY*lead+owner.dirX*lateral;const follow=1-Math.exp(-dt*(closeControl?28:20));ball.x=lerp(ball.x,targetX,follow);ball.y=lerp(ball.y,targetY,follow);ball.vx=owner.vx;ball.vy=owner.vy;
+      const owner=ball.owner;ball.height=0;ball.vz=0;const closeControl=owner===game.selected&&!owner.sprinting;const speed=Math.hypot(owner.vx,owner.vy);const touch=Math.sin(owner.stepPhase);if(Math.abs(touch)>.82)owner.dribbleSide=touch>0?1:-1;const lead=owner.radius+(closeControl?7:12)+clamp(speed/110,0,2.8)*Math.max(0,touch);const lateral=(speed>35?owner.dribbleSide:0)*(closeControl?2.3:3.8);const targetX=owner.x+owner.dirX*lead-owner.dirY*lateral;const targetY=owner.y+owner.dirY*lead+owner.dirX*lateral;const follow=1-Math.exp(-dt*(closeControl?28:20));ball.x=lerp(ball.x,targetX,follow);ball.y=lerp(ball.y,targetY,follow);ball.vx=owner.vx;ball.vy=owner.vy;
       ball.angle += Math.hypot(owner.vx, owner.vy) * dt * .035;
       game.stats.possession[owner.team] += dt;
     } else {
-      ball.x += ball.vx * dt; ball.y += ball.vy * dt; const friction = Math.pow(game.weather === "rain" ? .36 : .22, dt); ball.vx *= friction; ball.vy *= friction;
+      const speed=Math.hypot(ball.vx,ball.vy);if(speed>20&&Math.abs(ball.curve)>.005){const turn=ball.curve*dt;const cos=Math.cos(turn),sin=Math.sin(turn);const vx=ball.vx;ball.vx=vx*cos-ball.vy*sin;ball.vy=vx*sin+ball.vy*cos;}ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.height+=ball.vz*dt;ball.vz-=22*dt;if(ball.height<0){ball.height=0;if(Math.abs(ball.vz)>3.5)ball.vz=-ball.vz*.34;else ball.vz=0;}const friction=Math.pow(game.weather==="rain"?.36:.22,dt);ball.vx*=friction;ball.vy*=friction;
       if (Math.hypot(ball.vx, ball.vy) < 4) ball.vx = ball.vy = 0;
       if (ball.lock <= 0) {
-        let pickup = null; let best = 29;
+        let pickup=null;let best=Infinity;
         for (const player of players) {
           if (player.cooldown > 0 || player === ball.lastTouch && Math.hypot(ball.vx, ball.vy) > 550) continue;
-          const d = distance(player, ball); if (d < best) { pickup = player; best = d; }
+          const catchRadius=player.role==="GK"?38:28;if(ball.height>(player.role==="GK"?2.8:1.05))continue;const d=distance(player,ball);if(d<catchRadius&&d<best){pickup=player;best=d;}
         }
         if (pickup) setOwner(pickup);
       }
     }
 
-    ball.trail.unshift({ x: ball.x, y: ball.y }); if (ball.trail.length > 8) ball.trail.pop();
+    ball.trail.unshift({ x: ball.x, y: ball.y, height:ball.height }); if (ball.trail.length > 8) ball.trail.pop();
     const inGoalMouth = ball.y > FIELD.goalTop && ball.y < FIELD.goalBottom;
-    if (inGoalMouth && ball.x > FIELD.right + 20) { goal(HOME); return; }
-    if (inGoalMouth && ball.x < FIELD.left - 20) { goal(AWAY); return; }
+    if(inGoalMouth&&ball.height<3.25&&ball.x>FIELD.right+20){goal(HOME);return;}
+    if(inGoalMouth&&ball.height<3.25&&ball.x<FIELD.left-20){goal(AWAY);return;}
+    if(inGoalMouth&&ball.height>=3.25&&ball.x>FIELD.right-ball.radius){ball.x=FIELD.right-ball.radius;ball.vx=-Math.abs(ball.vx)*.58;ball.vz*=.72;}
+    if(inGoalMouth&&ball.height>=3.25&&ball.x<FIELD.left+ball.radius){ball.x=FIELD.left+ball.radius;ball.vx=Math.abs(ball.vx)*.58;ball.vz*=.72;}
     if (ball.y < FIELD.top + ball.radius) { ball.y = FIELD.top + ball.radius; ball.vy = Math.abs(ball.vy) * .74; }
     if (ball.y > FIELD.bottom - ball.radius) { ball.y = FIELD.bottom - ball.radius; ball.vy = -Math.abs(ball.vy) * .74; }
     if (!inGoalMouth && ball.x < FIELD.left + ball.radius) { ball.x = FIELD.left + ball.radius; ball.vx = Math.abs(ball.vx) * .74; }
@@ -379,7 +391,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
   function captureReplayFrame() {
     return {
-      ball: { x: ball.x, y: ball.y, angle: ball.angle },
+      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle },
       players: players.map((player) => ({ x: player.x, y: player.y, vx: player.vx, vy: player.vy, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: player.anim, animTime: player.animTime, animDuration: player.animDuration, animPower: player.animPower }))
     };
   }
@@ -715,7 +727,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   function render3D(now) {
     const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
-    ballView.position.set(worldX(renderBall.x),.86,worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
+    ballView.position.set(worldX(renderBall.x),.86+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
     if(input.shootStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.shootCharge);fill.position.x=-2.4+2.4*input.shootCharge;fill.material.color.set(input.shootCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
     const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
