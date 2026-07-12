@@ -1,9 +1,13 @@
-# Player model asset
+# Player assets
 
-`football-player.glb` is derived from **Universal Animation Library — Standard** by Quaternius.
+The player assets are derived from Quaternius packs released under CC0:
 
-- Source: https://quaternius.itch.io/universal-animation-library
-- License: Creative Commons Zero v1.0 Universal (CC0)
-- Changes: retained only the nine animation clips used by Tony Football Max and pruned unused data.
+- `football-character.glb`: Universal Base Characters — Standard. Textures resized to 1024px and converted to WebP.
+- `football-player.glb`: Universal Animation Library — Standard. Reduced to the nine clips used by the game.
 
-The original asset and this derived file may be used, modified, and redistributed under CC0.
+Sources:
+
+- https://quaternius.itch.io/universal-base-characters
+- https://quaternius.itch.io/universal-animation-library
+
+License: Creative Commons Zero v1.0 Universal (CC0).
