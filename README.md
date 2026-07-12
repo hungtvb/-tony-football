@@ -51,6 +51,17 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Tay, chân và thân trên có follow-through riêng khi chuyền và sút
 - Crossfade giữa idle, jog và sprint dài hơn để chuyển animation tự nhiên
 
+## Gameplay & AI — Sprint 11
+
+- Bóng bổng có độ cao, trọng lực, nảy và chỉ được khống chế khi hạ đủ thấp
+- Cú sút có quỹ đạo xoáy giảm dần theo vận tốc và ma sát mặt sân
+- Thủ môn dự đoán điểm bóng đến trước khung thành để chọn vị trí và bay người
+- Bán kính bắt bóng riêng cho thủ môn, không còn dùng chung với cầu thủ sân
+- Chuyền sệt đánh giá nguy cơ cắt bóng trong hành lang chuyền
+- AI ưu tiên đường chuyền an toàn hoặc chọc khe khi bị pressing
+- Tiền đạo chạy giãn biên, tiền vệ hỗ trợ và hậu vệ lùi giữ cự ly đội hình
+- Mỗi đội chỉ dùng cầu thủ gần bóng nhất để pressing, tránh toàn đội cùng lao vào bóng
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
