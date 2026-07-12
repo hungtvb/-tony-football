@@ -112,3 +112,12 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Camera Broadcast / Close hạ thấp để nhìn rõ cầu thủ và chuyển động
 - Mật độ cỏ, mưa và khán giả tăng gần gấp đôi trên desktop
 - Thiết bị cấu hình thấp vẫn tự bỏ post-processing và dùng pipeline nhẹ
+
+## Player Rig — Sprint 8
+
+- Thay model cầu thủ ghép từ primitive bằng nhân vật GLTF có skeleton thật
+- SkeletonUtils clone rig độc lập cho 12 cầu thủ nhưng dùng chung dữ liệu asset
+- AnimationMixer crossfade giữa idle, jog, sprint, nhận bóng, chuyền, sút, xoạc và ăn mừng
+- Uniform PBR được đổi màu theo Tony FC, Neon United và trang phục thủ môn
+- Asset đã cắt còn chín animation cần thiết; model procedural cũ trở thành fallback khi tải lỗi
+- Model gốc Universal Animation Library của Quaternius, giấy phép CC0; chi tiết trong `assets/models/README.md`

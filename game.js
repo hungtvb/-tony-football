@@ -6,6 +6,8 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -26,6 +28,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
   const WORLD_SCALE = .1;
   const playerViews = new Map();
   let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;
+  let playerAsset = null;
   const ledViews = []; const goalNetViews = [];
   const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
@@ -460,7 +463,12 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
     if(!lowPowerDevice){composer3D=new EffectComposer(renderer3D);composer3D.setPixelRatio(Math.min(window.devicePixelRatio||1,2));composer3D.setSize(W,H);composer3D.addPass(new RenderPass(scene3D,camera3D));const ssao=new SSAOPass(scene3D,camera3D,W,H,24);ssao.kernelRadius=10;ssao.minDistance=.002;ssao.maxDistance=.12;composer3D.addPass(ssao);const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.16,.48,.88);composer3D.addPass(bloom);composer3D.addPass(new SMAAPass(W*(window.devicePixelRatio||1),H*(window.devicePixelRatio||1)));composer3D.addPass(new OutputPass());}
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
+    loadPlayerAsset();
     return true;
+  }
+
+  function loadPlayerAsset() {
+    const loader=new GLTFLoader();loader.load("assets/models/football-player.glb?v=8.0.0",(gltf)=>{playerAsset={scene:gltf.scene,animations:gltf.animations};players.forEach(upgradePlayerView);ui.commentary.textContent="PLAYER RIG ONLINE · 9 ANIMATION CLIPS";},undefined,()=>{ui.commentary.textContent="Không tải được player rig · Đang dùng model dự phòng";});
   }
 
   function createPitchTexture3D() {
@@ -596,7 +604,24 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
     if (keeper) { const gloveMat = new THREE.MeshStandardMaterial({ color:0xf5f7f6, roughness:.4 }); for (const arm of [leftArm,rightArm]) { const glove = new THREE.Mesh(new THREE.BoxGeometry(.42,.38,.32),gloveMat); glove.position.y=-1.62; glove.rotation.z=.12; arm.add(glove); } }
     const numbers=createSquadNumber(player,home?"#101413":"#f0fbfa"); body.add(...numbers);
     const marker = new THREE.Mesh(new THREE.TorusGeometry(1.7,.09,8,36), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent:true, opacity:.92, toneMapped:false })); marker.rotation.x = Math.PI/2; marker.position.y = .08; root.add(marker);
-    const label = createLabelSprite(player, accent); root.add(label); scene3D.add(root); playerViews.set(player,{root,body,torso,head,leftLeg,rightLeg,leftArm,rightArm,marker,label});
+    const label = createLabelSprite(player, accent); root.add(label); scene3D.add(root); playerViews.set(player,{root,body,torso,head,leftLeg,rightLeg,leftArm,rightArm,marker,label}); if(playerAsset)upgradePlayerView(player);
+  }
+
+  function upgradePlayerView(player) {
+    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.25);model.rotation.y=Math.PI;
+    const home=player.team===HOME;const keeper=player.role==="GK";const kitColor=keeper?(home?0x7650d6:0xe65348):(home?0xe1bb58:0x32b8c8);const jointColor=keeper?0x20212c:(home?0x161a18:0x082e35);
+    const kitMaterial=new THREE.MeshPhysicalMaterial({color:kitColor,roughness:.46,metalness:.01,sheen:1,sheenColor:new THREE.Color(home?0xffe7a6:0xb9f8ff),sheenRoughness:.68,clearcoat:.06});const jointMaterial=new THREE.MeshStandardMaterial({color:jointColor,roughness:.74});
+    model.traverse((node)=>{if(!node.isMesh)return;node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;const source=Array.isArray(node.material)?node.material:[node.material];const mapped=source.map((material)=>material?.name?.includes("Joints")?jointMaterial:kitMaterial);node.material=Array.isArray(node.material)?mapped:mapped[0];});
+    const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null};
+    const numbers=createSquadNumber(player,home?"#101413":"#f0fbfa");for(const number of numbers){number.position.y+=.05;view.root.add(number);}switchRigAnimation(view,"Idle_Loop",true);
+  }
+
+  function switchRigAnimation(view,state,immediate=false) {
+    const rig=view.rig;if(!rig||rig.state===state)return;const next=rig.actions[state]||rig.actions.Idle_Loop;if(!next)return;const looping=state.endsWith("_Loop")||state==="Dance_Loop";next.reset();next.enabled=true;next.setLoop(looping?THREE.LoopRepeat:THREE.LoopOnce,looping?Infinity:1);next.clampWhenFinished=!looping;next.fadeIn(immediate?0:.14).play();if(rig.active&&rig.active!==next)rig.active.fadeOut(immediate?0:.14);rig.active=next;rig.state=state;
+  }
+
+  function rigAnimationState(player,speed) {
+    if(player.anim==="celebrate")return"Dance_Loop";if(player.anim==="shoot")return"Sword_Attack";if(player.anim==="pass")return"Punch_Jab";if(player.anim==="tackle"||player.anim==="dive")return"Roll";if(player.anim==="receive")return"Hit_Chest";if(speed>225)return"Sprint_Loop";if(speed>28)return"Jog_Fwd_Loop";return"Idle_Loop";
   }
 
   function createBall3D() {
@@ -617,6 +642,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
   function updatePlayerView(player, now, pose = player) {
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
+    if(view.rig){view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY);switchRigAnimation(view,rigAnimationState(pose,speed));const dt=Math.min(.05,(now-view.rig.lastTime)/1000);view.rig.lastTime=now;if(view.rig.active)view.rig.active.timeScale=view.rig.state==="Sprint_Loop"?clamp(speed/220,.8,1.55):view.rig.state==="Jog_Fwd_Loop"?clamp(speed/155,.72,1.45):1;view.rig.mixer.update(dt);view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);return;}
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
     const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
