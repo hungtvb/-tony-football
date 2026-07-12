@@ -41,6 +41,16 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Phòng thủ có kèm người, đổi cầu thủ, tranh bóng đứng và soạc bóng riêng
 - Tăng tốc hoạt động ở cả hai trạng thái tấn công và phòng thủ
 
+## Player Animation — Sprint 10
+
+- Xoay thân theo tám hướng di chuyển với tốc độ quay phụ thuộc trạng thái chạy
+- Cầu thủ nghiêng người khi đổi hướng và giảm tốc nhẹ ở các pha ngoặt gấp
+- Locomotion có độ trễ tăng/giảm nhịp để tránh chuyển động giật cục
+- Dẫn bóng luân phiên hai chân, bóng lệch theo chân chạm thay vì dính giữa người
+- Bóng theo điểm chạm bằng nội suy để giảm hiện tượng giật hoặc teleport
+- Tay, chân và thân trên có follow-through riêng khi chuyền và sút
+- Crossfade giữa idle, jog và sprint dài hơn để chuyển animation tự nhiên
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
