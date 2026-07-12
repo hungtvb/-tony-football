@@ -468,7 +468,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function loadPlayerAsset() {
-    const loader=new GLTFLoader();loader.load("assets/models/football-player.glb?v=8.0.0",(gltf)=>{playerAsset={scene:gltf.scene,animations:gltf.animations};players.forEach(upgradePlayerView);ui.commentary.textContent="PLAYER RIG ONLINE · 9 ANIMATION CLIPS";},undefined,()=>{ui.commentary.textContent="Không tải được player rig · Đang dùng model dự phòng";});
+    const loader=new GLTFLoader();Promise.all([loader.loadAsync("assets/models/football-character.glb?v=8.1.0"),loader.loadAsync("assets/models/football-player.glb?v=8.0.0")]).then(([character,motion])=>{playerAsset={scene:character.scene,animations:motion.animations};players.forEach(upgradePlayerView);ui.commentary.textContent="PLAYER RIG 8.1 ONLINE · FULL KIT";}).catch(()=>{ui.commentary.textContent="Không tải được player rig · Đang dùng model dự phòng";});
   }
 
   function createPitchTexture3D() {
@@ -607,21 +607,39 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const label = createLabelSprite(player, accent); root.add(label); scene3D.add(root); playerViews.set(player,{root,body,torso,head,leftLeg,rightLeg,leftArm,rightArm,marker,label}); if(playerAsset)upgradePlayerView(player);
   }
 
+  function addFootballKit(model,player) {
+    const home=player.team===HOME;const keeper=player.role==="GK";const jerseyColor=keeper?(home?0x7650d6:0xe65348):(home?0xe1bb58:0x32b8c8);const shortsColor=keeper?0x20212c:(home?0x171b1a:0x082e35);const sockColor=home?0xe8d486:0xb7edf2;
+    const jersey=new THREE.MeshPhysicalMaterial({color:jerseyColor,roughness:.5,sheen:1,sheenColor:new THREE.Color(home?0xffe9ae:0xc4fbff),sheenRoughness:.72});const shorts=new THREE.MeshStandardMaterial({color:shortsColor,roughness:.7});const socks=new THREE.MeshStandardMaterial({color:sockColor,roughness:.78});const boots=new THREE.MeshStandardMaterial({color:player.index%3===0?0xe64f3f:player.index%3===1?0xe7e9e7:0x141716,roughness:.38,metalness:.08});
+    const attach=(boneName,geometry,material,position)=>{const bone=model.getObjectByName(boneName);if(!bone)return null;const mesh=new THREE.Mesh(geometry,material);mesh.position.copy(position);mesh.castShadow=true;bone.add(mesh);return mesh;};
+    attach("spine_01",new THREE.CylinderGeometry(.28,.34,.5,16),jersey,new THREE.Vector3(0,.2,0));attach("upperarm_l",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("upperarm_r",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("pelvis",new THREE.BoxGeometry(.57,.3,.34),shorts,new THREE.Vector3(0,.08,0));
+    for(const side of ["l","r"]){attach(`calf_${side}`,new THREE.CylinderGeometry(.095,.12,.29,12),socks,new THREE.Vector3(0,.3,0));attach(`foot_${side}`,new THREE.BoxGeometry(.17,.29,.13),boots,new THREE.Vector3(0,.08,.015));}
+    const head=model.getObjectByName("Head");if(head){const hair=new THREE.Mesh(new THREE.SphereGeometry(.115,14,7,0,Math.PI*2,0,Math.PI*.48),new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.9}));hair.position.y=.055;hair.scale.set(1,1,.93);hair.castShadow=true;head.add(hair);}
+    return{head,spine:model.getObjectByName("spine_03"),rightThigh:model.getObjectByName("thigh_r"),rightCalf:model.getObjectByName("calf_r")};
+  }
+
   function upgradePlayerView(player) {
-    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.25);model.rotation.y=Math.PI;
-    const home=player.team===HOME;const keeper=player.role==="GK";const kitColor=keeper?(home?0x7650d6:0xe65348):(home?0xe1bb58:0x32b8c8);const jointColor=keeper?0x20212c:(home?0x161a18:0x082e35);
-    const kitMaterial=new THREE.MeshPhysicalMaterial({color:kitColor,roughness:.46,metalness:.01,sheen:1,sheenColor:new THREE.Color(home?0xffe7a6:0xb9f8ff),sheenRoughness:.68,clearcoat:.06});const jointMaterial=new THREE.MeshStandardMaterial({color:jointColor,roughness:.74});
-    model.traverse((node)=>{if(!node.isMesh)return;node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;const source=Array.isArray(node.material)?node.material:[node.material];const mapped=source.map((material)=>material?.name?.includes("Joints")?jointMaterial:kitMaterial);node.material=Array.isArray(node.material)?mapped:mapped[0];});
-    const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null};
-    const numbers=createSquadNumber(player,home?"#101413":"#f0fbfa");for(const number of numbers){number.position.y+=.05;view.root.add(number);}switchRigAnimation(view,"Idle_Loop",true);
+    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.28);model.rotation.y=Math.PI;
+    model.traverse((node)=>{if(!node.isMesh)return;node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;const source=Array.isArray(node.material)?node.material:[node.material];const mapped=source.map((material)=>{const clone=material.clone();clone.roughness=Math.max(.5,clone.roughness||.5);return clone;});node.material=Array.isArray(node.material)?mapped:mapped[0];});
+    const bones=addFootballKit(model,player);const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null,yaw:Math.atan2(player.dirX,player.dirY),...bones};
+    const numbers=createSquadNumber(player,player.team===HOME?"#101413":"#f0fbfa");for(const number of numbers){number.position.y+=.05;view.root.add(number);}switchRigAnimation(view,"Idle_Loop",true);
   }
 
   function switchRigAnimation(view,state,immediate=false) {
-    const rig=view.rig;if(!rig||rig.state===state)return;const next=rig.actions[state]||rig.actions.Idle_Loop;if(!next)return;const looping=state.endsWith("_Loop")||state==="Dance_Loop";next.reset();next.enabled=true;next.setLoop(looping?THREE.LoopRepeat:THREE.LoopOnce,looping?Infinity:1);next.clampWhenFinished=!looping;next.fadeIn(immediate?0:.14).play();if(rig.active&&rig.active!==next)rig.active.fadeOut(immediate?0:.14);rig.active=next;rig.state=state;
+    const rig=view.rig;if(!rig||rig.state===state)return;const next=rig.actions[state]||rig.actions.Idle_Loop;if(!next)return;const looping=state.endsWith("_Loop")||state==="Dance_Loop";const fade=immediate?0:(looping ? .24 : .12);next.reset();next.enabled=true;next.setLoop(looping?THREE.LoopRepeat:THREE.LoopOnce,looping?Infinity:1);next.clampWhenFinished=!looping;next.fadeIn(fade).play();if(rig.active&&rig.active!==next)rig.active.fadeOut(fade);rig.active=next;rig.state=state;
   }
 
-  function rigAnimationState(player,speed) {
-    if(player.anim==="celebrate")return"Dance_Loop";if(player.anim==="shoot")return"Sword_Attack";if(player.anim==="pass")return"Punch_Jab";if(player.anim==="tackle"||player.anim==="dive")return"Roll";if(player.anim==="receive")return"Hit_Chest";if(speed>225)return"Sprint_Loop";if(speed>28)return"Jog_Fwd_Loop";return"Idle_Loop";
+  function rigAnimationState(player,speed,current) {
+    if(player.anim==="celebrate")return"Dance_Loop";if(player.anim==="tackle"||player.anim==="dive")return"Roll";if(player.anim==="receive")return"Hit_Chest";if(current==="Sprint_Loop"&&speed>178)return current;if(speed>218)return"Sprint_Loop";if(current==="Jog_Fwd_Loop"&&speed>18)return current;if(speed>26)return"Jog_Fwd_Loop";return"Idle_Loop";
+  }
+
+  function smoothAngle(current,target,ease) {return current+Math.atan2(Math.sin(target-current),Math.cos(target-current))*ease;}
+
+  function updateRigPlayer(player,pose,view,now,speed) {
+    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const moving=speed>62;const desired=moving?Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY):Math.atan2(ballDirection.x,ballDirection.y);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*9));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
+    switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
+    const actionProgress=pose.animDuration?1-pose.animTime/pose.animDuration:1;const wave=pose.animTime>0?Math.sin(clamp(actionProgress,0,1)*Math.PI):0;if((pose.anim==="shoot"||pose.anim==="pass")&&rig.rightThigh){rig.rightThigh.rotation.x-=(pose.anim==="shoot"?1.15:.72)*wave;if(rig.rightCalf)rig.rightCalf.rotation.x+=wave*.58;}
+    if(rig.head){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.spine&&speed<75){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;}
+    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function createBall3D() {
@@ -642,7 +660,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
   function updatePlayerView(player, now, pose = player) {
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
-    if(view.rig){view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY);switchRigAnimation(view,rigAnimationState(pose,speed));const dt=Math.min(.05,(now-view.rig.lastTime)/1000);view.rig.lastTime=now;if(view.rig.active)view.rig.active.timeScale=view.rig.state==="Sprint_Loop"?clamp(speed/220,.8,1.55):view.rig.state==="Jog_Fwd_Loop"?clamp(speed/155,.72,1.45):1;view.rig.mixer.update(dt);view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has("KeyJ")||input.marking)?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);return;}
+    if(view.rig){updateRigPlayer(player,pose,view,now,speed);return;}
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
     const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
