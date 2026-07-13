@@ -46,6 +46,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     volt:{base:0xdff44a,patch:0x172019,stroke:"#20300d"},
     crimson:{base:0xf2f3f1,patch:0xc92832,stroke:"#6d1119"}
   };
+  const WEATHER_STYLES={clear:true,rain:true};
 
   function seededNoise(seed) {
     const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -59,7 +60,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     staminaBar: $("staminaBar"), staminaText: $("staminaText"), playerName: $("playerName"),
     playerNumber: $("playerNumber"), playerRating: $("playerRating"), possessionStat: $("possessionStat"),
     possessionBar: $("possessionBar"), homeShots: $("homeShots"), awayShots: $("awayShots"), passStat: $("passStat"),
-    replayBadge: $("replayBadge")
+    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard")
   };
 
   const formations = {
@@ -92,10 +93,18 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
     camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
-    goalSequence: null, goalScorer: null, weather: "rain",pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
+    goalSequence: null, goalScorer: null, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
   let players = [];
-  const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, shootStart: 0, shootCharge: 0, marking: false };
+  const FO4_CONTROLS = Object.freeze({
+    sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
+    teammateRun:"KeyQ", finesse:"KeyZ", shield:"KeyC", tackle:"Space", camera:"KeyB"
+  });
+  const input = {
+    keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0,
+    actionCode: null, actionStart: 0, actionCharge: 0, actionModifiers: null,
+    bufferedAction: null, lastMode: "defense", qTapStart: 0, qConsumed: false
+  };
 
   function loadPreference(key,fallback,options){try{const value=localStorage.getItem(key);return options[value]?value:fallback;}catch{return fallback;}}
   function savePreference(key,value){try{localStorage.setItem(key,value);}catch{}}
@@ -128,7 +137,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const taker = team === HOME ? players[4] : players[10];
     taker.x = W / 2 + (team === HOME ? -26 : 26); taker.y = H / 2;
     ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.height=0;ball.vz=0;ball.curve=0;ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null; ball.angle = 0; ball.spin = 0;
-    game.selected = team === HOME ? taker : closestPlayer(HOME, ball, false);
+    game.selected = team === HOME ? taker : closestPlayer(HOME, ball, false);input.lastMode=team===HOME?"attack":"defense";input.bufferedAction=null;
     game.kickOffTimer = 1.25; announce(team === HOME ? "Tony FC giao bóng!" : "Neon United giao bóng!");
   }
 
@@ -161,7 +170,12 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     return best;
   }
 
-  function isAttacking() { return ball.owner?.team === HOME; }
+  function isAttacking() { return controlMode() === "attack"; }
+
+  function controlMode() {
+    if (ball.owner) input.lastMode = ball.owner.team === HOME ? "attack" : "defense";
+    return input.lastMode;
+  }
 
   function switchPlayer() {
     if (ball.owner?.team === HOME) { game.selected = ball.owner; return; }
@@ -169,6 +183,15 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const candidates=players.filter((player)=>player.team===HOME&&player.role!=="GK"&&player!==game.selected).map((player)=>{const toTarget=normalize(target.x-player.x,target.y-player.y);const intent=input.magnitude>.12?toTarget.x*input.aimX+toTarget.y*input.aimY:0;const rolePenalty=player.role==="FW"&&target.x<W*.52?35:0;return{player,score:distance(player,target)-intent*55+rolePenalty};}).sort((a,b)=>a.score-b.score);
     game.selected=candidates[0]?.player||closestPlayer(HOME,target,false);
     tone(520, .035, "sine", .025);
+  }
+
+  function switchPlayerInDirection(code) {
+    if (controlMode() === "attack") return;const directions={ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1}};const direction=directions[code];if(!direction)return;
+    const candidates=players.filter((player)=>player.team===HOME&&player.role!=="GK"&&player!==game.selected).map((player)=>{
+      const dx=player.x-game.selected.x;const dy=player.y-game.selected.y;const d=length(dx,dy);const alignment=dx/d*direction.x+dy/d*direction.y;
+      return{player,score:alignment*360-d*.22-distance(player,ball)*.06};
+    }).sort((a,b)=>b.score-a.score);
+    if(candidates[0]?.score>20){game.selected=candidates[0].player;tone(610,.035,"sine",.025);}
   }
 
   function setOwner(player) {
@@ -179,6 +202,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;ball.height=0;ball.vz=0;ball.curve=0;player.controlBoost=.28;
     triggerAnimation(player, "receive", .2);
     if (player.team === HOME && player.role !== "GK") game.selected = player;
+    if(player===game.selected&&input.bufferedAction&&performance.now()<=input.bufferedAction.expires){const buffered=input.bufferedAction;input.bufferedAction=null;executeAttackAction(buffered.code,buffered.charge,buffered.modifiers);}
   }
 
   function triggerAnimation(player, name, duration, power = 0) {
@@ -195,8 +219,8 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     for (let i = 0; i < (type === "shot" ? 9 : 4); i += 1) spawnParticle(ball.x, ball.y, type === "shot" ? "#f5d067" : "#f4f7f5", 1.2);
   }
 
-  function passBall(player) {
-    if (ball.owner !== player) { tackle(player); return; }
+  function passBall(player, charge=.35, oneTwo=false) {
+    if (ball.owner !== player) return;
     const teammates = players.filter((p) => p.team === player.team && p !== player && p.role !== "GK");
     const hasIntent=player===game.selected&&input.magnitude>.12;const facing=hasIntent?normalize(input.aimX,input.aimY):normalize(player.dirX||(player.team===HOME?1:-1),player.dirY);
     let target = teammates[0]; let best = -Infinity;
@@ -208,36 +232,38 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
       if (score > best) { target = candidate; best = score; }
     }
     const leadX = target.x + target.vx * .18; const leadY = target.y + target.vy * .18;
-    const d = distance(player, target); releaseBall(player, leadX - player.x, leadY - player.y, clamp(430 + d * .35, 480, 650), "pass");
+    const d = distance(player, target); const power=lerp(.82,1.16,clamp(charge,.08,1));releaseBall(player, leadX - player.x, leadY - player.y, clamp((430 + d * .35)*power, 440, 760), "pass");
+    if(oneTwo){const runDirection=normalize((player.team===HOME?1:-1)*.9+input.aimX*.45,input.aimY*.55);player.vx=runDirection.x*225;player.vy=runDirection.y*225;player.controlBoost=.7;announce(`${player.name} bật tường và băng lên!`);}
     if (player.team === HOME) game.stats.passes += 1;
-    ball.pendingPass = { team: player.team, timer: 1.8 }; announce(`${player.name} chuyền bóng!`);
+    ball.pendingPass = { team: player.team, timer: 1.8 }; announce(oneTwo?`${player.name} bật tường và băng lên!`:`${player.name} chuyền bóng!`);
   }
 
-  function throughBall(player) {
+  function throughBall(player, charge=.45, chipped=false) {
     if (ball.owner !== player) return;
     const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
     const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
     for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const aligned=dx/d*facing.x+dy/d*facing.y;const progress=dx*attackDirection;const score=aligned*310+progress*.42-d*.12;if(score>best){best=score;target=candidate;}}
-    if(!target)return;const runX=target.vx*.58+attackDirection*58;const runY=target.vy*.58;const d=distance(player,target);releaseBall(player,target.x+runX-player.x,target.y+runY-player.y,clamp(540+d*.42,580,760),"pass");
+    if(!target)return;const runX=target.vx*.58+attackDirection*58;const runY=target.vy*.58;const d=distance(player,target);const power=lerp(.84,1.18,clamp(charge,.08,1));releaseBall(player,target.x+runX-player.x,target.y+runY-player.y,clamp((540+d*.42)*power,540,900),chipped?"loft":"pass");if(chipped){ball.vz=8.6+charge*4.2;ball.height=.12;}
     if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.1};announce(`${player.name} chọc khe vào khoảng trống!`);
   }
 
-  function loftBall(player) {
+  function loftBall(player, charge=.45) {
     if(ball.owner!==player)return;const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
     const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
     for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const wide=Math.abs(dy);const aligned=dx/d*facing.x+dy/d*facing.y;const score=aligned*240+dx*attackDirection*.25+wide*.12-d*.08;if(score>best){best=score;target=candidate;}}
-    if(!target)return;releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp(610+distance(player,target)*.3,650,820),"loft");
+    if(!target)return;const power=lerp(.82,1.18,clamp(charge,.08,1));releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp((610+distance(player,target)*.3)*power,580,940),"loft");ball.vz*=lerp(.82,1.14,charge);
     if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.2};announce(`${player.name} tạt bóng!`);
   }
 
-  function shootBall(player, charge = .5) {
-    if (ball.owner !== player) { tackle(player); return; }
+  function shootBall(player, charge = .5, style="power") {
+    if (ball.owner !== player) return;
     const targetX = player.team === HOME ? FIELD.right + 45 : FIELD.left - 45;
     const keeper = players.find((p) => p.team !== player.team && p.role === "GK");
     const openY = keeper.y < H / 2 ? FIELD.goalBottom - 34 : FIELD.goalTop + 34;
     const userAim=player===game.selected&&player.team===HOME&&input.magnitude>.12;const directedY=userAim?H/2+input.aimY*145:player.y+player.dirY*120;
     const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
-    const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, 620 + power * 430, "shot");
+    const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot");
+    if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}
     game.stats.shots[player.team] += 1; announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
 
@@ -258,6 +284,28 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     player.cooldown=1.05;player.vx+=player.dirX*105;player.vy+=player.dirY*105;triggerAnimation(player,"tackle",.52,1);announce(`${player.name} soạc bóng!`);
   }
 
+  function triggerTeammateRun() {
+    if(ball.owner!==game.selected)return;const owner=game.selected;const direction=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:1,y:0};
+    const runner=players.filter((player)=>player.team===HOME&&player!==owner&&player.role!=="GK").map((player)=>{const dx=player.x-owner.x;const dy=player.y-owner.y;const d=length(dx,dy);return{player,score:dx/d*direction.x+dy/d*direction.y-d/1200};}).sort((a,b)=>b.score-a.score)[0]?.player;
+    if(!runner)return;runner.vx=lerp(runner.vx,direction.x*220,.72);runner.vy=lerp(runner.vy,direction.y*220,.72);runner.controlBoost=.75;announce(`${runner.name} bắt đầu chạy chỗ!`);
+  }
+
+  function beginAttackAction(code) {
+    if(input.actionStart)return;const q=input.keys.has(FO4_CONTROLS.teammateRun);if(q)input.qConsumed=true;input.actionCode=code;input.actionStart=performance.now();input.actionCharge=0;input.actionModifiers={q,z:input.keys.has(FO4_CONTROLS.finesse)};
+  }
+
+  function executeAttackAction(code,charge,modifiers={}) {
+    const player=game.selected;if(ball.owner!==player){input.bufferedAction={code,charge,modifiers,expires:performance.now()+280};return;}
+    if(code===FO4_CONTROLS.shortPass)passBall(player,charge,modifiers.q);
+    else if(code===FO4_CONTROLS.throughBall)throughBall(player,charge,modifiers.q);
+    else if(code===FO4_CONTROLS.loftPass)loftBall(player,charge);
+    else if(code===FO4_CONTROLS.shoot)shootBall(player,charge,modifiers.q?"chip":modifiers.z?"finesse":"power");
+  }
+
+  function finishAttackAction(code) {
+    if(input.actionCode!==code||!input.actionStart)return;const charge=Math.max(.08,input.actionCharge);const modifiers=input.actionModifiers||{};input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;executeAttackAction(code,charge,modifiers);
+  }
+
   function updateInput() {
     let x = 0; let y = 0;
     if (input.keys.has("ArrowLeft")) x -= 1;
@@ -266,7 +314,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     if (input.keys.has("ArrowDown")) y += 1;
     const raw=Math.hypot(x,y);
     if(raw<.1){input.moveX=0;input.moveY=0;input.magnitude=0;}else{const direction=normalize(x,y);input.moveX=direction.x;input.moveY=direction.y;input.magnitude=1;input.aimX=direction.x;input.aimY=direction.y;}
-    if (input.shootStart) input.shootCharge = clamp((performance.now() - input.shootStart) / 900, 0, 1);
+    if (input.actionStart) input.actionCharge = clamp((performance.now() - input.actionStart) / 900, 0, 1);
   }
 
   function moveToward(player, tx, ty, speed, dt) {
@@ -288,10 +336,11 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function updateUser(player, dt) {
-    const attacking=isAttacking();const sprinting=input.keys.has("KeyE");
-    const precision=false;const marking=!attacking&&input.keys.has("KeyS");let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
+    const attacking=isAttacking();const sprinting=input.keys.has(FO4_CONTROLS.sprint);
+    const precision=input.keys.has(FO4_CONTROLS.shield);const marking=!attacking&&input.keys.has(FO4_CONTROLS.shoot);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
     if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
     const hasMove=controlMagnitude>.03;
+    if(precision&&!attacking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const face=normalize(markTarget.x-player.x,markTarget.y-player.y);player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*20));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*20));}}
     const boost = sprinting && !precision && player.stamina > 2 ? 1.42 : 1;
     player.sprinting = sprinting && !precision && player.stamina > 2 && hasMove;
     player.controlBoost=Math.max(0,player.controlBoost-dt);const speed=(marking?158:precision?132:205)*boost*controlMagnitude;
@@ -309,6 +358,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const aiSpeed = 168 * (team === AWAY ? game.ai : .96);
 
     if (player.role === "GK") {
+      if(team===HOME&&controlMode()==="defense"&&input.keys.has(FO4_CONTROLS.throughBall)){moveToward(player,ball.x,ball.y,aiSpeed*1.34,dt);return;}
       const gx=team===HOME?82:1118;const danger=team===HOME?ball.x<330:ball.x>870;const projectedY=clamp(projectedGoalY(team),FIELD.goalTop+18,FIELD.goalBottom-18);const shotIncoming=!ball.owner&&(team===HOME?ball.vx<0:ball.vx>0)&&Math.hypot(ball.vx,ball.vy)>360;
       if(shotIncoming&&danger&&Math.abs(projectedY-player.y)>24&&Math.abs(projectedY-player.y)<155&&player.diveCooldown<=0&&ball.height<3.1){
         triggerAnimation(player,"dive",.5,Math.sign(projectedY-player.y));player.diveCooldown=1.05;
@@ -333,7 +383,9 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
       moveToward(player, goalX, clamp(H / 2 + weave, 130, H - 130), aiSpeed * 1.03, dt); return;
     }
 
-    const shouldChase = teamChaser === player && (!ball.owner || ball.owner.team !== team);
+    const pressSupport=team===HOME?players.filter((candidate)=>candidate.team===HOME&&candidate.role!=="GK"&&candidate!==game.selected).sort((a,b)=>distance(a,ball)-distance(b,ball))[0]:null;
+    const teammatePress=team===HOME&&controlMode()==="defense"&&input.keys.has(FO4_CONTROLS.teammateRun)&&player===pressSupport;
+    const shouldChase = (teamChaser === player||teammatePress) && (!ball.owner || ball.owner.team !== team);
     if (shouldChase) { moveToward(player, ball.x, ball.y, aiSpeed * 1.08, dt); return; }
 
     let tx = player.baseX + (ball.x - W / 2) * .26; let ty = player.baseY + (ball.y - H / 2) * .2;
@@ -687,7 +739,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function upgradePlayerView(player) {
-    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.28);model.rotation.y=Math.PI;
+    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.28);model.rotation.y=0;
     model.traverse((node)=>{if(!node.isMesh)return;node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;const source=Array.isArray(node.material)?node.material:[node.material];const mapped=source.map((material)=>{const clone=material.clone();clone.roughness=Math.max(.5,clone.roughness||.5);return clone;});node.material=Array.isArray(node.material)?mapped:mapped[0];});
     const bones=addFootballKit(model,player);const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null,yaw:Math.atan2(player.dirX,player.dirY),...bones};
     const numbers=createSquadNumber(player,player.team===HOME?"#101413":"#f0fbfa");for(const number of numbers){number.position.y+=.05;view.root.add(number);}switchRigAnimation(view,"Idle_Loop",true);
@@ -709,7 +761,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const actionProgress=pose.animDuration?1-pose.animTime/pose.animDuration:1;const wave=pose.animTime>0?Math.sin(clamp(actionProgress,0,1)*Math.PI):0;if((pose.anim==="shoot"||pose.anim==="pass")&&rig.rightThigh){const power=pose.anim==="shoot"?1.2:.76;rig.rightThigh.rotation.x-=power*wave;if(rig.rightCalf)rig.rightCalf.rotation.x+=wave*.62;if(rig.leftArm)rig.leftArm.rotation.x-=wave*.34;if(rig.rightArm)rig.rightArm.rotation.x+=wave*.42;}
     if(ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
     if(rig.head){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.spine){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
-    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&input.keys.has("KeyS")?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function createBall3D() {
@@ -748,7 +800,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
-    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&input.keys.has("KeyS")?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function updateParticleView() {
@@ -767,7 +819,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
     ballView.position.set(worldX(renderBall.x),.86+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
-    if(input.shootStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.shootCharge);fill.position.x=-2.4+2.4*input.shootCharge;fill.material.color.set(input.shootCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
+    if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
     const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
@@ -782,7 +834,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   function drawFallbackPlayerDetail(player,pose,replayFrame) {
     const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
-    if(selected){ctx.strokeStyle=!isAttacking()&&input.keys.has("KeyS")?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
+    if(selected){ctx.strokeStyle=!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
     ctx.rotate(Math.atan2(pose.dirY,pose.dirX)+Math.PI/2);ctx.lineCap="round";
     ctx.strokeStyle=sock;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-6,10);ctx.lineTo(-7+stride,25);ctx.moveTo(6,10);ctx.lineTo(7-stride,25);ctx.stroke();ctx.strokeStyle="#191c1b";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-10+stride,26);ctx.lineTo(-5+stride,26);ctx.moveTo(3-stride,26);ctx.lineTo(10-stride,26);ctx.stroke();
     ctx.fillStyle=shorts;ctx.beginPath();ctx.roundRect(-11,4,22,12,4);ctx.fill();ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(-13,-15,26,22,7);ctx.fill();ctx.fillStyle=home?"#161b19":"#e4f5f3";ctx.fillRect(-12,-5,24,3);
@@ -801,7 +853,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
     for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
     if(game.weather==="rain"){ctx.fillStyle="rgba(135,190,196,.055)";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(195,235,242,.32)";ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<(lowPowerDevice?60:140);i+=1){const x=(seededNoise(i*3.7)*W+now*.11)%W;const y=(seededNoise(i*8.9)*H+now*.34*(.7+seededNoise(i)))%H;ctx.moveTo(x,y);ctx.lineTo(x-5,y+17);}ctx.stroke();}
-    if(input.shootStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.shootCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.shootCharge,6);}
+    if(input.actionStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.actionCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.actionCharge,6);}
     if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}drawRadar();
   }
 
@@ -879,7 +931,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const selected = player === game.selected; const home = player.team === HOME; const speed = Math.hypot(player.vx, player.vy); const running = speed > 30;
     const actionProgress = player.animDuration ? 1 - player.animTime / player.animDuration : 1;
     const actionWave = player.animTime > 0 ? Math.sin(clamp(actionProgress, 0, 1) * Math.PI) : 0;
-    const charging = selected && input.shootStart && ball.owner === player;
+    const charging = selected && input.actionStart && ball.owner === player;
     const kickPose = player.anim === "shoot" || player.anim === "pass" ? actionWave : 0;
     const tacklePose = player.anim === "tackle" ? actionWave : 0;
     const receivePose = player.anim === "receive" ? actionWave : 0;
@@ -902,7 +954,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     const shorts = keeper ? "#20212c" : (home ? "#171b1a" : "#092e35");
     const legReach = (player.anim === "shoot" ? 42 : 30) * kickPose;
     const tackleReach = 34 * tacklePose;
-    const windup = charging ? input.shootCharge * 9 : 0;
+    const windup = charging ? input.actionCharge * 9 : 0;
     ctx.strokeStyle = home ? "#e6c36a" : "#66d9e3"; ctx.lineWidth = 5; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(-5, 9); ctx.lineTo(-6 + stride * .45, 19 - tackleReach * .45); ctx.moveTo(5, 9); ctx.lineTo(6 - stride * .45, 19 - legReach * .5 + windup); ctx.stroke();
     ctx.strokeStyle = "#121817"; ctx.lineWidth = 4; ctx.beginPath();
@@ -955,10 +1007,10 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     }
     for (const particle of game.particles) { ctx.globalAlpha = clamp(particle.life / particle.max, 0, 1); ctx.fillStyle = particle.color; ctx.fillRect(particle.x, particle.y, particle.size, particle.size); }
     ctx.globalAlpha = 1;
-    if (input.shootStart && ball.owner === game.selected) {
+    if (input.actionStart && ball.owner === game.selected) {
       const x = game.selected.x; const y = game.selected.y - 44; ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(x - 31, y, 62, 8);
-      const grad = ctx.createLinearGradient(x - 30, 0, x + 30, 0); grad.addColorStop(0, "#e1bb58"); grad.addColorStop(1, input.shootCharge > .82 ? "#ff5b45" : "#ffdc78");
-      ctx.fillStyle = grad; ctx.fillRect(x - 30, y + 1, 60 * input.shootCharge, 6);
+      const grad = ctx.createLinearGradient(x - 30, 0, x + 30, 0); grad.addColorStop(0, "#e1bb58"); grad.addColorStop(1, input.actionCharge > .82 ? "#ff5b45" : "#ffdc78");
+      ctx.fillStyle = grad; ctx.fillRect(x - 30, y + 1, 60 * input.actionCharge, 6);
     }
   }
 
@@ -997,6 +1049,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     ui.possessionStat.textContent = `${homePossession}%`; ui.possessionBar.style.width = `${homePossession}%`;
     ui.homeShots.textContent = game.stats.shots[HOME]; ui.awayShots.textContent = game.stats.shots[AWAY];
     ui.passStat.textContent = `${game.stats.passes ? Math.round(game.stats.completed / game.stats.passes * 100) : 0}%`;
+    const mode=controlMode();if(ui.controlsMode?.dataset.mode!==mode){ui.controlsMode.dataset.mode=mode;ui.controlsMode.textContent=mode==="attack"?"TẤN CÔNG":"PHÒNG THỦ";ui.controlsCard?.classList.toggle("defense",mode==="defense");document.querySelectorAll("[data-attack][data-defense]").forEach((label)=>{label.textContent=label.dataset[mode];});}
     if (scoringTeam !== null) {
       const score = scoringTeam === HOME ? ui.homeScore : ui.awayScore;
       score.classList.add("score-pop"); setTimeout(() => score.classList.remove("score-pop"), 420);
@@ -1035,20 +1088,23 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
   function onKeyDown(event) {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
-    if (event.repeat && ["KeyS","KeyW","KeyD","KeyA","KeyC","KeyV","Escape"].includes(event.code)) return;
+    if (event.repeat && [FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass,FO4_CONTROLS.teammateRun,FO4_CONTROLS.tackle,FO4_CONTROLS.camera,"Escape"].includes(event.code)) return;
     input.keys.add(event.code);
     if (event.code === "Escape") togglePause();
     if (game.state !== "playing") return;
-    if (event.code === "KeyS" && isAttacking()) passBall(game.selected);
-    if (event.code === "KeyW") { if(isAttacking())throughBall(game.selected);else switchPlayer(); }
-    if (event.code === "KeyD") { if(isAttacking()&&ball.owner===game.selected){input.shootStart=performance.now();input.shootCharge=0;}else if(!isAttacking())tackle(game.selected); }
-    if (event.code === "KeyA") { if(isAttacking())loftBall(game.selected);else slideTackle(game.selected); }
-    if (event.code === "KeyC") cycleCamera();
-    if (event.code === "KeyV") cycleWeather();
+    if(event.shiftKey&&event.code.startsWith("Arrow")){switchPlayerInDirection(event.code);return;}
+    const attacking=isAttacking();
+    if(attacking&&[FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass].includes(event.code))beginAttackAction(event.code);
+    if(!attacking&&event.code===FO4_CONTROLS.shortPass)switchPlayer();
+    if(!attacking&&event.code===FO4_CONTROLS.loftPass)slideTackle(game.selected);
+    if(!attacking&&event.code===FO4_CONTROLS.tackle)tackle(game.selected);
+    if(attacking&&event.code===FO4_CONTROLS.teammateRun){input.qTapStart=performance.now();input.qConsumed=false;}
+    if(event.code===FO4_CONTROLS.camera)cycleCamera();
   }
   function onKeyUp(event) {
     input.keys.delete(event.code);
-    if (event.code === "KeyD" && input.shootStart) { if(ball.owner===game.selected)shootBall(game.selected,input.shootCharge);input.shootStart=0;input.shootCharge=0; }
+    if([FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass].includes(event.code)){if(controlMode()==="attack")finishAttackAction(event.code);else{input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;}}
+    if(event.code===FO4_CONTROLS.teammateRun){if(controlMode()==="attack"&&input.qTapStart&&!input.qConsumed)triggerTeammateRun();input.qTapStart=0;input.qConsumed=false;}
   }
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
@@ -1057,7 +1113,8 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }));
   document.querySelectorAll("[data-pitch]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-pitch]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.pitchStyle=button.dataset.pitch;savePreference("tfPitch",game.pitchStyle);applyPitchStyle();tone(520,.04,"sine",.018);}));
   document.querySelectorAll("[data-ball]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-ball]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.ballStyle=button.dataset.ball;savePreference("tfBall",game.ballStyle);applyBallStyle();tone(680,.04,"sine",.018);}));
-  document.querySelectorAll("[data-pitch]").forEach((button)=>button.classList.toggle("active",button.dataset.pitch===game.pitchStyle));document.querySelectorAll("[data-ball]").forEach((button)=>button.classList.toggle("active",button.dataset.ball===game.ballStyle));
+  document.querySelectorAll("[data-weather]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-weather]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.weather=button.dataset.weather;savePreference("tfWeather",game.weather);applyPitchStyle();tone(game.weather==="rain"?330:560,.05,"sine",.018);}));
+  document.querySelectorAll("[data-pitch]").forEach((button)=>button.classList.toggle("active",button.dataset.pitch===game.pitchStyle));document.querySelectorAll("[data-ball]").forEach((button)=>button.classList.toggle("active",button.dataset.ball===game.ballStyle));document.querySelectorAll("[data-weather]").forEach((button)=>button.classList.toggle("active",button.dataset.weather===game.weather));
   $("playButton").addEventListener("click", startMatch);
   $("pauseButton").addEventListener("click", () => togglePause());
   $("resumeButton").addEventListener("click", () => togglePause(false));
@@ -1065,7 +1122,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   $("playAgainButton").addEventListener("click", startMatch);
   $("soundButton").addEventListener("click", () => { game.sound=!game.sound;$("soundButton").classList.toggle("muted",!game.sound);$("soundButton").setAttribute("aria-label",game.sound?"Tắt âm thanh":"Bật âm thanh");if(game.sound)tone(600,.08); });
   window.addEventListener("keydown", onKeyDown, { passive: false }); window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", () => { input.keys.clear(); input.marking=false; input.shootStart=0; input.shootCharge=0; if(game.state === "playing") togglePause(true); });
+  window.addEventListener("blur", () => { input.keys.clear();input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;input.bufferedAction=null;input.qTapStart=0;input.qConsumed=false;if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
   init3D(); createTeams(); updateUI(); requestAnimationFrame(loop);

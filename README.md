@@ -5,13 +5,16 @@ Game bóng đá arcade 6v6 dành cho PC, chạy trực tiếp trên trình duy�
 ## Điều khiển
 
 - Phím mũi tên: di chuyển và chọn hướng chuyền/sút
-- `S`: chuyền sệt / kèm người
-- `W`: chọc khe / đổi cầu thủ
-- Giữ và thả `D`: sút theo lực / tranh bóng đứng
-- `A`: tạt bóng / soạc bóng
+- `S`: chuyền ngắn / đổi cầu thủ
+- `W`: chọc khe / gọi thủ môn lao ra
+- Giữ và thả `D`: sút theo lực / giữ để áp sát
+- `A`: tạt bóng / xoạc bóng
 - `E`: chạy nhanh khi tấn công hoặc phòng thủ
-- `C`: chuyển camera Broadcast / Close Action / Tactical
-- `V`: chuyển thời tiết Clear / Rain
+- `Q`: gọi chạy chỗ / gọi đồng đội pressing
+- `C`: che bóng / jockey
+- `Space`: tắc bóng hoặc tỳ vai khi phòng thủ
+- `Shift + phím mũi tên`: đổi cầu thủ theo hướng
+- `B`: chuyển camera Broadcast / Close Action / Tactical
 - `Escape`: tạm dừng
 
 ## Chạy local
@@ -92,6 +95,29 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Bổ sung cờ góc, ghế dự bị và canopy trong không gian 3D
 - Canvas 2D fallback có vùng khán đài, khán giả và cờ góc thay vì chỉ có mặt cỏ phẳng
 - Giữ pipeline SSAO, bloom nhẹ và SMAA dành cho desktop
+
+## FO4 Keyboard Controls — Sprint 15
+
+- Dùng preset PC Keyboard theo FIFA Online 4 làm cấu hình mặc định
+- Giữ phím mũi tên để di chuyển và định hướng; `S / W / A / D / E` lần lượt là chuyền ngắn, chọc khe, chuyền dài hoặc tạt, sút và tăng tốc khi tấn công
+- Đổi bộ phím phòng thủ thành `S` đổi cầu thủ, `D` áp sát, `Space` tắc bóng hoặc tỳ vai, `A` xoạc bóng, `Q` gọi đồng đội pressing, `C` jockey và `W` gọi thủ môn lao ra
+- Hỗ trợ đổi cầu thủ theo hướng bằng `Shift + phím mũi tên`, thay vì chỉ chọn tự động
+- Bổ sung các tổ hợp FO4 cốt lõi: `Q + S` bật tường, `Q + W` chọc khe bổng, `Q + D` lốp bóng và `Z + D` sút cứa lòng
+- Chuyền, chọc khe, tạt và sút đều nhận lực theo thời gian giữ phím; nhả phím mới thực hiện hành động
+- Tách rõ trạng thái có bóng, phòng thủ và bóng tự do để thao tác không bị đổi chức năng ngay trước khi cầu thủ nhận bóng
+- Thêm action map trung gian để gameplay không phụ thuộc trực tiếp vào mã phím và sẵn sàng cho màn hình remap
+- Cập nhật bảng hướng dẫn trong trận theo đúng trạng thái tấn công hoặc phòng thủ và hiển thị tổ hợp phím nâng cao
+- Di chuyển đổi thời tiết khỏi phím gameplay `V` sang phần thiết lập trước trận để tránh bấm nhầm
+
+### Sprint 15 — Acceptance Criteria
+
+- Tất cả phím cơ bản và tổ hợp trên hoạt động đúng trong cả WebGL 3D lẫn Canvas 2D fallback
+- Giữ phím không kích hoạt lặp ngoài ý muốn; thao tác hai phím vẫn được nhận khi bấm lệch nhau trong một khoảng đệm ngắn
+- `S` luôn đổi người khi phòng thủ, `D` chỉ áp sát và `Space` mới thực hiện tắc bóng hoặc tỳ vai
+- Cầu thủ được đổi bằng `S` ưu tiên mục tiêu phòng ngự hợp lý; `Shift + hướng` chọn đúng cầu thủ theo hướng người chơi yêu cầu
+- Khi bóng tự do, game duy trì ngữ cảnh thao tác trong một khoảng đệm ngắn và không tự biến lệnh chuyền hoặc sút thành lệnh phòng thủ
+- HUD, pause help và README hiển thị cùng một mapping, không còn phím chết hoặc mô tả sai chức năng
+- Bộ test đầu vào bao phủ nhấn, giữ, nhả, tổ hợp, đổi trạng thái sở hữu bóng và chống kích hoạt kép
 
 ## Đồ họa Sprint 1
 

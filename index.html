@@ -44,7 +44,7 @@
             <div class="overlay-card hero-card">
               <span class="eyebrow"><i></i> TONY FOOTBALL · MATCHDAY</span>
               <h2>CHƠI NHANH.<br /><em>THẮNG ĐẸP.</em></h2>
-              <p>Bóng đá arcade 6v6 dành riêng cho PC — điều khiển kiểu PES/FIFA, tốc độ cao và AI chiến thuật.</p>
+              <p>Bóng đá arcade 6v6 dành riêng cho PC — điều khiển bàn phím kiểu FIFA Online 4, tốc độ cao và AI chiến thuật.</p>
               <div class="match-specs" aria-label="Thông tin trận đấu"><span>6 VS 6</span><span>150 GIÂY</span><span>PC ULTRA</span></div>
               <div class="picker-label"><span>CHỌN ĐỘ KHÓ</span><b>AI LEVEL</b></div>
               <div class="difficulty-picker" aria-label="Chọn độ khó">
@@ -63,6 +63,10 @@
                   <button class="active" data-ball="classic" aria-label="Bóng Classic" title="Classic"><i class="ball-swatch classic"></i></button>
                   <button data-ball="volt" aria-label="Bóng Volt" title="Volt"><i class="ball-swatch volt"></i></button>
                   <button data-ball="crimson" aria-label="Bóng Crimson" title="Crimson"><i class="ball-swatch crimson"></i></button>
+                </div></div>
+                <div class="custom-picker weather-picker" aria-label="Chọn thời tiết"><span>THỜI TIẾT</span><div>
+                  <button class="active" data-weather="clear" aria-label="Trời quang" title="Trời quang"><i class="weather-swatch clear"></i></button>
+                  <button data-weather="rain" aria-label="Trời mưa" title="Trời mưa"><i class="weather-swatch rain"></i></button>
                 </div></div>
               </div>
               <button id="playButton" class="primary-button"><span>▶</span><b>BẮT ĐẦU TRẬN</b><small>ENTER THE PITCH</small></button>
@@ -112,17 +116,19 @@
             <canvas id="radarCanvas" width="260" height="140" aria-label="Radar vị trí cầu thủ"></canvas>
           </section>
 
-          <section class="rail-card controls-card">
-            <div class="rail-heading"><span>KEYBOARD</span><b>PES STYLE</b></div>
+          <section id="controlsCard" class="rail-card controls-card">
+            <div class="rail-heading"><span>FO4 KEYBOARD</span><b id="controlsMode" data-mode="attack">TẤN CÔNG</b></div>
             <div class="control-grid">
               <p><kbd>←↑↓→</kbd><span>Di chuyển</span></p>
               <p><kbd>E</kbd><span>Tăng tốc</span></p>
-              <p><kbd>S</kbd><span>Chuyền / Kèm</span></p>
-              <p><kbd>W</kbd><span>Chọc / Đổi</span></p>
-              <p><kbd>D</kbd><span>Sút / Tranh</span></p>
-              <p><kbd>A</kbd><span>Tạt / Soạc</span></p>
-              <p><kbd>C</kbd><span>Camera</span></p>
-              <p><kbd>V</kbd><span>Thời tiết</span></p>
+              <p><kbd>S</kbd><span data-attack="Chuyền ngắn" data-defense="Đổi cầu thủ">Chuyền ngắn</span></p>
+              <p><kbd>W</kbd><span data-attack="Chọc khe" data-defense="Thủ môn lao ra">Chọc khe</span></p>
+              <p><kbd>D</kbd><span data-attack="Sút bóng" data-defense="Áp sát">Sút bóng</span></p>
+              <p><kbd>A</kbd><span data-attack="Tạt bóng" data-defense="Xoạc bóng">Tạt bóng</span></p>
+              <p><kbd>Q</kbd><span data-attack="Gọi chạy chỗ" data-defense="Gọi pressing">Gọi chạy chỗ</span></p>
+              <p><kbd>C</kbd><span data-attack="Che bóng" data-defense="Jockey">Che bóng</span></p>
+              <p><kbd>SPC</kbd><span data-attack="—" data-defense="Tắc bóng">—</span></p>
+              <p><kbd>B</kbd><span>Đổi camera</span></p>
             </div>
           </section>
         </aside>
@@ -131,10 +137,10 @@
       <footer class="statusbar">
         <span><i class="status-dot"></i> ARCADE ENGINE ONLINE</span>
         <span id="commentary">Chào mừng đến Tony Football Max.</span>
-        <span>BUILD 14.0 · STADIUM ULTRA</span>
+        <span>BUILD 15.0 · FO4 CONTROLS</span>
       </footer>
     </main>
 
-    <script type="module" src="game.js?v=14.0.0"></script>
+    <script type="module" src="game.js?v=15.0.0"></script>
   </body>
 </html>
