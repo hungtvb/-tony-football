@@ -119,6 +119,16 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - HUD, pause help và README hiển thị cùng một mapping, không còn phím chết hoặc mô tả sai chức năng
 - Bộ test đầu vào bao phủ nhấn, giữ, nhả, tổ hợp, đổi trạng thái sở hữu bóng và chống kích hoạt kép
 
+## Player Asset Rebuild — Sprint 16
+
+- Character và animation tải theo hai giai đoạn độc lập; lỗi animation không còn làm model 3D biến mất
+- Character v2 dùng texture JPEG 256px tương thích rộng, geometry quantized và không yêu cầu `EXT_texture_webp`
+- Animation v2 dùng Meshopt, giảm dung lượng từ khoảng 5,5 MB xuống còn khoảng 500 KB
+- Tổng payload player runtime giảm còn khoảng 1 MB cho lần tải đầu
+- Loader có timeout 10 giây, retry một lần và log đầy đủ lỗi asset ra console
+- Badge trên sân hiển thị rõ `MODEL LOADING`, `PLAYER RIG READY`, basic motion hoặc procedural fallback
+- Model xuất hiện ngay khi character tải xong; animation được cài bổ sung vào các rig đang hiển thị
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn

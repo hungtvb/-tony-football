@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="preload" href="assets/models/football-character-v2.glb?v=16.0.0" as="fetch" type="model/gltf-binary" crossorigin />
     <script type="importmap">
       {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}
     </script>
@@ -39,6 +40,7 @@
         <div class="pitch-panel">
           <canvas id="gameCanvas" width="1200" height="700" aria-label="Sân bóng Tony Football Max"></canvas>
           <div id="replayBadge" class="replay-badge" aria-live="polite">● INSTANT REPLAY</div>
+          <div id="assetStatus" class="asset-status loading" role="status" aria-live="polite">MODEL · LOADING</div>
 
           <div id="startOverlay" class="game-overlay show">
             <div class="overlay-card hero-card">
@@ -137,10 +139,10 @@
       <footer class="statusbar">
         <span><i class="status-dot"></i> ARCADE ENGINE ONLINE</span>
         <span id="commentary">Chào mừng đến Tony Football Max.</span>
-        <span>BUILD 15.0 · FO4 CONTROLS</span>
+        <span>BUILD 16.0 · PLAYER ASSET V2</span>
       </footer>
     </main>
 
-    <script type="module" src="game.js?v=15.0.0"></script>
+    <script type="module" src="game.js?v=16.0.0"></script>
   </body>
 </html>
