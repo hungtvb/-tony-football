@@ -8,6 +8,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -60,7 +61,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     staminaBar: $("staminaBar"), staminaText: $("staminaText"), playerName: $("playerName"),
     playerNumber: $("playerNumber"), playerRating: $("playerRating"), possessionStat: $("possessionStat"),
     possessionBar: $("possessionBar"), homeShots: $("homeShots"), awayShots: $("awayShots"), passStat: $("passStat"),
-    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard")
+    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard"),assetStatus:$("assetStatus")
   };
 
   const formations = {
@@ -576,8 +577,27 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     return true;
   }
 
-  function loadPlayerAsset() {
-    const loader=new GLTFLoader();Promise.all([loader.loadAsync("assets/models/football-character.glb?v=8.1.0"),loader.loadAsync("assets/models/football-player.glb?v=8.0.0")]).then(([character,motion])=>{playerAsset={scene:character.scene,animations:motion.animations};players.forEach(upgradePlayerView);ui.commentary.textContent="PLAYER RIG 8.1 ONLINE · FULL KIT";}).catch(()=>{ui.commentary.textContent="Không tải được player rig · Đang dùng model dự phòng";});
+  function setAssetStatus(state,label,detail="") {
+    window.__playerAssetStatus={state,label,detail,updatedAt:new Date().toISOString()};if(!ui.assetStatus)return;ui.assetStatus.className=`asset-status ${state}`;ui.assetStatus.textContent=label;ui.assetStatus.title=detail;
+  }
+
+  async function loadGLBWithRetry(loader,url,label) {
+    let lastError;for(let attempt=0;attempt<2;attempt+=1){const source=attempt===0?url:`${url}${url.includes("?")?"&":"?"}retry=1`;try{return await Promise.race([loader.loadAsync(source),new Promise((_,reject)=>setTimeout(()=>reject(new Error(`${label} timeout after 10s`)),10000))]);}catch(error){lastError=error;console.warn(`[PlayerAsset] ${label} attempt ${attempt+1} failed`,error);}}
+    throw lastError||new Error(`${label} failed`);
+  }
+
+  function installPlayerAnimations(animations) {
+    if(!playerAsset||!animations.length)return;playerAsset.animations=animations;for(const view of playerViews.values()){const rig=view.rig;if(!rig)continue;rig.actions={};for(const clip of animations)rig.actions[clip.name]=rig.mixer.clipAction(clip,rig.model);rig.state="";rig.active=null;switchRigAnimation(view,"Idle_Loop",true);}
+  }
+
+  async function loadPlayerAsset() {
+    const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);setAssetStatus("loading","MODEL · LOADING","Đang tải football-character-v2.glb");
+    try{
+      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 16.0 ONLINE · LOADING MOTION";
+    }catch(error){console.error("[PlayerAsset] Character failed; procedural fallback remains active",error);setAssetStatus("error","MODEL · FALLBACK",error?.message||String(error));ui.commentary.textContent="Không tải được model 3D · Đang dùng cầu thủ procedural";return;}
+    try{
+      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 16.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
+    }catch(error){console.error("[PlayerAsset] Animation failed; static model remains active",error);setAssetStatus("warning","MODEL READY · BASIC MOTION",error?.message||String(error));ui.commentary.textContent="Model 3D đã tải · Animation fallback đang hoạt động";}
   }
 
   function createPitchTexture3D() {
