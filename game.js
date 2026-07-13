@@ -35,6 +35,18 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   const cameraLook = new THREE.Vector3();
   const wetPitchColor = new THREE.Color(0xb7d8c8); const dryPitchColor = new THREE.Color(0xffffff);
 
+  const PITCH_STYLES = {
+    classic:{top:"#0b7547",mid:"#087044",bottom:"#075d39",outside:"#07100d",grass:0x15915b,tint:0xffffff,wet:0xb7d8c8},
+    elite:{top:"#11915b",mid:"#0b8351",bottom:"#086b43",outside:"#07140f",grass:0x20a869,tint:0xf2fff8,wet:0xa8d8c4},
+    dry:{top:"#8b9c4d",mid:"#74883e",bottom:"#637537",outside:"#16170d",grass:0x879d4c,tint:0xfff1cc,wet:0xb8c39a},
+    midnight:{top:"#075943",mid:"#064b38",bottom:"#043d2e",outside:"#030c09",grass:0x08795a,tint:0xc4e9dc,wet:0x86b8a9}
+  };
+  const BALL_STYLES = {
+    classic:{base:0xf6f7f5,patch:0x151c19,stroke:"#17201d"},
+    volt:{base:0xdff44a,patch:0x172019,stroke:"#20300d"},
+    crimson:{base:0xf2f3f1,patch:0xc92832,stroke:"#6d1119"}
+  };
+
   function seededNoise(seed) {
     const value = Math.sin(seed * 12.9898) * 43758.5453;
     return value - Math.floor(value);
@@ -80,10 +92,13 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
     camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
-    goalSequence: null, goalScorer: null, weather: "rain"
+    goalSequence: null, goalScorer: null, weather: "rain",pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
   let players = [];
   const input = { keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0, shootStart: 0, shootCharge: 0, marking: false };
+
+  function loadPreference(key,fallback,options){try{const value=localStorage.getItem(key);return options[value]?value:fallback;}catch{return fallback;}}
+  function savePreference(key,value){try{localStorage.setItem(key,value);}catch{}}
 
   function createTeams() {
     for (const view of playerViews.values()) scene3D?.remove(view.root);
@@ -514,9 +529,10 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function createPitchTexture3D() {
+    const theme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;
     const textureCanvas = document.createElement("canvas"); textureCanvas.width = W; textureCanvas.height = H;
-    const paint = textureCanvas.getContext("2d"); paint.fillStyle = "#07100d"; paint.fillRect(0, 0, W, H);
-    const grass = paint.createLinearGradient(0, FIELD.top, 0, FIELD.bottom); grass.addColorStop(0, "#0b7547"); grass.addColorStop(.5, "#087044"); grass.addColorStop(1, "#075d39");
+    const paint = textureCanvas.getContext("2d"); paint.fillStyle = theme.outside; paint.fillRect(0, 0, W, H);
+    const grass = paint.createLinearGradient(0, FIELD.top, 0, FIELD.bottom); grass.addColorStop(0, theme.top); grass.addColorStop(.5, theme.mid); grass.addColorStop(1, theme.bottom);
     paint.fillStyle = grass; paint.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
     const stripe = (FIELD.right - FIELD.left) / 16;
     for (let i = 0; i < 16; i += 1) { paint.fillStyle = i % 2 ? "rgba(255,255,255,.035)" : "rgba(0,20,8,.05)"; paint.fillRect(FIELD.left + i * stripe, FIELD.top, stripe, FIELD.bottom - FIELD.top); }
@@ -533,13 +549,14 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function createPitch3D() {
+    const theme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;dryPitchColor.set(theme.tint);wetPitchColor.set(theme.wet);
     pitchView = new THREE.Mesh(new THREE.PlaneGeometry(W * WORLD_SCALE, H * WORLD_SCALE), new THREE.MeshStandardMaterial({ map: createPitchTexture3D(), roughness: .94, metalness: 0 }));
     pitchView.rotation.x = -Math.PI / 2; pitchView.receiveShadow = true; scene3D.add(pitchView);
     const base = new THREE.Mesh(new THREE.BoxGeometry(124, 1.2, 74), new THREE.MeshStandardMaterial({ color: 0x06130e, roughness: 1 })); base.position.y = -.7; base.receiveShadow = true; scene3D.add(base);
   }
 
   function createGrass3D() {
-    const count=lowPowerDevice?220:1800; const bladeGeometry=new THREE.PlaneGeometry(.055,.42); bladeGeometry.translate(0,.21,0); const bladeMaterial=new THREE.MeshStandardMaterial({color:0x15915b,roughness:.88,side:THREE.DoubleSide}); grassView=new THREE.InstancedMesh(bladeGeometry,bladeMaterial,count); const dummy=new THREE.Object3D();
+    const theme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;const count=lowPowerDevice?220:1800; const bladeGeometry=new THREE.PlaneGeometry(.055,.42); bladeGeometry.translate(0,.21,0); const bladeMaterial=new THREE.MeshStandardMaterial({color:theme.grass,roughness:.88,side:THREE.DoubleSide}); grassView=new THREE.InstancedMesh(bladeGeometry,bladeMaterial,count); const dummy=new THREE.Object3D();
     for(let i=0;i<count;i+=1){dummy.position.set(worldX(FIELD.left+seededNoise(i*2.13)*(FIELD.right-FIELD.left)),.015,worldZ(FIELD.top+seededNoise(i*5.71+3)*(FIELD.bottom-FIELD.top)));dummy.rotation.y=seededNoise(i*9.37)*Math.PI;const size=.65+seededNoise(i*4.43)*.7;dummy.scale.set(size,size,size);dummy.updateMatrix();grassView.setMatrixAt(i,dummy.matrix);} grassView.receiveShadow=true;grassView.frustumCulled=false;scene3D.add(grassView);
   }
 
@@ -686,10 +703,18 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function createBall3D() {
-    ballView = new THREE.Group(); const white = new THREE.Mesh(new THREE.SphereGeometry(.82,20,16), new THREE.MeshStandardMaterial({ color:0xf6f7f5,roughness:.32,metalness:.05 })); white.castShadow=true; ballView.add(white);
-    const patchMaterial = new THREE.MeshStandardMaterial({color:0x151c19,roughness:.45}); const patchGeometry = new THREE.SphereGeometry(.18,8,6);
+    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ballView = new THREE.Group(); const baseMaterial=new THREE.MeshStandardMaterial({ color:style.base,roughness:.32,metalness:.05 });const white = new THREE.Mesh(new THREE.SphereGeometry(.82,20,16),baseMaterial); white.castShadow=true; ballView.add(white);
+    const patchMaterial = new THREE.MeshStandardMaterial({color:style.patch,roughness:.45}); const patchGeometry = new THREE.SphereGeometry(.18,8,6);
     for (const [x,y,z] of [[0,.81,0],[0,-.81,0],[.81,0,0],[-.81,0,0],[0,0,.81],[0,0,-.81]]) { const patch=new THREE.Mesh(patchGeometry,patchMaterial); patch.position.set(x,y,z); ballView.add(patch); }
-    scene3D.add(ballView);
+    ballView.userData={baseMaterial,patchMaterial};scene3D.add(ballView);
+  }
+
+  function applyPitchStyle() {
+    const theme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;dryPitchColor.set(theme.tint);wetPitchColor.set(theme.wet);if(pitchView){pitchView.material.map?.dispose();pitchView.material.map=createPitchTexture3D();pitchView.material.needsUpdate=true;}if(grassView)grassView.material.color.set(theme.grass);
+  }
+
+  function applyBallStyle() {
+    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;if(!ballView)return;ballView.userData.baseMaterial?.color.set(style.base);ballView.userData.patchMaterial?.color.set(style.patch);
   }
 
   function createParticleView() {
@@ -754,12 +779,12 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
   function renderFallback2D(now) {
     const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||ball;
-    ctx.clearRect(0,0,W,H); ctx.fillStyle="#075d39"; ctx.fillRect(0,0,W,H);
+    const pitchTheme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;const ballTheme=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ctx.clearRect(0,0,W,H);ctx.fillStyle=pitchTheme.mid;ctx.fillRect(0,0,W,H);
     for(let i=0;i<14;i+=1){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,20,8,.04)";ctx.fillRect(FIELD.left+i*(FIELD.right-FIELD.left)/14,FIELD.top,(FIELD.right-FIELD.left)/14,FIELD.bottom-FIELD.top);}
     ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();
     const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||player})).sort((a,b)=>a.pose.y-b.pose.y);
     for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame);
-    ctx.fillStyle="white";ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#17201d";ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
     for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
     if(game.weather==="rain"){ctx.fillStyle="rgba(135,190,196,.055)";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(195,235,242,.32)";ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<(lowPowerDevice?60:140);i+=1){const x=(seededNoise(i*3.7)*W+now*.11)%W;const y=(seededNoise(i*8.9)*H+now*.34*(.7+seededNoise(i)))%H;ctx.moveTo(x,y);ctx.lineTo(x-5,y+17);}ctx.stroke();}
     if(input.shootStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.shootCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.shootCharge,6);}
@@ -1016,6 +1041,9 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     document.querySelectorAll("[data-difficulty]").forEach((item) => item.classList.remove("active")); button.classList.add("active");
     game.difficulty = button.dataset.difficulty; game.ai = { rookie: .78, pro: 1, legend: 1.18 }[game.difficulty]; tone(620,.05,"sine",.025);
   }));
+  document.querySelectorAll("[data-pitch]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-pitch]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.pitchStyle=button.dataset.pitch;savePreference("tfPitch",game.pitchStyle);applyPitchStyle();tone(520,.04,"sine",.018);}));
+  document.querySelectorAll("[data-ball]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-ball]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.ballStyle=button.dataset.ball;savePreference("tfBall",game.ballStyle);applyBallStyle();tone(680,.04,"sine",.018);}));
+  document.querySelectorAll("[data-pitch]").forEach((button)=>button.classList.toggle("active",button.dataset.pitch===game.pitchStyle));document.querySelectorAll("[data-ball]").forEach((button)=>button.classList.toggle("active",button.dataset.ball===game.ballStyle));
   $("playButton").addEventListener("click", startMatch);
   $("pauseButton").addEventListener("click", () => togglePause());
   $("resumeButton").addEventListener("click", () => togglePause(false));

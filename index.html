@@ -52,6 +52,19 @@
                 <button class="active" data-difficulty="pro"><small>02</small>PRO</button>
                 <button data-difficulty="legend"><small>03</small>LEGEND</button>
               </div>
+              <div class="customization-row">
+                <div class="custom-picker" aria-label="Chọn mặt sân"><span>MẶT SÂN</span><div>
+                  <button class="active" data-pitch="classic" aria-label="Sân Classic" title="Classic"><i class="pitch-swatch classic"></i></button>
+                  <button data-pitch="elite" aria-label="Sân Elite" title="Elite"><i class="pitch-swatch elite"></i></button>
+                  <button data-pitch="dry" aria-label="Sân khô" title="Dry"><i class="pitch-swatch dry"></i></button>
+                  <button data-pitch="midnight" aria-label="Sân đêm" title="Midnight"><i class="pitch-swatch midnight"></i></button>
+                </div></div>
+                <div class="custom-picker ball-picker" aria-label="Chọn bóng"><span>BÓNG THI ĐẤU</span><div>
+                  <button class="active" data-ball="classic" aria-label="Bóng Classic" title="Classic"><i class="ball-swatch classic"></i></button>
+                  <button data-ball="volt" aria-label="Bóng Volt" title="Volt"><i class="ball-swatch volt"></i></button>
+                  <button data-ball="crimson" aria-label="Bóng Crimson" title="Crimson"><i class="ball-swatch crimson"></i></button>
+                </div></div>
+              </div>
               <button id="playButton" class="primary-button"><span>▶</span><b>BẮT ĐẦU TRẬN</b><small>ENTER THE PITCH</small></button>
             </div>
           </div>
@@ -118,10 +131,10 @@
       <footer class="statusbar">
         <span><i class="status-dot"></i> ARCADE ENGINE ONLINE</span>
         <span id="commentary">Chào mừng đến Tony Football Max.</span>
-        <span>BUILD 12.0 · MATCHDAY UI</span>
+        <span>BUILD 13.0 · PITCH & BALL</span>
       </footer>
     </main>
 
-    <script type="module" src="game.js?v=12.0.0"></script>
+    <script type="module" src="game.js?v=13.0.0"></script>
   </body>
 </html>

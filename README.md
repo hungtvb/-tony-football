@@ -73,6 +73,15 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Player card, thống kê, radar, pause và kết quả dùng chung một visual system
 - Hỗ trợ reduced motion và focus-visible cho người chơi dùng bàn phím
 
+## Pitch & Ball — Sprint 13
+
+- Chọn mặt sân Classic, Elite, Dry hoặc Midnight ngay trước trận
+- Mỗi mặt sân có bảng màu, vệt cắt, cỏ 3D và phản xạ thời tiết riêng
+- Chọn bóng Classic, Volt hoặc Crimson với vật liệu và màu panel khác nhau
+- Lựa chọn áp dụng đồng thời cho WebGL 3D và chế độ Canvas 2D dự phòng
+- Tự lưu lựa chọn mặt sân và bóng bằng local storage cho lần chơi sau
+- Bộ chọn swatch được tích hợp vào Matchday UI mà không làm trang bị cuộn
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
