@@ -553,7 +553,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     try {
       renderer3D = new THREE.WebGLRenderer({ canvas, antialias: lowPowerDevice, alpha: false, powerPreference: "high-performance" });
     } catch (error) {
-      use3D = false; ctx = canvas.getContext("2d"); ui.commentary.textContent = "WebGL không khả dụng · Đang chạy chế độ tương thích 2D"; return false;
+      use3D = false; ctx = canvas.getContext("2d");setAssetStatus("warning","WEBGL · 2D FALLBACK",error?.message||"WebGL renderer unavailable");ui.commentary.textContent = "WebGL không khả dụng · Đang chạy chế độ tương thích 2D"; return false;
     }
     renderer3D.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowPowerDevice ? 1.1 : 2));
     renderer3D.setSize(W, H, false); renderer3D.shadowMap.enabled = !lowPowerDevice; renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -593,10 +593,10 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   async function loadPlayerAsset() {
     const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);setAssetStatus("loading","MODEL · LOADING","Đang tải football-character-v2.glb");
     try{
-      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 16.0 ONLINE · LOADING MOTION";
+      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 17.0 ONLINE · LOADING MOTION";
     }catch(error){console.error("[PlayerAsset] Character failed; procedural fallback remains active",error);setAssetStatus("error","MODEL · FALLBACK",error?.message||String(error));ui.commentary.textContent="Không tải được model 3D · Đang dùng cầu thủ procedural";return;}
     try{
-      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 16.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
+      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 17.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
     }catch(error){console.error("[PlayerAsset] Animation failed; static model remains active",error);setAssetStatus("warning","MODEL READY · BASIC MOTION",error?.message||String(error));ui.commentary.textContent="Model 3D đã tải · Animation fallback đang hoạt động";}
   }
 
@@ -755,7 +755,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     attach("spine_01",new THREE.CylinderGeometry(.28,.34,.5,16),jersey,new THREE.Vector3(0,.2,0));attach("upperarm_l",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("upperarm_r",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("pelvis",new THREE.BoxGeometry(.57,.3,.34),shorts,new THREE.Vector3(0,.08,0));
     for(const side of ["l","r"]){attach(`calf_${side}`,new THREE.CylinderGeometry(.095,.12,.29,12),socks,new THREE.Vector3(0,.3,0));attach(`foot_${side}`,new THREE.BoxGeometry(.17,.29,.13),boots,new THREE.Vector3(0,.08,.015));}
     const head=model.getObjectByName("Head");if(head){const hair=new THREE.Mesh(new THREE.SphereGeometry(.115,14,7,0,Math.PI*2,0,Math.PI*.48),new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.9}));hair.position.y=.055;hair.scale.set(1,1,.93);hair.castShadow=true;head.add(hair);}
-    return{head,spine:model.getObjectByName("spine_03"),leftThigh:model.getObjectByName("thigh_l"),rightThigh:model.getObjectByName("thigh_r"),rightCalf:model.getObjectByName("calf_r"),leftArm:model.getObjectByName("upperarm_l"),rightArm:model.getObjectByName("upperarm_r")};
+    return{head,spine:model.getObjectByName("spine_03"),pelvis:model.getObjectByName("pelvis"),leftThigh:model.getObjectByName("thigh_l"),rightThigh:model.getObjectByName("thigh_r"),leftCalf:model.getObjectByName("calf_l"),rightCalf:model.getObjectByName("calf_r"),leftFoot:model.getObjectByName("foot_l"),rightFoot:model.getObjectByName("foot_r"),leftArm:model.getObjectByName("upperarm_l"),rightArm:model.getObjectByName("upperarm_r")};
   }
 
   function upgradePlayerView(player) {
@@ -770,17 +770,28 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   }
 
   function rigAnimationState(player,speed,current) {
-    if(player.anim==="celebrate")return"Dance_Loop";if(player.anim==="tackle"||player.anim==="dive")return"Roll";if(player.anim==="receive")return"Hit_Chest";if(current==="Sprint_Loop"&&speed>178)return current;if(speed>218)return"Sprint_Loop";if(current==="Jog_Fwd_Loop"&&speed>18)return current;if(speed>26)return"Jog_Fwd_Loop";return"Idle_Loop";
+    if(player.anim==="celebrate")return"Dance_Loop";if(player.anim==="dive")return"Roll";if(player.anim==="tackle"||player.anim==="receive")return"Idle_Loop";if(current==="Sprint_Loop"&&speed>178)return current;if(speed>218)return"Sprint_Loop";if(current==="Jog_Fwd_Loop"&&speed>18)return current;if(speed>26)return"Jog_Fwd_Loop";return"Idle_Loop";
   }
 
   function smoothAngle(current,target,ease) {return current+Math.atan2(Math.sin(target-current),Math.cos(target-current))*ease;}
 
+  function motionPulse(progress,start=0,end=1) {if(progress<=start||progress>=end)return 0;return Math.sin((progress-start)/(end-start)*Math.PI);}
+
+  function applyFootballActionPose(rig,pose,progress,dt) {
+    if(!rig.active)return;const shoot=pose.anim==="shoot";const pass=pose.anim==="pass";const receive=pose.anim==="receive";const tackle=pose.anim==="tackle";let bodyPitch=0;let bodyRoll=-(pose.turnLean||0)*.14;let bodyDrop=0;
+    if(shoot){const windup=motionPulse(progress,0,.5);const strike=motionPulse(progress,.24,1);if(rig.rightThigh)rig.rightThigh.rotation.x+=windup*.68-strike*1.36;if(rig.rightCalf)rig.rightCalf.rotation.x+=windup*.92+strike*.48;if(rig.rightFoot)rig.rightFoot.rotation.x-=strike*.28;if(rig.leftThigh)rig.leftThigh.rotation.x-=strike*.16;if(rig.pelvis)rig.pelvis.rotation.y+=strike*.2;if(rig.spine){rig.spine.rotation.y-=strike*.28;rig.spine.rotation.x-=strike*.1;}if(rig.leftArm)rig.leftArm.rotation.x-=strike*.42;if(rig.rightArm)rig.rightArm.rotation.x+=strike*.56;bodyPitch=-strike*.1;bodyRoll-=strike*.08;}
+    if(pass){const open=motionPulse(progress,0,.58);const contact=motionPulse(progress,.2,1);if(rig.rightThigh){rig.rightThigh.rotation.x+=open*.28-contact*.72;rig.rightThigh.rotation.z+=contact*.2;}if(rig.rightCalf)rig.rightCalf.rotation.x+=open*.42+contact*.26;if(rig.rightFoot)rig.rightFoot.rotation.y+=contact*.32;if(rig.pelvis)rig.pelvis.rotation.y+=contact*.12;if(rig.spine)rig.spine.rotation.y-=contact*.15;if(rig.leftArm)rig.leftArm.rotation.x-=contact*.24;if(rig.rightArm)rig.rightArm.rotation.x+=contact*.28;bodyPitch=-contact*.04;}
+    if(receive){const cushion=motionPulse(progress,.04,.92);if(rig.rightThigh)rig.rightThigh.rotation.x-=cushion*.36;if(rig.rightCalf)rig.rightCalf.rotation.x+=cushion*.48;if(rig.rightFoot)rig.rightFoot.rotation.x-=cushion*.2;if(rig.spine)rig.spine.rotation.x+=cushion*.08;bodyDrop=-cushion*.05;}
+    if(tackle){const slide=motionPulse(progress,0,1);const side=pose.animPower<0?-1:1;if(rig.leftThigh)rig.leftThigh.rotation.x-=slide*.88;if(rig.rightThigh)rig.rightThigh.rotation.x-=slide*1.2;if(rig.leftCalf)rig.leftCalf.rotation.x+=slide*.3;if(rig.rightCalf)rig.rightCalf.rotation.x+=slide*.14;if(rig.leftArm)rig.leftArm.rotation.x-=slide*.58;if(rig.rightArm)rig.rightArm.rotation.x+=slide*.42;bodyPitch=slide*.22;bodyRoll+=side*slide*.72;bodyDrop=-slide*.32;}
+    rig.model.rotation.x=lerp(rig.model.rotation.x,bodyPitch,1-Math.exp(-dt*18));rig.model.rotation.z=lerp(rig.model.rotation.z,bodyRoll,1-Math.exp(-dt*18));rig.model.position.y=lerp(rig.model.position.y,bodyDrop,1-Math.exp(-dt*20));
+  }
+
   function updateRigPlayer(player,pose,view,now,speed) {
-    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const moving=speed>42;const desired=moving?(pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY)):Math.atan2(ballDirection.x,ballDirection.y);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;rig.model.rotation.z=lerp(rig.model.rotation.z,-(pose.turnLean||0)*.14,1-Math.exp(-dt*12));
+    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=player===game.selected&&controlMode()==="defense"&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&ball.owner?.team!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
     switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
-    const actionProgress=pose.animDuration?1-pose.animTime/pose.animDuration:1;const wave=pose.animTime>0?Math.sin(clamp(actionProgress,0,1)*Math.PI):0;if((pose.anim==="shoot"||pose.anim==="pass")&&rig.rightThigh){const power=pose.anim==="shoot"?1.2:.76;rig.rightThigh.rotation.x-=power*wave;if(rig.rightCalf)rig.rightCalf.rotation.x+=wave*.62;if(rig.leftArm)rig.leftArm.rotation.x-=wave*.34;if(rig.rightArm)rig.rightArm.rotation.x+=wave*.42;}
-    if(ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
-    if(rig.head){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.spine){const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
+    const actionProgress=pose.animDuration?clamp(1-pose.animTime/pose.animDuration,0,1):1;applyFootballActionPose(rig,pose,actionProgress,dt);
+    if(rig.active&&ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
+    if(rig.active&&rig.head){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.active&&rig.spine){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
     view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 

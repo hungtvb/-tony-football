@@ -46,7 +46,9 @@ for (const contract of [
   "loader.setMeshoptDecoder(MeshoptDecoder)",
   "football-character-v2.glb?v=16.0.0",
   "football-animations-v2.glb?v=16.0.0",
-  "installPlayerAnimations(motion.animations||[])"
+  "installPlayerAnimations(motion.animations||[])",
+  "applyFootballActionPose(rig,pose,actionProgress,dt)",
+  "WEBGL · 2D FALLBACK"
 ]) {
   if (!gameSource.includes(contract)) throw new Error(`game.js: missing player loader contract: ${contract}`);
 }

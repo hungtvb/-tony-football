@@ -129,6 +129,16 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Badge trên sân hiển thị rõ `MODEL LOADING`, `PLAYER RIG READY`, basic motion hoặc procedural fallback
 - Model xuất hiện ngay khi character tải xong; animation được cài bổ sung vào các rig đang hiển thị
 
+## Football Motion & Player Polish — Sprint 17
+
+- Thêm football action overlay riêng cho sút, chuyền, nhận bóng và xoạc thay vì dùng chung chuyển động generic
+- Cú sút có nhịp vung chân, chân trụ, xoay hông, follow-through thân trên và tay giữ thăng bằng
+- Chuyền bóng mở hông và dùng lòng trong; nhận bóng có động tác rút chân giảm lực
+- Xoạc bóng hạ trọng tâm, duỗi hai chân và nghiêng thân theo pha tranh chấp, không còn phát clip lăn người `Roll`
+- Cầu thủ phòng thủ blend hướng chạy với hướng bóng; khi giữ áp sát hoặc jockey, thân ưu tiên hướng đối thủ
+- Head tracking chỉ phủ lên animation khi rig đã sẵn sàng, tránh tích lũy rotation lúc animation tải chậm
+- Badge asset báo chính xác `WEBGL 2D FALLBACK` khi trình duyệt không tạo được renderer 3D
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
