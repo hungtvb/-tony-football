@@ -593,10 +593,10 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   async function loadPlayerAsset() {
     const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);setAssetStatus("loading","MODEL · LOADING","Đang tải football-character-v2.glb");
     try{
-      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 17.0 ONLINE · LOADING MOTION";
+      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 18.0 ONLINE · LOADING MOTION";
     }catch(error){console.error("[PlayerAsset] Character failed; procedural fallback remains active",error);setAssetStatus("error","MODEL · FALLBACK",error?.message||String(error));ui.commentary.textContent="Không tải được model 3D · Đang dùng cầu thủ procedural";return;}
     try{
-      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 17.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
+      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 18.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
     }catch(error){console.error("[PlayerAsset] Animation failed; static model remains active",error);setAssetStatus("warning","MODEL READY · BASIC MOTION",error?.message||String(error));ui.commentary.textContent="Model 3D đã tải · Animation fallback đang hoạt động";}
   }
 
@@ -718,6 +718,17 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     const back = new THREE.Mesh(new THREE.PlaneGeometry(.92,1.06),material); back.position.set(0,3.5,-1.005); back.rotation.y=Math.PI; return [front,back];
   }
 
+  function createRigSquadNumber(player, color, spine) {
+    if (!spine) return [];
+    const numberCanvas = document.createElement("canvas"); numberCanvas.width = 128; numberCanvas.height = 128; const paint = numberCanvas.getContext("2d");
+    paint.clearRect(0,0,128,128); paint.fillStyle=color; paint.strokeStyle="rgba(0,0,0,.5)"; paint.lineWidth=9; paint.font="800 92px Barlow Condensed"; paint.textAlign="center"; paint.textBaseline="middle"; paint.strokeText(player.number,64,68); paint.fillText(player.number,64,68);
+    const texture=new THREE.CanvasTexture(numberCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=renderer3D?.capabilities?.getMaxAnisotropy?.()||1;
+    const material=new THREE.MeshBasicMaterial({map:texture,transparent:true,toneMapped:false,depthWrite:false,side:THREE.DoubleSide});
+    const front=new THREE.Mesh(new THREE.PlaneGeometry(.205,.25),material);front.position.set(0,.035,.157);front.renderOrder=3;
+    const back=new THREE.Mesh(new THREE.PlaneGeometry(.245,.29),material);back.position.set(0,.035,-.157);back.rotation.y=Math.PI;back.renderOrder=3;
+    spine.add(front,back);return[front,back];
+  }
+
   function addHairStyle(body, player, hairMaterial) {
     const style = (player.index + player.team * 2) % 4; const segments = lowPowerDevice ? 8 : 14;
     const cap = new THREE.Mesh(new THREE.SphereGeometry(.74,segments,7,0,Math.PI*2,0,Math.PI*(style===1 ? .35 : .48)),hairMaterial); cap.position.y=5.55; cap.scale.set(style===2?1.08:1,style===1 ? .72 : 1,1); body.add(cap);
@@ -749,12 +760,27 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   }
 
   function addFootballKit(model,player) {
-    const home=player.team===HOME;const keeper=player.role==="GK";const jerseyColor=keeper?(home?0x7650d6:0xe65348):(home?0xe1bb58:0x32b8c8);const shortsColor=keeper?0x20212c:(home?0x171b1a:0x082e35);const sockColor=home?0xe8d486:0xb7edf2;
-    const jersey=new THREE.MeshPhysicalMaterial({color:jerseyColor,roughness:.5,sheen:1,sheenColor:new THREE.Color(home?0xffe9ae:0xc4fbff),sheenRoughness:.72});const shorts=new THREE.MeshStandardMaterial({color:shortsColor,roughness:.7});const socks=new THREE.MeshStandardMaterial({color:sockColor,roughness:.78});const boots=new THREE.MeshStandardMaterial({color:player.index%3===0?0xe64f3f:player.index%3===1?0xe7e9e7:0x141716,roughness:.38,metalness:.08});
-    const attach=(boneName,geometry,material,position)=>{const bone=model.getObjectByName(boneName);if(!bone)return null;const mesh=new THREE.Mesh(geometry,material);mesh.position.copy(position);mesh.castShadow=true;bone.add(mesh);return mesh;};
-    attach("spine_01",new THREE.CylinderGeometry(.28,.34,.5,16),jersey,new THREE.Vector3(0,.2,0));attach("upperarm_l",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("upperarm_r",new THREE.CylinderGeometry(.115,.13,.22,12),jersey,new THREE.Vector3(0,.1,0));attach("pelvis",new THREE.BoxGeometry(.57,.3,.34),shorts,new THREE.Vector3(0,.08,0));
-    for(const side of ["l","r"]){attach(`calf_${side}`,new THREE.CylinderGeometry(.095,.12,.29,12),socks,new THREE.Vector3(0,.3,0));attach(`foot_${side}`,new THREE.BoxGeometry(.17,.29,.13),boots,new THREE.Vector3(0,.08,.015));}
-    const head=model.getObjectByName("Head");if(head){const hair=new THREE.Mesh(new THREE.SphereGeometry(.115,14,7,0,Math.PI*2,0,Math.PI*.48),new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.9}));hair.position.y=.055;hair.scale.set(1,1,.93);hair.castShadow=true;head.add(hair);}
+    const home=player.team===HOME;const keeper=player.role==="GK";const skinTones=[0xd89d78,0xb97958,0x8f5a3d,0xe5b08b];const skinColor=skinTones[(player.index+player.team)%skinTones.length];
+    const palette=keeper
+      ?{jersey:home?0x7650d6:0xe65348,jerseyLight:home?0xbca4ff:0xffa096,shorts:0x20212c,socks:home?0xbca4ff:0xffa096,trim:0xf5f7f6}
+      :home
+        ?{jersey:0xe1bb58,jerseyLight:0xffe9ae,shorts:0x171b1a,socks:0xe8d486,trim:0x161b19}
+        :{jersey:0x32b8c8,jerseyLight:0xc4fbff,shorts:0x082e35,socks:0xb7edf2,trim:0xf0fbfa};
+    const jersey=new THREE.MeshPhysicalMaterial({color:palette.jersey,roughness:.5,metalness:.01,sheen:1,sheenColor:new THREE.Color(palette.jerseyLight),sheenRoughness:.72});
+    const trim=new THREE.MeshStandardMaterial({color:palette.trim,roughness:.64});const shorts=new THREE.MeshStandardMaterial({color:palette.shorts,roughness:.7});const socks=new THREE.MeshStandardMaterial({color:palette.socks,roughness:.78});
+    const boots=new THREE.MeshStandardMaterial({color:player.index%3===0?0xe64f3f:player.index%3===1?0xe7e9e7:0x141716,roughness:.38,metalness:.08});
+    model.traverse((node)=>{if(node.isMesh&&node.name==="SuperHero_Male"){const materials=Array.isArray(node.material)?node.material:[node.material];for(const material of materials){material.map=null;material.aoMap=null;material.metalnessMap=null;material.roughnessMap=null;material.color.set(skinColor);material.roughness=.72;material.metalness=0;material.needsUpdate=true;}}});
+    const attach=(boneName,geometry,material,position,scale=null)=>{const bone=model.getObjectByName(boneName);if(!bone)return null;const mesh=new THREE.Mesh(geometry,material);mesh.position.copy(position);if(scale)mesh.scale.copy(scale);mesh.castShadow=true;bone.add(mesh);return mesh;};
+    attach("spine_01",new THREE.CylinderGeometry(.29,.35,.48,16),jersey,new THREE.Vector3(0,.2,0),new THREE.Vector3(1,1,.76));
+    attach("spine_02",new THREE.CylinderGeometry(.255,.3,.31,16),jersey,new THREE.Vector3(0,.075,0),new THREE.Vector3(1,1,.76));
+    attach("spine_02",new THREE.BoxGeometry(.51,.055,.34),trim,new THREE.Vector3(0,.055,.005));
+    const collar=attach("spine_03",new THREE.TorusGeometry(.105,.022,7,16),trim,new THREE.Vector3(0,.1,0));if(collar)collar.rotation.x=Math.PI/2;
+    for(const side of ["l","r"]){attach(`upperarm_${side}`,new THREE.CylinderGeometry(.12,.135,.235,12),jersey,new THREE.Vector3(0,.105,0));attach(`upperarm_${side}`,new THREE.CylinderGeometry(.122,.122,.035,10),trim,new THREE.Vector3(0,.205,0));}
+    attach("pelvis",new THREE.BoxGeometry(.59,.31,.36),shorts,new THREE.Vector3(0,.08,0));
+    for(const side of ["l","r"]){attach(`thigh_${side}`,new THREE.CylinderGeometry(.14,.15,.22,12),shorts,new THREE.Vector3(0,.1,0));attach(`calf_${side}`,new THREE.CylinderGeometry(.098,.125,.3,12),socks,new THREE.Vector3(0,.3,0));attach(`foot_${side}`,new THREE.BoxGeometry(.18,.3,.14),boots,new THREE.Vector3(0,.08,.015));}
+    if(keeper){for(const side of ["l","r"]){const glove=attach(`hand_${side}`,new THREE.BoxGeometry(.15,.18,.11),trim,new THREE.Vector3(0,.07,0));if(glove)glove.rotation.x=.08;}}
+    const head=model.getObjectByName("Head");if(head){const style=(player.index+player.team*2)%4;const hairMaterial=new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.9});const cap=new THREE.Mesh(new THREE.SphereGeometry(.12,14,7,0,Math.PI*2,0,Math.PI*(style===1?.34:.48)),hairMaterial);cap.position.y=.055;cap.scale.set(style===2?1.08:1,style===1?.72:1,.93);cap.castShadow=true;head.add(cap);if(style===2){for(let i=0;i<5;i+=1){const curl=new THREE.Mesh(new THREE.SphereGeometry(.034,7,5),hairMaterial);curl.position.set((i-2)*.04,.145-Math.abs(i-2)*.008,.012);head.add(curl);}}if(style===3){const top=new THREE.Mesh(new THREE.BoxGeometry(.145,.065,.15),hairMaterial);top.position.set(0,.125,0);top.rotation.z=.08;head.add(top);}}
+    const numberSpine=model.getObjectByName("spine_02");createRigSquadNumber(player,home&&!keeper?"#101413":"#f0fbfa",numberSpine);
     return{head,spine:model.getObjectByName("spine_03"),pelvis:model.getObjectByName("pelvis"),leftThigh:model.getObjectByName("thigh_l"),rightThigh:model.getObjectByName("thigh_r"),leftCalf:model.getObjectByName("calf_l"),rightCalf:model.getObjectByName("calf_r"),leftFoot:model.getObjectByName("foot_l"),rightFoot:model.getObjectByName("foot_r"),leftArm:model.getObjectByName("upperarm_l"),rightArm:model.getObjectByName("upperarm_r")};
   }
 
@@ -762,7 +788,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.28);model.rotation.y=0;
     model.traverse((node)=>{if(!node.isMesh)return;node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;const source=Array.isArray(node.material)?node.material:[node.material];const mapped=source.map((material)=>{const clone=material.clone();clone.roughness=Math.max(.5,clone.roughness||.5);return clone;});node.material=Array.isArray(node.material)?mapped:mapped[0];});
     const bones=addFootballKit(model,player);const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null,yaw:Math.atan2(player.dirX,player.dirY),...bones};
-    const numbers=createSquadNumber(player,player.team===HOME?"#101413":"#f0fbfa");for(const number of numbers){number.position.y+=.05;view.root.add(number);}switchRigAnimation(view,"Idle_Loop",true);
+    switchRigAnimation(view,"Idle_Loop",true);
   }
 
   function switchRigAnimation(view,state,immediate=false) {

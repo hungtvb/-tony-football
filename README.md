@@ -139,6 +139,15 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Head tracking chỉ phủ lên animation khi rig đã sẵn sàng, tránh tích lũy rotation lúc animation tải chậm
 - Badge asset báo chính xác `WEBGL 2D FALLBACK` khi trình duyệt không tạo được renderer 3D
 
+## Player Visual Identity — Sprint 18
+
+- Thay texture superhero còn sót bằng vật liệu da trung tính để kit bóng đá hiển thị đúng trên model rig
+- Áo đấu chia thành nhiều lớp theo ngực, thân và tay áo; thêm cổ áo, dải ngực cùng viền tay tương phản
+- Quần, tất và giày có hình khối rõ hơn; màu sân nhà, sân khách và thủ môn tách biệt khi camera ở xa
+- Số áo trước và sau gắn trực tiếp vào xương sống nên đi theo thân người trong mọi animation
+- Thủ môn có găng riêng; cầu thủ có bốn biến thể kiểu tóc, tông da và màu giày nhưng không tăng tải asset
+- Tất cả chi tiết kit dùng geometry runtime nhẹ, giữ nguyên ngân sách character và animation khoảng 1 MB
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn

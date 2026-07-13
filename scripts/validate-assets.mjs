@@ -17,6 +17,7 @@ const animationPath = "assets/models/football-animations-v2.glb";
 const character = await readGLB(characterPath);
 const animation = await readGLB(animationPath);
 const gameSource = await readFile("game.js", "utf8");
+const indexSource = await readFile("index.html", "utf8");
 
 if (character.bytes.length > 750_000) throw new Error(`${characterPath}: exceeds 750 KB budget`);
 if (animation.bytes.length > 750_000) throw new Error(`${animationPath}: exceeds 750 KB budget`);
@@ -27,6 +28,9 @@ if (!character.json.images?.every((image) => ["image/jpeg", "image/png"].include
 }
 
 const characterNodes = new Set((character.json.nodes || []).map((node) => node.name).filter(Boolean));
+const expectedKitBones = ["Head", "spine_01", "spine_02", "spine_03", "pelvis", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "hand_l", "hand_r", "SuperHero_Male"];
+const missingKitBones = expectedKitBones.filter((name) => !characterNodes.has(name));
+if (missingKitBones.length) throw new Error(`${characterPath}: missing football kit targets: ${missingKitBones.join(", ")}`);
 const animationTargets = new Set();
 for (const clip of animation.json.animations || []) {
   for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name);
@@ -48,9 +52,14 @@ for (const contract of [
   "football-animations-v2.glb?v=16.0.0",
   "installPlayerAnimations(motion.animations||[])",
   "applyFootballActionPose(rig,pose,actionProgress,dt)",
+  "createRigSquadNumber(player,home&&!keeper",
+  "node.name===\"SuperHero_Male\"",
   "WEBGL · 2D FALLBACK"
 ]) {
   if (!gameSource.includes(contract)) throw new Error(`game.js: missing player loader contract: ${contract}`);
+}
+if (!indexSource.includes("BUILD 18.0 · PLAYER IDENTITY") || !indexSource.includes("game.js?v=18.0.0")) {
+  throw new Error("index.html: missing Build 18 player identity version markers");
 }
 
 console.log(`Player assets valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
