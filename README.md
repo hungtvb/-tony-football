@@ -62,6 +62,17 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Tiền đạo chạy giãn biên, tiền vệ hỗ trợ và hậu vệ lùi giữ cự ly đội hình
 - Mỗi đội chỉ dùng cầu thủ gần bóng nhất để pressing, tránh toàn đội cùng lao vào bóng
 
+## Matchday UI — Sprint 12
+
+- Thiết kế lại toàn bộ giao diện PC theo phong cách truyền hình thể thao hiện đại
+- Hero trước trận có thông tin matchday, lựa chọn AI dạng thẻ và CTA phân cấp rõ ràng
+- Bảng điểm, nút âm thanh và pause dùng icon vector cùng trạng thái focus dễ nhận biết
+- Sidebar được nén để vừa chiều cao sân, loại bỏ khoảng trống đen và cuộn dọc trên desktop
+- Controls chuyển thành lưới hai cột, chữ lớn và tương phản tốt hơn
+- Giữ đầy đủ bảng controls trên laptop 1024px thay vì ẩn như giao diện cũ
+- Player card, thống kê, radar, pause và kết quả dùng chung một visual system
+- Hỗ trợ reduced motion và focus-visible cho người chơi dùng bàn phím
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
