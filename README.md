@@ -82,6 +82,17 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Tự lưu lựa chọn mặt sân và bóng bằng local storage cho lần chơi sau
 - Bộ chọn swatch được tích hợp vào Matchday UI mà không làm trang bị cuộn
 
+## Stadium Ultra — Sprint 14
+
+- Khán đài procedural ba tầng bao quanh sân với vật liệu và độ cao riêng
+- Mái che kim loại, cột kết cấu, đường hầm cầu thủ và khu kỹ thuật hai bên
+- Mật độ khán giả desktop tăng lên 1.900 điểm màu nhưng vẫn dùng một draw call
+- Bốn cột đèn sân tự tăng cường độ khi chọn mặt sân Midnight
+- Ánh sáng môi trường, flood light, rim light, fog và exposure đổi theo chế độ ngày/đêm
+- Bổ sung cờ góc, ghế dự bị và canopy trong không gian 3D
+- Canvas 2D fallback có vùng khán đài, khán giả và cờ góc thay vì chỉ có mặt cỏ phẳng
+- Giữ pipeline SSAO, bloom nhẹ và SMAA dành cho desktop
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
