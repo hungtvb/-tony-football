@@ -27,9 +27,9 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
   const WORLD_SCALE = .1;
   const playerViews = new Map();
-  let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;
+  let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;
-  const ledViews = []; const goalNetViews = [];
+  const ledViews = []; const goalNetViews = [];const stadiumLightViews=[];
   const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
@@ -510,13 +510,13 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     camera3D = new THREE.PerspectiveCamera(lowPowerDevice?43:39, W / H, .1, 260); camera3D.position.set(0, lowPowerDevice?54:45, lowPowerDevice?63:52); camera3D.lookAt(0, 0, 0);
     if(!lowPowerDevice){const pmrem=new THREE.PMREMGenerator(renderer3D);const environment=new RoomEnvironment();scene3D.environment=pmrem.fromScene(environment,.04).texture;scene3D.environmentIntensity=.62;environment.dispose();pmrem.dispose();}
 
-    const hemisphere = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45); scene3D.add(hemisphere);
-    const flood = new THREE.DirectionalLight(0xffffff, 3.4); flood.position.set(-28, 62, 30); flood.castShadow = true;
-    flood.shadow.mapSize.set(lowPowerDevice ? 512 : 2048, lowPowerDevice ? 512 : 2048); flood.shadow.camera.left = -72; flood.shadow.camera.right = 72; flood.shadow.camera.top = 50; flood.shadow.camera.bottom = -50;
-    flood.shadow.bias = -.00035; scene3D.add(flood);
-    const rim = new THREE.DirectionalLight(0x70dcff, 1.4); rim.position.set(48, 25, -35); scene3D.add(rim);
+    hemisphereLight = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45); scene3D.add(hemisphereLight);
+    floodLight = new THREE.DirectionalLight(0xffffff, 3.4); floodLight.position.set(-28, 62, 30); floodLight.castShadow = true;
+    floodLight.shadow.mapSize.set(lowPowerDevice ? 512 : 2048, lowPowerDevice ? 512 : 2048); floodLight.shadow.camera.left = -72; floodLight.shadow.camera.right = 72; floodLight.shadow.camera.top = 50; floodLight.shadow.camera.bottom = -50;
+    floodLight.shadow.bias = -.00035; scene3D.add(floodLight);
+    rimLight = new THREE.DirectionalLight(0x70dcff, 1.4); rimLight.position.set(48, 25, -35); scene3D.add(rimLight);
 
-    createPitch3D(); createGrass3D(); createStadium3D(); createGoals3D(); createAtmosphere3D(); createBall3D(); createParticleView(); createChargeView();
+    createPitch3D(); createGrass3D(); createStadium3D(); createGoals3D(); createAtmosphere3D(); createBall3D(); createParticleView(); createChargeView();applyStadiumLighting();
     if(!lowPowerDevice){composer3D=new EffectComposer(renderer3D);composer3D.setPixelRatio(Math.min(window.devicePixelRatio||1,2));composer3D.setSize(W,H);composer3D.addPass(new RenderPass(scene3D,camera3D));const ssao=new SSAOPass(scene3D,camera3D,W,H,24);ssao.kernelRadius=10;ssao.minDistance=.002;ssao.maxDistance=.12;composer3D.addPass(ssao);const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.16,.48,.88);composer3D.addPass(bloom);composer3D.addPass(new SMAAPass(W*(window.devicePixelRatio||1),H*(window.devicePixelRatio||1)));composer3D.addPass(new OutputPass());}
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
@@ -553,6 +553,14 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     pitchView = new THREE.Mesh(new THREE.PlaneGeometry(W * WORLD_SCALE, H * WORLD_SCALE), new THREE.MeshStandardMaterial({ map: createPitchTexture3D(), roughness: .94, metalness: 0 }));
     pitchView.rotation.x = -Math.PI / 2; pitchView.receiveShadow = true; scene3D.add(pitchView);
     const base = new THREE.Mesh(new THREE.BoxGeometry(124, 1.2, 74), new THREE.MeshStandardMaterial({ color: 0x06130e, roughness: 1 })); base.position.y = -.7; base.receiveShadow = true; scene3D.add(base);
+    createPitchDetails3D();
+  }
+
+  function createPitchDetails3D() {
+    const poleMaterial=new THREE.MeshStandardMaterial({color:0xe9efec,metalness:.62,roughness:.32});const flagColors=[0xe1bb58,0x47c9d4,0x47c9d4,0xe1bb58];const corners=[[-55.2,-30.8],[-55.2,30.8],[55.2,-30.8],[55.2,30.8]];
+    corners.forEach(([x,z],index)=>{const pole=new THREE.Mesh(new THREE.CylinderGeometry(.035,.05,1.65,8),poleMaterial);pole.position.set(x,.82,z);pole.castShadow=true;scene3D.add(pole);const flag=new THREE.Mesh(new THREE.PlaneGeometry(.72,.45),new THREE.MeshStandardMaterial({color:flagColors[index],side:THREE.DoubleSide,roughness:.55}));flag.position.set(x+(x<0?.36:-.36),1.42,z);flag.rotation.y=x<0?0:Math.PI;scene3D.add(flag);});
+    const canopyMaterial=new THREE.MeshPhysicalMaterial({color:0x8fb9ad,transparent:true,opacity:.2,roughness:.22,metalness:.25,side:THREE.DoubleSide});const seatMaterial=new THREE.MeshStandardMaterial({color:0x1b2927,roughness:.75});
+    for(const side of [-1,1]){const group=new THREE.Group();const canopy=new THREE.Mesh(new THREE.BoxGeometry(15,.12,3.4),canopyMaterial);canopy.position.y=2.15;canopy.rotation.x=side*.2;group.add(canopy);for(let i=-3;i<=3;i+=1){const seat=new THREE.Mesh(new THREE.BoxGeometry(1.15,.65,.82),seatMaterial);seat.position.set(i*1.65,.45,0);group.add(seat);}group.position.set(0,0,side*35.1);scene3D.add(group);}
   }
 
   function createGrass3D() {
@@ -567,11 +575,13 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function createStadium3D() {
-    const standMaterial = new THREE.MeshStandardMaterial({ color: 0x111918, roughness: .82, metalness: .12 });
-    const stands = [[0, 4, -41, 126, 8, 12], [-67, 4, 0, 10, 8, 78], [67, 4, 0, 10, 8, 78], [0, 2, 40, 126, 4, 9]];
-    for (const [x,y,z,w,h,d] of stands) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), standMaterial); mesh.position.set(x,y,z); mesh.receiveShadow = true; scene3D.add(mesh); }
+    const standMaterial=new THREE.MeshStandardMaterial({color:0x111918,roughness:.82,metalness:.12});const tierMaterials=[standMaterial,new THREE.MeshStandardMaterial({color:0x17201f,roughness:.78,metalness:.16}),new THREE.MeshStandardMaterial({color:0x1b2524,roughness:.75,metalness:.18})];
+    for(let tier=0;tier<3;tier+=1){const y=1.6+tier*2.3;const longDepth=4.2+tier*1.2;for(const zSide of [-1,1]){const mesh=new THREE.Mesh(new THREE.BoxGeometry(128,2.1,longDepth),tierMaterials[tier]);mesh.position.set(0,y,zSide*(38.2+tier*3.1));mesh.receiveShadow=true;scene3D.add(mesh);}for(const xSide of [-1,1]){const mesh=new THREE.Mesh(new THREE.BoxGeometry(longDepth,2.1,76),tierMaterials[tier]);mesh.position.set(xSide*(64.5+tier*3.1),y,0);mesh.receiveShadow=true;scene3D.add(mesh);}}
+    const roofMaterial=new THREE.MeshPhysicalMaterial({color:0x1a2425,roughness:.35,metalness:.62,clearcoat:.35,clearcoatRoughness:.5});const roofPieces=[[0,9.8,-47,136,.5,11],[0,9.8,47,136,.5,11],[-73,9.8,0,10,.5,84],[73,9.8,0,10,.5,84]];for(const [x,y,z,w,h,d] of roofPieces){const roof=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),roofMaterial);roof.position.set(x,y,z);roof.castShadow=true;scene3D.add(roof);}
+    if(!lowPowerDevice){const beamMaterial=new THREE.MeshStandardMaterial({color:0x53605d,metalness:.8,roughness:.28});for(let i=-5;i<=5;i+=1){for(const z of [-43,43]){const beam=new THREE.Mesh(new THREE.BoxGeometry(.24,6.5,.24),beamMaterial);beam.position.set(i*11,7,z);scene3D.add(beam);}}for(let i=-2;i<=2;i+=1){for(const x of [-68,68]){const beam=new THREE.Mesh(new THREE.BoxGeometry(.24,6.5,.24),beamMaterial);beam.position.set(x,7,i*14);scene3D.add(beam);}}}
+    const tunnel=new THREE.Mesh(new THREE.BoxGeometry(11,4.2,5.5),new THREE.MeshStandardMaterial({color:0x030606,roughness:.94}));tunnel.position.set(0,2.1,39);scene3D.add(tunnel);
     const crowdPositions = []; const crowdColors = [];
-    const crowdCount = lowPowerDevice ? 320 : 1200;
+    const crowdCount = lowPowerDevice ? 360 : 1900;
     for (let i = 0; i < crowdCount; i += 1) {
       const edge = i % 4; const row = 1 + Math.floor(seededNoise(i * 8.3) * 4); let x; let z;
       if (edge < 2) { x = -61 + seededNoise(i * 2.8) * 122; z = edge === 0 ? -36 - row * 1.4 : 36 + row * .9; }
@@ -584,7 +594,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
     createLedBoard3D(0, -35.1, "TONY FOOTBALL MAX", 0xe1bb58); createLedBoard3D(0, 35.2, "PLAY BEAUTIFUL · PLAY TONY", 0x47c9d4);
     for (const x of [-49, 49]) for (const z of [-36, 36]) {
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(.28, .38, 21, 8), new THREE.MeshStandardMaterial({ color: 0x59615e, metalness: .8, roughness: .35 })); mast.position.set(x, 10, z); scene3D.add(mast);
-      const lamp = new THREE.PointLight(0xe8fff5, 20, 70, 2); lamp.position.set(x, 20, z); scene3D.add(lamp);
+      const lamp = new THREE.PointLight(0xe8fff5, 20, 70, 2); lamp.position.set(x, 20, z); scene3D.add(lamp);stadiumLightViews.push(lamp);
       const beam=new THREE.Mesh(new THREE.ConeGeometry(8,28,16,1,true),new THREE.MeshBasicMaterial({color:0xbdebdc,transparent:true,opacity:lowPowerDevice ? .018 : .035,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));beam.position.set(x,6,z);beam.rotation.z=Math.PI;scene3D.add(beam);
     }
   }
@@ -710,7 +720,11 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   }
 
   function applyPitchStyle() {
-    const theme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;dryPitchColor.set(theme.tint);wetPitchColor.set(theme.wet);if(pitchView){pitchView.material.map?.dispose();pitchView.material.map=createPitchTexture3D();pitchView.material.needsUpdate=true;}if(grassView)grassView.material.color.set(theme.grass);
+    const theme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;dryPitchColor.set(theme.tint);wetPitchColor.set(theme.wet);if(pitchView){pitchView.material.map?.dispose();pitchView.material.map=createPitchTexture3D();pitchView.material.needsUpdate=true;}if(grassView)grassView.material.color.set(theme.grass);applyStadiumLighting();
+  }
+
+  function applyStadiumLighting() {
+    if(!scene3D)return;const night=game.pitchStyle==="midnight";scene3D.background.set(night?0x020708:0x07100d);scene3D.fog.color.set(night?0x030908:0x07110e);if(renderer3D)renderer3D.toneMappingExposure=night?1.22:1.12;if(hemisphereLight)hemisphereLight.intensity=night?1.05:1.45;if(floodLight)floodLight.intensity=night?4.35:3.4;if(rimLight)rimLight.intensity=night?1.85:1.4;for(const lamp of stadiumLightViews)lamp.intensity=night?30:20;
   }
 
   function applyBallStyle() {
@@ -779,9 +793,9 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
   function renderFallback2D(now) {
     const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||ball;
-    const pitchTheme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;const ballTheme=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ctx.clearRect(0,0,W,H);ctx.fillStyle=pitchTheme.mid;ctx.fillRect(0,0,W,H);
+    const pitchTheme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;const ballTheme=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ctx.clearRect(0,0,W,H);ctx.fillStyle=pitchTheme.outside;ctx.fillRect(0,0,W,H);ctx.fillStyle=pitchTheme.mid;ctx.fillRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);for(let i=0;i<90;i+=1){const edge=i%4;const x=edge<2?seededNoise(i*3.1)*W:(edge===2?18:W-18);const y=edge<2?(edge===0?18:H-18):seededNoise(i*5.7)*H;ctx.fillStyle=i%9===0?"rgba(225,187,88,.65)":i%7===0?"rgba(71,201,212,.55)":"rgba(218,229,223,.24)";ctx.fillRect(x,y,2.4,2.4);}
     for(let i=0;i<14;i+=1){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,20,8,.04)";ctx.fillRect(FIELD.left+i*(FIELD.right-FIELD.left)/14,FIELD.top,(FIELD.right-FIELD.left)/14,FIELD.bottom-FIELD.top);}
-    ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();for(const [x,y,s] of [[FIELD.left,FIELD.top,1],[FIELD.right,FIELD.top,-1],[FIELD.left,FIELD.bottom,1],[FIELD.right,FIELD.bottom,-1]]){ctx.strokeStyle="#eef3f0";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-18*(y<H/2?1:-1));ctx.stroke();ctx.fillStyle=s>0?"#e1bb58":"#47c9d4";ctx.beginPath();ctx.moveTo(x,y-18*(y<H/2?1:-1));ctx.lineTo(x+s*12,y-13*(y<H/2?1:-1));ctx.lineTo(x,y-8*(y<H/2?1:-1));ctx.fill();}
     const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||player})).sort((a,b)=>a.pose.y-b.pose.y);
     for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame);
     ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
