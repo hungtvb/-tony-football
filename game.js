@@ -1021,7 +1021,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
   $("resumeButton").addEventListener("click", () => togglePause(false));
   $("restartButton").addEventListener("click", startMatch);
   $("playAgainButton").addEventListener("click", startMatch);
-  $("soundButton").addEventListener("click", () => { game.sound = !game.sound; $("soundButton").textContent = game.sound ? "♪" : "×"; if(game.sound) tone(600,.08); });
+  $("soundButton").addEventListener("click", () => { game.sound=!game.sound;$("soundButton").classList.toggle("muted",!game.sound);$("soundButton").setAttribute("aria-label",game.sound?"Tắt âm thanh":"Bật âm thanh");if(game.sound)tone(600,.08); });
   window.addEventListener("keydown", onKeyDown, { passive: false }); window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", () => { input.keys.clear(); input.marking=false; input.shootStart=0; input.shootCharge=0; if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());

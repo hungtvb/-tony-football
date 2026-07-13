@@ -20,8 +20,8 @@
         <div class="brand">
           <span class="brand-mark">TF</span>
           <div>
-            <h1>TONY FOOTBALL <em>MAX</em></h1>
-            <p>WEBGL 3D · MINI MATCH 6V6</p>
+            <div class="brand-line"><h1>TONY FOOTBALL <em>MAX</em></h1><span>PC EDITION</span></div>
+            <p>MATCHDAY ENGINE · 6V6</p>
           </div>
         </div>
         <div class="scoreboard" aria-live="polite">
@@ -30,8 +30,8 @@
           <div class="away"><strong id="awayScore">0</strong><span>NEON UTD</span></div>
         </div>
         <div class="top-actions">
-          <button id="soundButton" class="icon-button" aria-label="Bật hoặc tắt âm thanh">♪</button>
-          <button id="pauseButton" class="icon-button" aria-label="Tạm dừng trận đấu">Ⅱ</button>
+          <button id="soundButton" class="icon-button" aria-label="Bật hoặc tắt âm thanh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6h4l5 4V5L9 9H5Z"/><path d="M17 9.5a4 4 0 0 1 0 5M19.5 7a7.5 7.5 0 0 1 0 10"/></svg></button>
+          <button id="pauseButton" class="icon-button" aria-label="Tạm dừng trận đấu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
         </div>
       </header>
 
@@ -42,15 +42,17 @@
 
           <div id="startOverlay" class="game-overlay show">
             <div class="overlay-card hero-card">
-              <span class="eyebrow">TONY FOOTBALL MAX</span>
-              <h2>SÂN CỎ.<br /><em>TRẬN CẦU LỚN.</em></h2>
-              <p>Game bóng đá 3D arcade 6v6 dành cho PC, với điều khiển kiểu PES/FIFA, cầu thủ full-body, Desktop Ultra và AI chiến thuật.</p>
+              <span class="eyebrow"><i></i> TONY FOOTBALL · MATCHDAY</span>
+              <h2>CHƠI NHANH.<br /><em>THẮNG ĐẸP.</em></h2>
+              <p>Bóng đá arcade 6v6 dành riêng cho PC — điều khiển kiểu PES/FIFA, tốc độ cao và AI chiến thuật.</p>
+              <div class="match-specs" aria-label="Thông tin trận đấu"><span>6 VS 6</span><span>150 GIÂY</span><span>PC ULTRA</span></div>
+              <div class="picker-label"><span>CHỌN ĐỘ KHÓ</span><b>AI LEVEL</b></div>
               <div class="difficulty-picker" aria-label="Chọn độ khó">
-                <button data-difficulty="rookie">ROOKIE</button>
-                <button class="active" data-difficulty="pro">PRO</button>
-                <button data-difficulty="legend">LEGEND</button>
+                <button data-difficulty="rookie"><small>01</small>ROOKIE</button>
+                <button class="active" data-difficulty="pro"><small>02</small>PRO</button>
+                <button data-difficulty="legend"><small>03</small>LEGEND</button>
               </div>
-              <button id="playButton" class="primary-button"><span>▶</span> BẮT ĐẦU TRẬN</button>
+              <button id="playButton" class="primary-button"><span>▶</span><b>BẮT ĐẦU TRẬN</b><small>ENTER THE PITCH</small></button>
             </div>
           </div>
 
@@ -98,15 +100,17 @@
           </section>
 
           <section class="rail-card controls-card">
-            <div class="rail-heading"><span>CONTROLS</span><b>KEYBOARD</b></div>
-            <p><kbd>← ↑ ↓ →</kbd><span>Di chuyển</span></p>
-            <p><kbd>S</kbd><span>Chuyền / Kèm người</span></p>
-            <p><kbd>W</kbd><span>Chọc khe / Đổi người</span></p>
-            <p><kbd>D</kbd><span>Sút / Tranh bóng</span></p>
-            <p><kbd>A</kbd><span>Tạt bóng / Soạc bóng</span></p>
-            <p><kbd>E</kbd><span>Chạy nhanh</span></p>
-            <p><kbd>C</kbd><span>Đổi góc camera</span></p>
-            <p><kbd>V</kbd><span>Đổi thời tiết</span></p>
+            <div class="rail-heading"><span>KEYBOARD</span><b>PES STYLE</b></div>
+            <div class="control-grid">
+              <p><kbd>←↑↓→</kbd><span>Di chuyển</span></p>
+              <p><kbd>E</kbd><span>Tăng tốc</span></p>
+              <p><kbd>S</kbd><span>Chuyền / Kèm</span></p>
+              <p><kbd>W</kbd><span>Chọc / Đổi</span></p>
+              <p><kbd>D</kbd><span>Sút / Tranh</span></p>
+              <p><kbd>A</kbd><span>Tạt / Soạc</span></p>
+              <p><kbd>C</kbd><span>Camera</span></p>
+              <p><kbd>V</kbd><span>Thời tiết</span></p>
+            </div>
           </section>
         </aside>
       </section>
@@ -114,10 +118,10 @@
       <footer class="statusbar">
         <span><i class="status-dot"></i> ARCADE ENGINE ONLINE</span>
         <span id="commentary">Chào mừng đến Tony Football Max.</span>
-        <span>BUILD 11.0 · GAMEPLAY & AI</span>
+        <span>BUILD 12.0 · MATCHDAY UI</span>
       </footer>
     </main>
 
-    <script type="module" src="game.js?v=11.0.0"></script>
+    <script type="module" src="game.js?v=12.0.0"></script>
   </body>
 </html>
