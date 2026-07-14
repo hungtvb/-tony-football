@@ -1,0 +1,44 @@
+name: Apply G1 fixed loop migration
+
+on:
+  push:
+    branches:
+      - refactor/gameplay-g1-fixed-simulation
+    paths:
+      - scripts/apply-g1-loop.mjs
+      - src/game/core/**
+      - src/game/config/**
+      - game.js
+      - package.json
+      - tests/simulation/**
+      - .github/workflows/apply-g1-loop.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/gameplay-g1-fixed-simulation
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/apply-g1-loop.mjs
+      - run: npm test
+      - name: Commit migrated game loop
+        run: |
+          if git diff --quiet -- game.js; then
+            echo "game.js already uses the fixed simulation loop"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game.js
+          git commit -m "refactor(gameplay): integrate fixed simulation loop"
+          git push
