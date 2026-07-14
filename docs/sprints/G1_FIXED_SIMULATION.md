@@ -1,60 +1,68 @@
 # Sprint G1 — Fixed Simulation Foundation
 
-Status: In Progress
+Status: In Progress — implementation complete, manual gameplay validation pending
 
 ## Goal
 
-Separate authoritative simulation timing from browser render timing while preserving existing gameplay behavior.
+Separate simulation timing from rendering while preserving current gameplay behavior.
 
-## Branch
+## Implemented
 
-`refactor/gameplay-g1-fixed-simulation`
+- `src/game/core/FixedClock.js`
+- `src/game/core/SimulationLoop.js`
+- `src/game/core/Random.js`
+- `src/game/config/gameplayConfig.js`
+- fixed-step integration in `game.js`
+- headless clock, loop, and deterministic RNG tests
+- pull-request CI workflow
 
-## Scope
+## Runtime design
 
-- Add a DOM-free `FixedClock`.
-- Add foundational simulation configuration.
-- Add seeded random utility for future deterministic systems.
-- Add headless timing tests.
-- Integrate the current `update(dt)` flow into the fixed clock.
-
-## Out of scope
-
-- Gameplay tuning.
-- AI behavior changes.
-- UI redesign.
-- Control changes.
-- Models or animations.
-- Multiplayer and additional modes.
-
-## Automated tests
-
-- 600 ticks equal 10 seconds.
-- 30, 60, and 120 FPS schedules produce 60 simulation updates per second.
+- Simulation runs at 60 Hz.
+- Rendering remains tied to browser animation frames.
 - Large frame deltas are clamped.
-- Maximum substeps are respected.
-- Accumulator remains stable.
-- Seeded random sequences repeat.
+- Maximum substeps prevent a spiral of death.
+- Remaining accumulator time is exposed as render interpolation alpha.
+- Current rendering does not yet interpolate entity transforms; alpha is available for a later sprint.
 
-## Current implementation status
+## Constraints respected
 
-Completed:
-- Fixed clock module.
-- Seeded random utility.
-- Simulation configuration.
-- Headless tests.
-- Test command wiring.
+- No intentional gameplay tuning.
+- No UI redesign.
+- No control changes.
+- No multiplayer or game-mode work.
+- WebGL and Canvas code paths remain unchanged.
+- No full `game.js` rewrite.
 
-Remaining before sprint completion:
-- Safely adapt the existing monolithic `game.js` requestAnimationFrame loop to call the fixed clock.
-- Run the complete repository test suite and manual gameplay checklist.
+## Automated validation
 
-## Manual validation required
+Covered by `npm test`:
 
-- Start and finish a match.
-- Move, sprint, pass, through pass, shoot, finesse, and chip.
-- Switch player and defend.
-- Score and view replay.
-- Pause and resume.
-- Verify WebGL and Canvas fallback.
-- Verify model and animation fallback.
+- syntax check for `game.js` and `server.mjs`
+- asset validation
+- 30, 60, and 120 FPS fixed update behavior
+- large delta clamp
+- maximum substeps
+- floating-point accumulator normalization
+- deterministic seeded random
+- one render per browser frame
+- idempotent loop start
+- safe loop stop
+- interpolation alpha delivery
+
+## Manual validation pending
+
+- start match
+- movement and sprint
+- passing, through pass, loft pass, and shooting
+- defending and switching player
+- pause and resume
+- goal and replay
+- full-time flow
+- WebGL renderer
+- Canvas fallback
+- player model and animation fallback
+
+## Definition of Done
+
+G1 is ready to merge after CI passes and the manual checklist is completed without a major regression.
