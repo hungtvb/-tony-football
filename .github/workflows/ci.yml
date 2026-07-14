@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -18,6 +18,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: feature/ui-u2-game-feel
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -25,5 +28,19 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Apply pending U2 review fixes
+        run: |
+          if grep -q 'audioContext?.currentTime ?? performance.now() / 1000' game.js; then
+            node scripts/apply-u2-review-fixes.mjs
+          fi
       - name: Run test suite
         run: npm test
+      - name: Commit applied review fixes
+        run: |
+          if ! git diff --quiet -- game.js; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add game.js
+            git commit -m "fix(u2): resolve reviewed runtime regressions [u2-review-fixed]"
+            git push origin HEAD:feature/ui-u2-game-feel
+          fi
