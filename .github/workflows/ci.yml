@@ -25,5 +25,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Run test suite
-        run: npm test
+      - name: Check JavaScript syntax
+        run: node --check game.js && node --check server.mjs
+      - name: Validate assets and UI contract
+        run: node scripts/validate-assets.mjs
+      - name: Run simulation tests
+        run: node --test tests/simulation/*.test.mjs
+      - name: Run presentation tests
+        run: node --test tests/presentation/*.test.mjs
