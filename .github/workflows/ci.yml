@@ -33,5 +33,9 @@ jobs:
         run: node --test tests/simulation/*.test.mjs
       - name: Run existing presentation tests
         run: node --test tests/presentation/AudioFeedbackController.test.mjs tests/presentation/ContextualParticlePolicy.test.mjs tests/presentation/game-feel-controller.test.mjs tests/presentation/game-feel-visuals.test.mjs
-      - name: Run U2 runtime regression tests
-        run: node --test tests/presentation/u2-runtime-regressions.test.mjs
+      - name: Verify audio clock regression
+        run: node --test --test-name-pattern="audio cooldown" tests/presentation/u2-runtime-regressions.test.mjs
+      - name: Verify replay trail regression
+        run: node --test --test-name-pattern="replay snapshots" tests/presentation/u2-runtime-regressions.test.mjs
+      - name: Verify goal duration regression
+        run: node --test --test-name-pattern="goal effects" tests/presentation/u2-runtime-regressions.test.mjs
