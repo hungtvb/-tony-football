@@ -3,20 +3,26 @@
 ```yaml
 Sprint: U2
 Title: Game Feel and Match Feedback
-Status: In Progress
+Status: Implementation Complete — Manual Validation Pending
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/U2_GAME_FEEL.md
 Primary specs:
   - docs/ui/GAME_FEEL.md
-Allowed focus:
-  - smooth camera follow and zoom feedback
-  - bounded camera shake
-  - ball trail and spin presentation
-  - impact and goal feedback
-  - crowd and action audio layering
-  - weather-aware particles
+Delivered focus:
+  - frame-rate-independent camera follow
+  - bounded camera impulses
+  - Canvas and WebGL ball trails
+  - contextual grass, dust, and rain particles
+  - cooldown-based audio feedback
+  - goal and replay presentation polish
   - reduced-motion and low-power fallbacks
-  - effect pooling and performance guards
+Remaining validation:
+  - WebGL browser smoke test
+  - Canvas fallback smoke test
+  - sound on/off
+  - reduced-motion
+  - low-power device
+  - narrow and desktop layouts
 Do not modify:
   - simulation timing
   - player locomotion values
