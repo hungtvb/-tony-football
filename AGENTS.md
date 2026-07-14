@@ -1,0 +1,58 @@
+# Tony Football — Agent Entry Point
+
+This file is the mandatory entry point for repository-level AI agents.
+
+## Read first
+
+Before planning or modifying code, read in this order:
+
+1. `docs/00_PROJECT_CONTEXT.md`
+2. `docs/01_ACTIVE_SPRINT.md`
+3. `docs/03_DEV_RULES.md`
+4. The file referenced by `Sprint document` in `01_ACTIVE_SPRINT.md`
+5. Only the relevant specification files
+6. Only the relevant ADR files
+
+Do not scan every document by default.
+
+## Scope rule
+
+Implement only the active sprint unless the user explicitly requests another task.
+
+Do not:
+- Start multiplayer or game-mode work.
+- Rewrite the whole project.
+- Expand `game.js` with another large subsystem.
+- Change the FO4 control mapping without approval.
+- Remove WebGL or Canvas fallback.
+- Merge directly to `main`.
+- Perform destructive repository or filesystem operations without explicit approval.
+
+## Source-of-truth priority
+
+1. Direct user instruction
+2. `docs/00_PROJECT_CONTEXT.md`
+3. `docs/01_ACTIVE_SPRINT.md`
+4. Accepted ADRs
+5. Gameplay/UI specifications
+6. `docs/02_ROADMAP.md`
+7. `docs/10_BACKLOG.md`
+8. Existing code comments
+
+Report unresolved contradictions before implementation.
+
+## Required workflow
+
+Before coding:
+- Summarize the relevant current architecture.
+- List files to add or modify.
+- List regression risks.
+- Define tests and manual checks.
+
+After coding:
+- Run existing and new tests.
+- Validate the live-use flow locally.
+- Update required documentation.
+- Report changed files, commands, results, limitations, and next recommendation.
+
+Use `docs/04_DOCUMENTATION_WORKFLOW.md` to route documentation updates.
