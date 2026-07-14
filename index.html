@@ -10,77 +10,143 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="u1-match-experience.css" />
     <link rel="preload" href="assets/models/football-character-v2.glb?v=16.0.0" as="fetch" type="model/gltf-binary" crossorigin />
     <script type="importmap">
       {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}
     </script>
   </head>
   <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <div class="brand">
+    <main class="app-shell match-app">
+      <header class="topbar match-topbar">
+        <div class="brand compact-brand">
           <span class="brand-mark">TF</span>
           <div>
-            <div class="brand-line"><h1>TONY FOOTBALL <em>MAX</em></h1><span>PC EDITION</span></div>
-            <p>MATCHDAY ENGINE · 6V6</p>
+            <div class="brand-line"><h1>TONY FOOTBALL <em>MAX</em></h1><span>6V6</span></div>
+            <p>MATCHDAY ENGINE</p>
           </div>
         </div>
-        <div class="scoreboard" aria-live="polite">
-          <div><span>TONY FC</span><strong id="homeScore">0</strong></div>
+
+        <div class="scoreboard match-scoreboard" aria-live="polite">
+          <div class="team-score home-team"><span>TONY FC</span><strong id="homeScore">0</strong></div>
           <div class="match-clock"><b id="gameClock">00:00</b><small id="matchState">SẴN SÀNG</small></div>
-          <div class="away"><strong id="awayScore">0</strong><span>NEON UTD</span></div>
+          <div class="team-score away away-team"><strong id="awayScore">0</strong><span>NEON UTD</span></div>
         </div>
+
         <div class="top-actions">
           <button id="soundButton" class="icon-button" aria-label="Bật hoặc tắt âm thanh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6h4l5 4V5L9 9H5Z"/><path d="M17 9.5a4 4 0 0 1 0 5M19.5 7a7.5 7.5 0 0 1 0 10"/></svg></button>
           <button id="pauseButton" class="icon-button" aria-label="Tạm dừng trận đấu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
         </div>
       </header>
 
-      <section class="game-layout">
-        <div class="pitch-panel">
+      <section class="game-layout match-layout">
+        <div class="pitch-panel match-pitch">
           <canvas id="gameCanvas" width="1200" height="700" aria-label="Sân bóng Tony Football Max"></canvas>
           <div id="replayBadge" class="replay-badge" aria-live="polite">● INSTANT REPLAY</div>
           <div id="assetStatus" class="asset-status loading" role="status" aria-live="polite">MODEL · LOADING</div>
 
-          <div id="startOverlay" class="game-overlay show">
-            <div class="overlay-card hero-card">
-              <span class="eyebrow"><i></i> TONY FOOTBALL · MATCHDAY</span>
-              <h2>CHƠI NHANH.<br /><em>THẮNG ĐẸP.</em></h2>
-              <p>Bóng đá arcade 6v6 dành riêng cho PC — điều khiển bàn phím kiểu FIFA Online 4, tốc độ cao và AI chiến thuật.</p>
-              <div class="match-specs" aria-label="Thông tin trận đấu"><span>6 VS 6</span><span>150 GIÂY</span><span>PC ULTRA</span></div>
-              <div class="picker-label"><span>CHỌN ĐỘ KHÓ</span><b>AI LEVEL</b></div>
-              <div class="difficulty-picker" aria-label="Chọn độ khó">
-                <button data-difficulty="rookie"><small>01</small>ROOKIE</button>
-                <button class="active" data-difficulty="pro"><small>02</small>PRO</button>
-                <button data-difficulty="legend"><small>03</small>LEGEND</button>
+          <section class="match-hud" aria-label="Thông tin trong trận">
+            <div class="hud-player-card">
+              <div class="hud-shirt" aria-hidden="true"><b id="playerNumber">10</b></div>
+              <div class="hud-player-copy">
+                <div class="hud-player-title"><span id="playerName">TONY</span><small>OVR <b id="playerRating">92</b></small></div>
+                <div class="hud-stamina-row"><span>STAMINA</span><b id="staminaText">100%</b></div>
+                <div class="meter"><i id="staminaBar"></i></div>
               </div>
-              <div class="customization-row">
-                <div class="custom-picker" aria-label="Chọn mặt sân"><span>MẶT SÂN</span><div>
-                  <button class="active" data-pitch="classic" aria-label="Sân Classic" title="Classic"><i class="pitch-swatch classic"></i></button>
-                  <button data-pitch="elite" aria-label="Sân Elite" title="Elite"><i class="pitch-swatch elite"></i></button>
-                  <button data-pitch="dry" aria-label="Sân khô" title="Dry"><i class="pitch-swatch dry"></i></button>
-                  <button data-pitch="midnight" aria-label="Sân đêm" title="Midnight"><i class="pitch-swatch midnight"></i></button>
-                </div></div>
-                <div class="custom-picker ball-picker" aria-label="Chọn bóng"><span>BÓNG THI ĐẤU</span><div>
-                  <button class="active" data-ball="classic" aria-label="Bóng Classic" title="Classic"><i class="ball-swatch classic"></i></button>
-                  <button data-ball="volt" aria-label="Bóng Volt" title="Volt"><i class="ball-swatch volt"></i></button>
-                  <button data-ball="crimson" aria-label="Bóng Crimson" title="Crimson"><i class="ball-swatch crimson"></i></button>
-                </div></div>
-                <div class="custom-picker weather-picker" aria-label="Chọn thời tiết"><span>THỜI TIẾT</span><div>
-                  <button class="active" data-weather="clear" aria-label="Trời quang" title="Trời quang"><i class="weather-swatch clear"></i></button>
-                  <button data-weather="rain" aria-label="Trời mưa" title="Trời mưa"><i class="weather-swatch rain"></i></button>
-                </div></div>
+            </div>
+
+            <section class="hud-radar" aria-label="Radar chiến thuật">
+              <canvas id="radarCanvas" width="260" height="140" aria-label="Radar vị trí cầu thủ"></canvas>
+            </section>
+
+            <section id="controlsCard" class="hud-controls controls-card" aria-label="Gợi ý điều khiển">
+              <div class="context-heading"><span>FO4</span><b id="controlsMode" data-mode="attack">TẤN CÔNG</b></div>
+              <div class="context-actions">
+                <p><kbd>S</kbd><span data-attack="Chuyền" data-defense="Đổi người">Chuyền</span></p>
+                <p><kbd>W</kbd><span data-attack="Chọc khe" data-defense="GK lao ra">Chọc khe</span></p>
+                <p><kbd>D</kbd><span data-attack="Sút" data-defense="Áp sát">Sút</span></p>
+                <p><kbd>A</kbd><span data-attack="Tạt bóng" data-defense="Xoạc bóng">Tạt bóng</span></p>
               </div>
-              <button id="playButton" class="primary-button"><span>▶</span><b>BẮT ĐẦU TRẬN</b><small>ENTER THE PITCH</small></button>
+            </section>
+          </section>
+
+          <div id="startOverlay" class="game-overlay show pre-match-overlay">
+            <div class="overlay-card pre-match-card">
+              <div class="pre-match-header">
+                <span class="eyebrow"><i></i> QUICK MATCH · 6V6</span>
+                <span class="match-chip">150 GIÂY</span>
+              </div>
+
+              <div class="matchup" aria-label="Cặp đấu">
+                <article class="team-card home-card">
+                  <span class="team-crest">TF</span>
+                  <div><small>HOME</small><h2>TONY FC</h2><p>Pressing · Direct play</p></div>
+                </article>
+                <div class="versus"><span>VS</span><small>MATCHDAY</small></div>
+                <article class="team-card away-card">
+                  <div><small>AWAY</small><h2>NEON UTD</h2><p>Possession · Counter</p></div>
+                  <span class="team-crest neon">NU</span>
+                </article>
+              </div>
+
+              <div class="setup-grid">
+                <section class="setup-section difficulty-section">
+                  <div class="section-label"><span>ĐỘ KHÓ AI</span><b>CHỌN CẤP ĐỘ</b></div>
+                  <div class="difficulty-picker" aria-label="Chọn độ khó">
+                    <button data-difficulty="rookie"><small>01</small><span>ROOKIE<em>Phản ứng chậm</em></span></button>
+                    <button class="active" data-difficulty="pro"><small>02</small><span>PRO<em>Cân bằng</em></span></button>
+                    <button data-difficulty="legend"><small>03</small><span>LEGEND<em>Quyết định nhanh</em></span></button>
+                  </div>
+                </section>
+
+                <section class="setup-section visual-section">
+                  <div class="section-label"><span>THIẾT LẬP TRẬN</span><b>VISUAL</b></div>
+                  <div class="customization-row">
+                    <div class="custom-picker" aria-label="Chọn mặt sân"><span>MẶT SÂN</span><div>
+                      <button class="active" data-pitch="classic" aria-label="Sân Classic" title="Classic"><i class="pitch-swatch classic"></i></button>
+                      <button data-pitch="elite" aria-label="Sân Elite" title="Elite"><i class="pitch-swatch elite"></i></button>
+                      <button data-pitch="dry" aria-label="Sân khô" title="Dry"><i class="pitch-swatch dry"></i></button>
+                      <button data-pitch="midnight" aria-label="Sân đêm" title="Midnight"><i class="pitch-swatch midnight"></i></button>
+                    </div></div>
+                    <div class="custom-picker ball-picker" aria-label="Chọn bóng"><span>BÓNG</span><div>
+                      <button class="active" data-ball="classic" aria-label="Bóng Classic" title="Classic"><i class="ball-swatch classic"></i></button>
+                      <button data-ball="volt" aria-label="Bóng Volt" title="Volt"><i class="ball-swatch volt"></i></button>
+                      <button data-ball="crimson" aria-label="Bóng Crimson" title="Crimson"><i class="ball-swatch crimson"></i></button>
+                    </div></div>
+                    <div class="custom-picker weather-picker" aria-label="Chọn thời tiết"><span>THỜI TIẾT</span><div>
+                      <button class="active" data-weather="clear" aria-label="Trời quang" title="Trời quang"><i class="weather-swatch clear"></i></button>
+                      <button data-weather="rain" aria-label="Trời mưa" title="Trời mưa"><i class="weather-swatch rain"></i></button>
+                    </div></div>
+                  </div>
+                </section>
+              </div>
+
+              <div class="pre-match-footer">
+                <div class="control-preview"><span><kbd>ARROWS</kbd> DI CHUYỂN</span><span><kbd>S</kbd> CHUYỀN</span><span><kbd>D</kbd> SÚT</span><span><kbd>ESC</kbd> TẠM DỪNG</span></div>
+                <button id="playButton" class="primary-button"><span>▶</span><b>BẮT ĐẦU TRẬN</b><small>ENTER THE PITCH</small></button>
+              </div>
             </div>
           </div>
 
-          <div id="pauseOverlay" class="game-overlay">
-            <div class="overlay-card compact-card">
-              <span class="eyebrow">MATCH PAUSED</span>
-              <h2>TẠM DỪNG</h2>
-              <button id="resumeButton" class="primary-button">TIẾP TỤC</button>
-              <button id="restartButton" class="secondary-button">CHƠI LẠI</button>
+          <div id="pauseOverlay" class="game-overlay pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+            <div class="overlay-card pause-card">
+              <div class="pause-menu">
+                <span class="eyebrow">MATCH PAUSED</span>
+                <h2 id="pauseTitle">TẠM DỪNG</h2>
+                <button id="resumeButton" class="primary-button">TIẾP TỤC</button>
+                <button id="restartButton" class="secondary-button">CHƠI LẠI</button>
+                <div class="pause-help"><kbd>ESC</kbd><span>Quay lại trận đấu</span></div>
+              </div>
+              <aside class="pause-summary">
+                <div class="summary-heading"><span>THỐNG KÊ TRẬN</span><b>LIVE</b></div>
+                <div class="stat"><span>Kiểm soát bóng</span><strong id="possessionStat">50%</strong></div>
+                <div class="split-meter"><i id="possessionBar"></i></div>
+                <div class="stat"><span>Sút</span><strong><b id="homeShots">0</b> : <b id="awayShots">0</b></strong></div>
+                <div class="stat"><span>Chuyền chính xác</span><strong id="passStat">0%</strong></div>
+                <div class="pause-controls-list">
+                  <span><kbd>E</kbd> Tăng tốc</span><span><kbd>Q</kbd> Gọi chạy</span><span><kbd>C</kbd> Che bóng</span><span><kbd>B</kbd> Camera</span>
+                </div>
+              </aside>
             </div>
           </div>
 
@@ -94,55 +160,11 @@
             </div>
           </div>
 
+          <div id="commentary" class="match-toast" role="status" aria-live="polite">Chào mừng đến Tony Football Max.</div>
         </div>
-
-        <aside class="command-rail">
-          <section class="rail-card player-card">
-            <div class="rail-heading"><span>CẦU THỦ</span><b id="playerNumber">10</b></div>
-            <h3 id="playerName">TONY</h3>
-            <div class="rating"><span>OVR</span><strong id="playerRating">92</strong></div>
-            <div class="stamina-row"><span>STAMINA</span><b id="staminaText">100%</b></div>
-            <div class="meter"><i id="staminaBar"></i></div>
-          </section>
-
-          <section class="rail-card stats-card">
-            <div class="rail-heading"><span>MATCH STATS</span><b>LIVE</b></div>
-            <div class="stat"><span>Kiểm soát bóng</span><strong id="possessionStat">50%</strong></div>
-            <div class="split-meter"><i id="possessionBar"></i></div>
-            <div class="stat"><span>Sút</span><strong><b id="homeShots">0</b> : <b id="awayShots">0</b></strong></div>
-            <div class="stat"><span>Chuyền chính xác</span><strong id="passStat">0%</strong></div>
-          </section>
-
-          <section class="rail-card radar-card">
-            <div class="rail-heading"><span>RADAR</span><b>TACTICAL</b></div>
-            <canvas id="radarCanvas" width="260" height="140" aria-label="Radar vị trí cầu thủ"></canvas>
-          </section>
-
-          <section id="controlsCard" class="rail-card controls-card">
-            <div class="rail-heading"><span>FO4 KEYBOARD</span><b id="controlsMode" data-mode="attack">TẤN CÔNG</b></div>
-            <div class="control-grid">
-              <p><kbd>←↑↓→</kbd><span>Di chuyển</span></p>
-              <p><kbd>E</kbd><span>Tăng tốc</span></p>
-              <p><kbd>S</kbd><span data-attack="Chuyền ngắn" data-defense="Đổi cầu thủ">Chuyền ngắn</span></p>
-              <p><kbd>W</kbd><span data-attack="Chọc khe" data-defense="Thủ môn lao ra">Chọc khe</span></p>
-              <p><kbd>D</kbd><span data-attack="Sút bóng" data-defense="Áp sát">Sút bóng</span></p>
-              <p><kbd>A</kbd><span data-attack="Tạt bóng" data-defense="Xoạc bóng">Tạt bóng</span></p>
-              <p><kbd>Q</kbd><span data-attack="Gọi chạy chỗ" data-defense="Gọi pressing">Gọi chạy chỗ</span></p>
-              <p><kbd>C</kbd><span data-attack="Che bóng" data-defense="Jockey">Che bóng</span></p>
-              <p><kbd>SPC</kbd><span data-attack="—" data-defense="Tắc bóng">—</span></p>
-              <p><kbd>B</kbd><span>Đổi camera</span></p>
-            </div>
-          </section>
-        </aside>
       </section>
-
-      <footer class="statusbar">
-        <span><i class="status-dot"></i> ARCADE ENGINE ONLINE</span>
-        <span id="commentary">Chào mừng đến Tony Football Max.</span>
-        <span>BUILD 19.0 · ASSET REBUILD</span>
-      </footer>
     </main>
 
-    <script type="module" src="game.js?v=19.0.0"></script>
+    <script type="module" src="game.js?v=20.0.0"></script>
   </body>
 </html>
