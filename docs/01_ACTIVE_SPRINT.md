@@ -1,27 +1,31 @@
 # Active Sprint
 
 ```yaml
-Sprint: G1
-Title: Fixed Simulation Foundation
+Sprint: U1
+Title: Match Experience and HUD Hierarchy
 Status: In Progress
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/G1_FIXED_SIMULATION.md
-Primary spec:
-  - docs/gameplay/SIMULATION.md
-Relevant ADR:
-  - docs/adr/ADR-001-FIXED-TIMESTEP.md
+Sprint document: docs/sprints/U1_MATCH_EXPERIENCE.md
+Primary specs:
+  - docs/ui/HUD.md
+  - docs/ui/PREMATCH.md
+  - docs/ui/RADAR.md
+  - docs/ui/CONTROLS.md
+  - docs/ui/MENUS_SETTINGS.md
 Allowed focus:
-  - simulation timing
-  - frame accumulator
-  - test harness
-  - seeded random utility
-  - foundational timing configuration
+  - pre-match information architecture
+  - in-match HUD hierarchy
+  - radar readability
+  - contextual control hints
+  - pause menu structure
+  - settings information architecture
+  - responsive and accessible UI states
 Do not modify:
-  - gameplay behavior intentionally
-  - AI decision design
-  - UI layout
-  - controls
-  - models and animations
+  - simulation timing
+  - movement or ball behavior
+  - AI decisions
+  - FO4 control mapping
+  - player models and animations
   - multiplayer or game modes
 ```
 
