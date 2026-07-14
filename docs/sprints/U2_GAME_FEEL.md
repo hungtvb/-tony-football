@@ -1,6 +1,6 @@
 # Sprint U2 — Game Feel and Match Feedback
 
-Status: In Progress
+Status: Implementation Complete — Manual Validation Pending
 
 ## Goal
 
@@ -16,63 +16,50 @@ Make every pass, shot, tackle, goal, replay, and camera transition feel more res
 - Rain and pitch contact produce restrained contextual particles.
 - Effects scale down automatically for reduced-motion and low-power devices.
 
-## Scope
+## Scope delivered
 
 ### Camera
-- Add configurable follow smoothing.
-- Add a small dead zone to reduce micro-jitter.
-- Add bounded dynamic zoom based on ball position and action context.
-- Add short, low-amplitude shake for strong shots, posts, tackles, and goals.
-- Never hide the ball or produce motion sickness.
-
-### Ball presentation
-- Improve trail readability based on speed.
-- Improve visual spin cues.
-- Improve contact shadow and airborne separation.
-- Keep all visual effects independent from authoritative physics.
-
-### Impact and goal feedback
-- Add restrained impact flash and particles.
-- Add a short goal emphasis sequence.
-- Reuse existing replay flow rather than building a new replay system.
-- Keep score, radar, and controls readable throughout.
-
-### Audio
-- Layer kick, pass, tackle, post, whistle, goal, and crowd responses.
-- Prevent repeated sounds from stacking excessively.
-- Respect mute state and browser autoplay restrictions.
-
-### Weather particles
-- Add restrained grass/dust contact particles.
-- Add rain splash feedback when rain is active.
-- Pool particle objects and cap active counts.
-
-### Accessibility and performance
-- Respect `prefers-reduced-motion`.
-- Provide low-power fallbacks.
-- Avoid per-frame DOM creation.
-- Reuse objects in hot loops.
-- Preserve WebGL and Canvas fallback paths.
-
-## Implemented
-
-- Frame-rate-independent camera easing.
+- Frame-rate-independent follow easing.
 - Deterministic bounded camera impulses.
 - Strong-shot, tackle, and goal feedback hooks.
+- Reduced-motion disables shake offsets.
+
+### Ball presentation
+- Speed-based trail length and opacity.
+- Reusable WebGL trail buffer with no per-frame object creation.
+- Canvas fallback trail using the same presentation policy.
+- Height-aware Canvas ball shadow.
+
+### Impact and goal feedback
 - Shared flash decay behavior.
-- Speed-based ball trail length and opacity in Canvas fallback.
-- Height-aware ball shadow in Canvas fallback.
-- Particle budgets for desktop, low-power, and reduced-motion modes.
-- Reduced-motion disables camera shake and shortens flash emphasis.
-- Automated presentation tests for camera, impulse, trail, shadow, and budgets.
+- Contextual contact particles for shots and tackles.
+- Grass, dry-pitch dust, and rain splash palettes.
+- Reduced-motion goal timing and restrained stadium pulse.
+- Existing replay flow remains authoritative and unchanged.
 
-## Remaining
+### Audio
+- Cooldown-based kick, whistle, and goal feedback.
+- Power-scaled kick profile.
+- Muting and browser autoplay behavior remain preserved.
 
-- Add a lightweight WebGL ball trail without per-frame object creation.
-- Add contextual grass, dust, and rain contact particles within the active budget.
-- Layer action and crowd audio with cooldowns.
-- Refine goal and replay emphasis.
-- Perform manual WebGL, Canvas fallback, low-power, and reduced-motion validation.
+### Accessibility and performance
+- Desktop, low-power, and reduced-motion particle budgets.
+- Effects are presentation-only and do not write football simulation outcomes.
+- Reusable controllers are covered by automated tests.
+- Temporary migration workflows and scripts were removed after integration.
+
+## Automated coverage
+
+- camera easing and impulse decay
+- deterministic camera noise
+- strong-shot thresholds
+- flash decay bounds
+- trail point count and opacity
+- airborne shadow scaling
+- particle budgets and reduced-motion behavior
+- WebGL trail buffer behavior
+- audio cooldown and profile scaling
+- contextual particle selection and burst scaling
 
 ## Out of scope
 
@@ -91,24 +78,24 @@ Make every pass, shot, tackle, goal, replay, and camera transition feel more res
 - No effect changes simulation state or action outcomes.
 - Ball remains visible during every effect.
 - UI remains readable at desktop and narrow widths.
-- Reduced-motion mode disables or minimizes shake, flash, and slow emphasis.
+- Reduced-motion mode disables or minimizes shake, flash, and aggressive pulse.
 - Existing tests and asset validation pass.
 - No major FPS regression in WebGL or Canvas fallback.
 
-## Manual validation
+## Manual validation pending
 
 - start match and move across the pitch
 - short pass, through pass, loft pass, regular shot, finesse, chip
 - tackle and shoulder contact
-- ball hits post or crossbar
 - goal, replay, and kickoff reset
 - pause/resume during active effects
-- clear and rain weather
+- classic, dry, and rain particle contexts
 - sound on/off
 - WebGL and Canvas fallback
 - reduced-motion browser preference
+- low-power and desktop devices
 - narrow and desktop layouts
 
 ## Definition of Done
 
-U2 is complete when CI passes, the manual checklist has no major regression, documentation matches behavior, and the PR is limited to presentation feedback rather than football tuning.
+U2 is complete when CI passes, the manual checklist has no major regression, documentation matches behavior, and the PR remains limited to presentation feedback rather than football tuning.
