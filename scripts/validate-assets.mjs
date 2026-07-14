@@ -31,6 +31,12 @@ const characterNodes = new Set((character.json.nodes || []).map((node) => node.n
 const expectedKitBones = ["Head", "spine_01", "spine_02", "spine_03", "pelvis", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "hand_l", "hand_r", "SuperHero_Male"];
 const missingKitBones = expectedKitBones.filter((name) => !characterNodes.has(name));
 if (missingKitBones.length) throw new Error(`${characterPath}: missing football kit targets: ${missingKitBones.join(", ")}`);
+const bodyNode = character.json.nodes.find((node) => node.name === "SuperHero_Male");
+const bodyPrimitive = character.json.meshes?.[bodyNode?.mesh]?.primitives?.[0];
+const bodyPosition = character.json.accessors?.[bodyPrimitive?.attributes?.POSITION];
+if (!bodyPosition || bodyPosition.componentType !== 5122 || !bodyPosition.normalized || bodyPosition.count < 7000) {
+  throw new Error(`${characterPath}: integrated kit requires the normalized high-detail body position stream`);
+}
 const animationTargets = new Set();
 for (const clip of animation.json.animations || []) {
   for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name);
@@ -53,13 +59,19 @@ for (const contract of [
   "installPlayerAnimations(motion.animations||[])",
   "applyFootballActionPose(rig,pose,actionProgress,dt)",
   "createRigSquadNumber(player,home&&!keeper",
-  "node.name===\"SuperHero_Male\"",
+  "createIntegratedKitMaterial(source,player,palette,skinColor)",
+  "applyIntegratedFootballKit(model,player)",
+  "createBallSurfaceTextures(style)",
+  "new THREE.SphereGeometry(.56,48,32)",
   "WEBGL · 2D FALLBACK"
 ]) {
   if (!gameSource.includes(contract)) throw new Error(`game.js: missing player loader contract: ${contract}`);
 }
-if (!indexSource.includes("BUILD 18.0 · PLAYER IDENTITY") || !indexSource.includes("game.js?v=18.0.0")) {
-  throw new Error("index.html: missing Build 18 player identity version markers");
+for (const legacyPrimitive of ["attach(\"spine_01\"", "patchGeometry", "new THREE.SphereGeometry(.82,20,16)"]) {
+  if (gameSource.includes(legacyPrimitive)) throw new Error(`game.js: legacy primitive player/ball rendering returned: ${legacyPrimitive}`);
+}
+if (!indexSource.includes("BUILD 19.0 · ASSET REBUILD") || !indexSource.includes("game.js?v=19.0.0")) {
+  throw new Error("index.html: missing Build 19 asset rebuild version markers");
 }
 
 console.log(`Player assets valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);

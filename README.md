@@ -148,6 +148,17 @@ Game dùng Three.js WebGL với chế độ Canvas 2D dự phòng, Web Audio API
 - Thủ môn có găng riêng; cầu thủ có bốn biến thể kiểu tóc, tông da và màu giày nhưng không tăng tải asset
 - Tất cả chi tiết kit dùng geometry runtime nhẹ, giữ nguyên ngân sách character và animation khoảng 1 MB
 
+## Player & Ball Asset Rebuild — Sprint 19
+
+- Bỏ toàn bộ lớp áo, quần, tất, giày và tóc ghép từ cylinder, box hoặc sphere bên ngoài model
+- Kit mới được tô trực tiếp lên skinned mesh theo bind pose, nên bám chính xác vào cơ thể trong mọi animation
+- Giữ normal map cơ thể nhưng thay texture superhero bằng vật liệu bóng đá riêng cho từng đội, thủ môn, tông da, tóc và giày
+- Thu gọn chiều ngang model để silhouette cầu thủ tự nhiên hơn ở camera Broadcast và Close
+- Bóng chuyển thành một mesh UV duy nhất với geometry 48×32, panel cong, đường may bump map và vật liệu PBR mờ
+- Giảm tỷ lệ bóng 3D từ bán kính 0,82 xuống 0,56 để gần tỷ lệ thực tế nhưng vẫn đủ rõ khi thi đấu
+- Ba lựa chọn bóng Classic, Volt và Crimson dùng chung pipeline texture; đổi mẫu có dọn texture GPU cũ
+- Canvas fallback cũng dùng panel cong và màu bóng đã chọn thay cho cụm chấm tròn dạng đồ chơi
+
 ## Đồ họa Sprint 1
 
 - Sân cỏ procedural với vệt cắt, chi tiết mặt cỏ và ánh đèn
