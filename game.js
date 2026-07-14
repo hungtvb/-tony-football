@@ -14,6 +14,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
 import { createGameFeelController } from "./src/game/presentation/GameFeelController.js";
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
+import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -104,6 +105,7 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const gameFeel = createGameFeelController({ lowPowerDevice, reducedMotion });
   const audioFeedback = createAudioFeedbackController();
+  const contextualParticles = createContextualParticlePolicy({ lowPowerDevice, reducedMotion });
   let players = [];
   const FO4_CONTROLS = Object.freeze({
     sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
@@ -273,7 +275,7 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
     const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
     const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot");
     if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}
-    game.stats.shots[player.team] += 1; const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
+    game.stats.shots[player.team] += 1; spawnContextParticles(player.x+player.dirX*18,player.y+player.dirY*18,.55+power*1.2); const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
 
   function tackle(player) {
@@ -281,7 +283,7 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
     const opponent = ball.owner && ball.owner.team !== player.team ? ball.owner : closestPlayer(player.team === HOME ? AWAY : HOME, player);
     if (!opponent || distance(player, opponent) > 48) return;
     player.cooldown = .7; triggerAnimation(player, "tackle", .38); const chance = .48 + (player.rating - opponent.rating) * .012;
-    for (let i = 0; i < 5; i += 1) spawnParticle(player.x + player.dirX * 14, player.y + player.dirY * 14, i % 2 ? "#b7cf75" : "#5d8a49", .5);
+    spawnContextParticles(player.x+player.dirX*14,player.y+player.dirY*14,.8);
     if (ball.owner === opponent && Math.random() < chance) {
       ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
       ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`); kickSound(.3);
@@ -458,7 +460,7 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
     const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
     game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.owner = null; game.goalScorer = scorer; goalSound();
     game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
-    game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: 3.65 };
+    game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: reducedMotion ? 3.15 : 3.65 };
     for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", 3.65, player === scorer ? 1 : .65);
     for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
     announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(team);
@@ -497,6 +499,11 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
     if (game.particles.length >= gameFeel.particleBudget()) return;
     const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 150 * energy;
     game.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: .4 + Math.random() * .7, max: 1.1, color, size: 2 + Math.random() * 4 });
+  }
+
+  function spawnContextParticles(x,y,energy=1){
+    const burst=contextualParticles.burst({energy,weather:game.weather,pitchStyle:game.pitchStyle});
+    for(let i=0;i<burst.count;i+=1)spawnParticle(x,y,burst.colors[i%burst.colors.length],burst.energy);
   }
 
   function updateParticles(dt) {
@@ -930,7 +937,7 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
     else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,lowPowerDevice?26:20,lowPowerDevice?38:31+targetZ*.18);cameraLook.set(targetX,1.2,targetZ);}
     else{cameraTarget.set(targetX,(lowPowerDevice?52:44)+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),(lowPowerDevice?62:52)+targetZ*.08);cameraLook.set(targetX,.7,targetZ);}
     const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
-    const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
+    const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
   }
 
