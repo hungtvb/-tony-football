@@ -43,6 +43,11 @@ export class FixedClock {
       this.accumulatorSeconds %= this.fixedDeltaSeconds;
     }
 
+    const tolerance = this.fixedDeltaSeconds * 1e-9;
+    if (Math.abs(this.accumulatorSeconds) < tolerance) this.accumulatorSeconds = 0;
+    if (this.accumulatorSeconds >= this.fixedDeltaSeconds) this.accumulatorSeconds %= this.fixedDeltaSeconds;
+    if (this.accumulatorSeconds < 0) this.accumulatorSeconds = 0;
+
     return {
       steps,
       alpha: this.accumulatorSeconds / this.fixedDeltaSeconds,
