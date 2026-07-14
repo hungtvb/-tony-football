@@ -6,7 +6,7 @@
   "description": "A polished 6v6 mini football game that runs in the browser.",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --check game.js && node --check server.mjs && node scripts/validate-assets.mjs && node --test tests/simulation/*.test.mjs"
+    "test": "node --check game.js && node --check server.mjs && node scripts/validate-assets.mjs && node --test tests/simulation/*.test.mjs tests/presentation/*.test.mjs"
   },
   "dependencies": {
     "three": "0.185.1"
