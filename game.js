@@ -99,7 +99,8 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
     goalSequence: null, goalScorer: null, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
-  const gameFeel = createGameFeelController();
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const gameFeel = createGameFeelController({ lowPowerDevice, reducedMotion });
   let players = [];
   const FO4_CONTROLS = Object.freeze({
     sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
@@ -437,7 +438,7 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
       }
     }
 
-    ball.trail.unshift({ x: ball.x, y: ball.y, height:ball.height }); if (ball.trail.length > 8) ball.trail.pop();
+    const visualSpeed=Math.hypot(ball.vx,ball.vy);const trailLimit=gameFeel.trailPointCount(visualSpeed);ball.trail.unshift({ x: ball.x, y: ball.y, height:ball.height }); while(ball.trail.length>trailLimit)ball.trail.pop();
     const inGoalMouth = ball.y > FIELD.goalTop && ball.y < FIELD.goalBottom;
     if(inGoalMouth&&ball.height<3.25&&ball.x>FIELD.right+20){goal(HOME);return;}
     if(inGoalMouth&&ball.height<3.25&&ball.x<FIELD.left-20){goal(AWAY);return;}
@@ -490,6 +491,7 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
   }
 
   function spawnParticle(x, y, color, energy = 1) {
+    if (game.particles.length >= gameFeel.particleBudget()) return;
     const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 150 * energy;
     game.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: .4 + Math.random() * .7, max: 1.1, color, size: 2 + Math.random() * 4 });
   }
@@ -902,7 +904,7 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
   }
 
   function updateParticleView() {
-    const positions=particleView.geometry.attributes.position.array; const colors=particleView.geometry.attributes.color.array; const count=Math.min(300,game.particles.length);
+    const positions=particleView.geometry.attributes.position.array; const colors=particleView.geometry.attributes.color.array; const count=Math.min(gameFeel.particleBudget(),game.particles.length);
     for(let i=0;i<count;i+=1){const p=game.particles[i];const j=i*3;positions[j]=worldX(p.x);positions[j+1]=.35+Math.max(0,(p.max-p.life))*1.8;positions[j+2]=worldZ(p.y);const color=new THREE.Color(p.color);colors[j]=color.r;colors[j+1]=color.g;colors[j+2]=color.b;}
     particleView.geometry.setDrawRange(0,count);particleView.geometry.attributes.position.needsUpdate=true;particleView.geometry.attributes.color.needsUpdate=true;
   }
@@ -1076,8 +1078,8 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
   function drawBall() {
     const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;
     ctx.save();
-    for (let i = ball.trail.length - 1; i >= 0; i -= 1) { const point = ball.trail[i]; ctx.globalAlpha = (1 - i / ball.trail.length) * .08; ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(point.x, point.y, ball.radius * (1 - i / 12), 0, Math.PI * 2); ctx.fill(); }
-    ctx.globalAlpha = 1; ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(ball.x + 5, ball.y + 9, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+    const visualSpeed=Math.hypot(ball.vx,ball.vy);for(let i=ball.trail.length-1;i>=0;i-=1){const point=ball.trail[i];ctx.globalAlpha=gameFeel.trailOpacity(i,ball.trail.length,visualSpeed);ctx.fillStyle="white";ctx.beginPath();ctx.arc(point.x,point.y,Math.max(1.5,ball.radius*(1-i/(ball.trail.length+4))),0,Math.PI*2);ctx.fill();}
+    const shadow=gameFeel.ballShadow(ball.height||0);ctx.globalAlpha=shadow.opacity;ctx.fillStyle="black";ctx.beginPath();ctx.ellipse(ball.x+5,ball.y+9,12*shadow.scale,5*shadow.scale,0,0,Math.PI*2);ctx.fill();
     ctx.translate(ball.x, ball.y); ctx.rotate(ball.angle);
     const ballShade=ctx.createRadialGradient(-3,-4,1,0,0,ball.radius+2);ballShade.addColorStop(0,"#fff");ballShade.addColorStop(.56,cssColor(style.base));ballShade.addColorStop(1,"#747d78");
     ctx.fillStyle=ballShade;ctx.beginPath();ctx.arc(0,0,ball.radius,0,Math.PI*2);ctx.fill();ctx.save();ctx.clip();ctx.strokeStyle=style.stroke;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,-3);ctx.bezierCurveTo(-3,-8,3,-8,11,-2);ctx.moveTo(-9,6);ctx.bezierCurveTo(-2,1,4,2,10,7);ctx.moveTo(-4,-11);ctx.bezierCurveTo(1,-4,-1,4,4,11);ctx.stroke();ctx.fillStyle=cssColor(style.patch);for(const [x,y,r] of [[-4,-4,.2],[5,2,-.25],[-2,7,.1]]){ctx.save();ctx.translate(x,y);ctx.rotate(r);ctx.beginPath();ctx.moveTo(-3,-1);ctx.quadraticCurveTo(0,-4,4,-2);ctx.lineTo(2,2);ctx.quadraticCurveTo(-1,4,-4,1);ctx.closePath();ctx.fill();ctx.restore();}ctx.restore();ctx.strokeStyle=style.stroke;ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(0,0,ball.radius,0,Math.PI*2);ctx.stroke();
