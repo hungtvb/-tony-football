@@ -40,4 +40,4 @@ replaceOnce(
 );
 
 await writeFile(path, source);
-console.log("Applied U2 review fixes");
+console.log("Applied U2 review fixes safely");
