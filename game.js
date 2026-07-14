@@ -43,9 +43,9 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     midnight:{top:"#075943",mid:"#064b38",bottom:"#043d2e",outside:"#030c09",grass:0x08795a,tint:0xc4e9dc,wet:0x86b8a9}
   };
   const BALL_STYLES = {
-    classic:{base:0xf6f7f5,patch:0x151c19,stroke:"#17201d"},
-    volt:{base:0xdff44a,patch:0x172019,stroke:"#20300d"},
-    crimson:{base:0xf2f3f1,patch:0xc92832,stroke:"#6d1119"}
+    classic:{base:0xf3f4ef,patch:0x17201d,stroke:"#59635e"},
+    volt:{base:0xdff44a,patch:0x172019,stroke:"#5b681b"},
+    crimson:{base:0xf2f3f1,patch:0xc92832,stroke:"#7c3439"}
   };
   const WEATHER_STYLES={clear:true,rain:true};
 
@@ -593,10 +593,10 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   async function loadPlayerAsset() {
     const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);setAssetStatus("loading","MODEL · LOADING","Đang tải football-character-v2.glb");
     try{
-      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 18.0 ONLINE · LOADING MOTION";
+      const character=await loadGLBWithRetry(loader,"assets/models/football-character-v2.glb?v=16.0.0","character");playerAsset={scene:character.scene,animations:[]};players.forEach(upgradePlayerView);setAssetStatus("ready","MODEL · READY","Character đã tải; animation đang tải nền");ui.commentary.textContent="PLAYER MODEL 19.0 ONLINE · LOADING MOTION";
     }catch(error){console.error("[PlayerAsset] Character failed; procedural fallback remains active",error);setAssetStatus("error","MODEL · FALLBACK",error?.message||String(error));ui.commentary.textContent="Không tải được model 3D · Đang dùng cầu thủ procedural";return;}
     try{
-      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 18.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
+      const motion=await loadGLBWithRetry(loader,"assets/models/football-animations-v2.glb?v=16.0.0","animations");installPlayerAnimations(motion.animations||[]);setAssetStatus("ready","PLAYER RIG · READY",`${motion.animations?.length||0} animation clips`);ui.commentary.textContent=`PLAYER RIG 19.0 ONLINE · ${motion.animations?.length||0} CLIPS`;
     }catch(error){console.error("[PlayerAsset] Animation failed; static model remains active",error);setAssetStatus("warning","MODEL READY · BASIC MOTION",error?.message||String(error));ui.commentary.textContent="Model 3D đã tải · Animation fallback đang hoạt động";}
   }
 
@@ -759,35 +759,52 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     const label = createLabelSprite(player, accent); root.add(label); scene3D.add(root); playerViews.set(player,{root,body,torso,head,leftLeg,rightLeg,leftArm,rightArm,marker,label}); if(playerAsset)upgradePlayerView(player);
   }
 
-  function addFootballKit(model,player) {
+  function shaderColor(value) {
+    const color=new THREE.Color(value);return`vec3(${color.r.toFixed(5)},${color.g.toFixed(5)},${color.b.toFixed(5)})`;
+  }
+
+  function createIntegratedKitMaterial(source,player,palette,skinColor) {
+    const hairColors=[0x231914,0x38241b,0x111413,0x5a351f];const hairColor=hairColors[(player.index+player.team)%hairColors.length];const bootColor=player.index%3===0?0xe64f3f:player.index%3===1?0xe7e9e7:0x141716;const keeper=player.role==="GK";
+    const material=source.clone();material.map=null;material.aoMap=null;material.metalnessMap=null;material.roughnessMap=null;material.color.set(0xffffff);material.roughness=.68;material.metalness=0;material.normalScale?.set(.52,.52);
+    const colors={skin:shaderColor(skinColor),hair:shaderColor(hairColor),jersey:shaderColor(palette.jersey),jerseyLight:shaderColor(palette.jerseyLight),shorts:shaderColor(palette.shorts),socks:shaderColor(palette.socks),trim:shaderColor(palette.trim),boots:shaderColor(bootColor)};
+    material.onBeforeCompile=(shader)=>{
+      shader.vertexShader=shader.vertexShader.replace("#include <common>","#include <common>\nvarying vec3 vKitPosition;").replace("#include <begin_vertex>","#include <begin_vertex>\nvKitPosition = position;");
+      shader.fragmentShader=shader.fragmentShader.replace("#include <common>","#include <common>\nvarying vec3 vKitPosition;").replace("#include <map_fragment>",`#include <map_fragment>
+        float kitY=vKitPosition.y;float kitX=abs(vKitPosition.x);vec3 kitColor=${colors.skin};
+        if(kitY < -.85) kitColor=${colors.boots};
+        else if(kitY < -.54) kitColor=${colors.socks};
+        if(kitY > -.06 && kitY < .20 && kitX < .27) kitColor=${colors.shorts};
+        bool kitTorso=kitY > .15 && kitY < .69 && kitX < .245;
+        bool kitSleeve=kitY > .48 && kitY < .70 && kitX >= .18 && kitX < .50;
+        if(kitTorso || kitSleeve) kitColor=${colors.jersey};
+        if(kitTorso && kitY > .42 && kitY < .47) kitColor=${colors.trim};
+        if(kitSleeve && kitX > .445) kitColor=${colors.trim};
+        if(kitTorso && kitY > .63 && kitX < .16) kitColor=${colors.jerseyLight};
+        ${keeper?`if(kitX > .74 && kitY > .53 && kitY < .65) kitColor=${colors.trim};`:""}
+        float hairLine=.895+.014*sin(vKitPosition.x*38.0)+.010*cos(vKitPosition.z*34.0);
+        if(kitY > hairLine) kitColor=${colors.hair};
+        diffuseColor.rgb=kitColor;`);
+    };
+    material.customProgramCacheKey=()=>`football-kit-v3-${player.team}-${player.role}-${player.index%4}`;material.needsUpdate=true;return material;
+  }
+
+  function applyIntegratedFootballKit(model,player) {
     const home=player.team===HOME;const keeper=player.role==="GK";const skinTones=[0xd89d78,0xb97958,0x8f5a3d,0xe5b08b];const skinColor=skinTones[(player.index+player.team)%skinTones.length];
     const palette=keeper
       ?{jersey:home?0x7650d6:0xe65348,jerseyLight:home?0xbca4ff:0xffa096,shorts:0x20212c,socks:home?0xbca4ff:0xffa096,trim:0xf5f7f6}
       :home
         ?{jersey:0xe1bb58,jerseyLight:0xffe9ae,shorts:0x171b1a,socks:0xe8d486,trim:0x161b19}
         :{jersey:0x32b8c8,jerseyLight:0xc4fbff,shorts:0x082e35,socks:0xb7edf2,trim:0xf0fbfa};
-    const jersey=new THREE.MeshPhysicalMaterial({color:palette.jersey,roughness:.5,metalness:.01,sheen:1,sheenColor:new THREE.Color(palette.jerseyLight),sheenRoughness:.72});
-    const trim=new THREE.MeshStandardMaterial({color:palette.trim,roughness:.64});const shorts=new THREE.MeshStandardMaterial({color:palette.shorts,roughness:.7});const socks=new THREE.MeshStandardMaterial({color:palette.socks,roughness:.78});
-    const boots=new THREE.MeshStandardMaterial({color:player.index%3===0?0xe64f3f:player.index%3===1?0xe7e9e7:0x141716,roughness:.38,metalness:.08});
-    model.traverse((node)=>{if(node.isMesh&&node.name==="SuperHero_Male"){const materials=Array.isArray(node.material)?node.material:[node.material];for(const material of materials){material.map=null;material.aoMap=null;material.metalnessMap=null;material.roughnessMap=null;material.color.set(skinColor);material.roughness=.72;material.metalness=0;material.needsUpdate=true;}}});
-    const attach=(boneName,geometry,material,position,scale=null)=>{const bone=model.getObjectByName(boneName);if(!bone)return null;const mesh=new THREE.Mesh(geometry,material);mesh.position.copy(position);if(scale)mesh.scale.copy(scale);mesh.castShadow=true;bone.add(mesh);return mesh;};
-    attach("spine_01",new THREE.CylinderGeometry(.29,.35,.48,16),jersey,new THREE.Vector3(0,.2,0),new THREE.Vector3(1,1,.76));
-    attach("spine_02",new THREE.CylinderGeometry(.255,.3,.31,16),jersey,new THREE.Vector3(0,.075,0),new THREE.Vector3(1,1,.76));
-    attach("spine_02",new THREE.BoxGeometry(.51,.055,.34),trim,new THREE.Vector3(0,.055,.005));
-    const collar=attach("spine_03",new THREE.TorusGeometry(.105,.022,7,16),trim,new THREE.Vector3(0,.1,0));if(collar)collar.rotation.x=Math.PI/2;
-    for(const side of ["l","r"]){attach(`upperarm_${side}`,new THREE.CylinderGeometry(.12,.135,.235,12),jersey,new THREE.Vector3(0,.105,0));attach(`upperarm_${side}`,new THREE.CylinderGeometry(.122,.122,.035,10),trim,new THREE.Vector3(0,.205,0));}
-    attach("pelvis",new THREE.BoxGeometry(.59,.31,.36),shorts,new THREE.Vector3(0,.08,0));
-    for(const side of ["l","r"]){attach(`thigh_${side}`,new THREE.CylinderGeometry(.14,.15,.22,12),shorts,new THREE.Vector3(0,.1,0));attach(`calf_${side}`,new THREE.CylinderGeometry(.098,.125,.3,12),socks,new THREE.Vector3(0,.3,0));attach(`foot_${side}`,new THREE.BoxGeometry(.18,.3,.14),boots,new THREE.Vector3(0,.08,.015));}
-    if(keeper){for(const side of ["l","r"]){const glove=attach(`hand_${side}`,new THREE.BoxGeometry(.15,.18,.11),trim,new THREE.Vector3(0,.07,0));if(glove)glove.rotation.x=.08;}}
-    const head=model.getObjectByName("Head");if(head){const style=(player.index+player.team*2)%4;const hairMaterial=new THREE.MeshStandardMaterial({color:[0x231914,0x38241b,0x111413,0x5a351f][(player.index+player.team)%4],roughness:.9});const cap=new THREE.Mesh(new THREE.SphereGeometry(.12,14,7,0,Math.PI*2,0,Math.PI*(style===1?.34:.48)),hairMaterial);cap.position.y=.055;cap.scale.set(style===2?1.08:1,style===1?.72:1,.93);cap.castShadow=true;head.add(cap);if(style===2){for(let i=0;i<5;i+=1){const curl=new THREE.Mesh(new THREE.SphereGeometry(.034,7,5),hairMaterial);curl.position.set((i-2)*.04,.145-Math.abs(i-2)*.008,.012);head.add(curl);}}if(style===3){const top=new THREE.Mesh(new THREE.BoxGeometry(.145,.065,.15),hairMaterial);top.position.set(0,.125,0);top.rotation.z=.08;head.add(top);}}
+    model.traverse((node)=>{if(!node.isMesh||node.name!=="SuperHero_Male")return;const source=Array.isArray(node.material)?node.material:[node.material];const integrated=source.map((material)=>createIntegratedKitMaterial(material,player,palette,skinColor));node.material=Array.isArray(node.material)?integrated:integrated[0];});
+    const head=model.getObjectByName("Head");
     const numberSpine=model.getObjectByName("spine_02");createRigSquadNumber(player,home&&!keeper?"#101413":"#f0fbfa",numberSpine);
     return{head,spine:model.getObjectByName("spine_03"),pelvis:model.getObjectByName("pelvis"),leftThigh:model.getObjectByName("thigh_l"),rightThigh:model.getObjectByName("thigh_r"),leftCalf:model.getObjectByName("calf_l"),rightCalf:model.getObjectByName("calf_r"),leftFoot:model.getObjectByName("foot_l"),rightFoot:model.getObjectByName("foot_r"),leftArm:model.getObjectByName("upperarm_l"),rightArm:model.getObjectByName("upperarm_r")};
   }
 
   function upgradePlayerView(player) {
-    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.setScalar(3.28);model.rotation.y=0;
+    const view=playerViews.get(player);if(!view||view.rig||!playerAsset)return;const model=cloneSkeleton(playerAsset.scene);model.scale.set(2.96,3.28,2.96);model.rotation.y=0;
     model.traverse((node)=>{if(!node.isMesh)return;node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;const source=Array.isArray(node.material)?node.material:[node.material];const mapped=source.map((material)=>{const clone=material.clone();clone.roughness=Math.max(.5,clone.roughness||.5);return clone;});node.material=Array.isArray(node.material)?mapped:mapped[0];});
-    const bones=addFootballKit(model,player);const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null,yaw:Math.atan2(player.dirX,player.dirY),...bones};
+    const bones=applyIntegratedFootballKit(model,player);const mixer=new THREE.AnimationMixer(model);const actions={};for(const clip of playerAsset.animations)actions[clip.name]=mixer.clipAction(clip);view.body.visible=false;view.root.add(model);view.rig={model,mixer,actions,state:"",lastTime:performance.now(),active:null,yaw:Math.atan2(player.dirX,player.dirY),...bones};
     switchRigAnimation(view,"Idle_Loop",true);
   }
 
@@ -821,11 +838,31 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
+  function cssColor(value) {return`#${value.toString(16).padStart(6,"0")}`;}
+
+  function createBallSurfaceTextures(style) {
+    const width=768;const height=384;const colorCanvas=document.createElement("canvas");const bumpCanvas=document.createElement("canvas");colorCanvas.width=bumpCanvas.width=width;colorCanvas.height=bumpCanvas.height=height;const paint=colorCanvas.getContext("2d");const bump=bumpCanvas.getContext("2d");
+    paint.fillStyle=cssColor(style.base);paint.fillRect(0,0,width,height);bump.fillStyle="#d8d8d8";bump.fillRect(0,0,width,height);
+    const drawSeams=(target,color,lineWidth)=>{target.strokeStyle=color;target.lineWidth=lineWidth;target.lineCap="round";target.lineJoin="round";
+      for(let i=0;i<6;i+=1){const x=(i+.5)*width/6;target.beginPath();target.moveTo(x-22,0);target.bezierCurveTo(x+42,height*.24,x-40,height*.74,x+20,height);target.stroke();}
+      for(let row=1;row<4;row+=1){const y=row*height/4;target.beginPath();target.moveTo(0,y+12);target.bezierCurveTo(width*.24,y-26,width*.72,y+24,width,y-10);target.stroke();}
+    };
+    drawSeams(paint,style.stroke,3.4);drawSeams(bump,"#444",7);
+    paint.fillStyle=cssColor(style.patch);paint.globalAlpha=.96;
+    const panels=[[92,76,-.18],[244,205,.22],[392,98,-.12],[548,270,.18],[685,146,-.2],[78,326,.14],[444,332,-.15]];
+    for(const [x,y,rotation] of panels){paint.save();paint.translate(x,y);paint.rotate(rotation);paint.beginPath();paint.moveTo(-28,-8);paint.quadraticCurveTo(-2,-28,30,-14);paint.lineTo(18,13);paint.quadraticCurveTo(-4,26,-31,10);paint.closePath();paint.fill();paint.restore();}
+    paint.globalAlpha=.34;paint.fillStyle="#ffffff";paint.fillRect(0,0,width,3);paint.globalAlpha=1;
+    const map=new THREE.CanvasTexture(colorCanvas);map.colorSpace=THREE.SRGBColorSpace;map.wrapS=THREE.RepeatWrapping;map.anisotropy=renderer3D?.capabilities?.getMaxAnisotropy?.()||1;
+    const bumpMap=new THREE.CanvasTexture(bumpCanvas);bumpMap.wrapS=THREE.RepeatWrapping;bumpMap.anisotropy=map.anisotropy;return{map,bumpMap};
+  }
+
+  function applyBallSurface(material,style) {
+    material.map?.dispose();material.bumpMap?.dispose();const textures=createBallSurfaceTextures(style);material.map=textures.map;material.bumpMap=textures.bumpMap;material.color.set(0xffffff);material.needsUpdate=true;
+  }
+
   function createBall3D() {
-    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ballView = new THREE.Group(); const baseMaterial=new THREE.MeshStandardMaterial({ color:style.base,roughness:.32,metalness:.05 });const white = new THREE.Mesh(new THREE.SphereGeometry(.82,20,16),baseMaterial); white.castShadow=true; ballView.add(white);
-    const patchMaterial = new THREE.MeshStandardMaterial({color:style.patch,roughness:.45}); const patchGeometry = new THREE.SphereGeometry(.18,8,6);
-    for (const [x,y,z] of [[0,.81,0],[0,-.81,0],[.81,0,0],[-.81,0,0],[0,0,.81],[0,0,-.81]]) { const patch=new THREE.Mesh(patchGeometry,patchMaterial); patch.position.set(x,y,z); ballView.add(patch); }
-    ballView.userData={baseMaterial,patchMaterial};scene3D.add(ballView);
+    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ballView=new THREE.Group();const material=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.58,metalness:0,clearcoat:.16,clearcoatRoughness:.7,bumpScale:.035});applyBallSurface(material,style);
+    const mesh=new THREE.Mesh(new THREE.SphereGeometry(.56,48,32),material);mesh.castShadow=true;mesh.receiveShadow=true;ballView.add(mesh);ballView.userData={mesh,material};scene3D.add(ballView);
   }
 
   function applyPitchStyle() {
@@ -837,7 +874,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   }
 
   function applyBallStyle() {
-    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;if(!ballView)return;ballView.userData.baseMaterial?.color.set(style.base);ballView.userData.patchMaterial?.color.set(style.patch);
+    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;if(!ballView)return;if(ballView.userData.material)applyBallSurface(ballView.userData.material,style);
   }
 
   function createParticleView() {
@@ -875,7 +912,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   function render3D(now) {
     const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
-    ballView.position.set(worldX(renderBall.x),.86+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
+    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
     if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
     const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
@@ -1033,14 +1070,13 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   }
 
   function drawBall() {
+    const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;
     ctx.save();
     for (let i = ball.trail.length - 1; i >= 0; i -= 1) { const point = ball.trail[i]; ctx.globalAlpha = (1 - i / ball.trail.length) * .08; ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(point.x, point.y, ball.radius * (1 - i / 12), 0, Math.PI * 2); ctx.fill(); }
     ctx.globalAlpha = 1; ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(ball.x + 5, ball.y + 9, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
     ctx.translate(ball.x, ball.y); ctx.rotate(ball.angle);
-    const ballShade = ctx.createRadialGradient(-3, -4, 1, 0, 0, ball.radius + 2); ballShade.addColorStop(0, "#fff"); ballShade.addColorStop(.65, "#eef2ef"); ballShade.addColorStop(1, "#87908b");
-    ctx.fillStyle = ballShade; ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#17201d"; ctx.lineWidth = 1.2; ctx.stroke();
-    ctx.fillStyle = "#17201d"; ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, Math.PI * 2); ctx.fill();
-    for (let i = 0; i < 5; i += 1) { const angle = i * Math.PI * 2 / 5; ctx.beginPath(); ctx.arc(Math.cos(angle) * 6, Math.sin(angle) * 6, 1.3, 0, Math.PI * 2); ctx.fill(); }
+    const ballShade=ctx.createRadialGradient(-3,-4,1,0,0,ball.radius+2);ballShade.addColorStop(0,"#fff");ballShade.addColorStop(.56,cssColor(style.base));ballShade.addColorStop(1,"#747d78");
+    ctx.fillStyle=ballShade;ctx.beginPath();ctx.arc(0,0,ball.radius,0,Math.PI*2);ctx.fill();ctx.save();ctx.clip();ctx.strokeStyle=style.stroke;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,-3);ctx.bezierCurveTo(-3,-8,3,-8,11,-2);ctx.moveTo(-9,6);ctx.bezierCurveTo(-2,1,4,2,10,7);ctx.moveTo(-4,-11);ctx.bezierCurveTo(1,-4,-1,4,4,11);ctx.stroke();ctx.fillStyle=cssColor(style.patch);for(const [x,y,r] of [[-4,-4,.2],[5,2,-.25],[-2,7,.1]]){ctx.save();ctx.translate(x,y);ctx.rotate(r);ctx.beginPath();ctx.moveTo(-3,-1);ctx.quadraticCurveTo(0,-4,4,-2);ctx.lineTo(2,2);ctx.quadraticCurveTo(-1,4,-4,1);ctx.closePath();ctx.fill();ctx.restore();}ctx.restore();ctx.strokeStyle=style.stroke;ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(0,0,ball.radius,0,Math.PI*2);ctx.stroke();
     ctx.restore();
   }
 
