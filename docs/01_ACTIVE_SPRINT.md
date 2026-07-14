@@ -1,31 +1,29 @@
 # Active Sprint
 
 ```yaml
-Sprint: U1
-Title: Match Experience and HUD Hierarchy
+Sprint: U2
+Title: Game Feel and Match Feedback
 Status: In Progress
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/U1_MATCH_EXPERIENCE.md
+Sprint document: docs/sprints/U2_GAME_FEEL.md
 Primary specs:
-  - docs/ui/HUD.md
-  - docs/ui/PREMATCH.md
-  - docs/ui/RADAR.md
-  - docs/ui/CONTROLS.md
-  - docs/ui/MENUS_SETTINGS.md
+  - docs/ui/GAME_FEEL.md
 Allowed focus:
-  - pre-match information architecture
-  - in-match HUD hierarchy
-  - radar readability
-  - contextual control hints
-  - pause menu structure
-  - settings information architecture
-  - responsive and accessible UI states
+  - smooth camera follow and zoom feedback
+  - bounded camera shake
+  - ball trail and spin presentation
+  - impact and goal feedback
+  - crowd and action audio layering
+  - weather-aware particles
+  - reduced-motion and low-power fallbacks
+  - effect pooling and performance guards
 Do not modify:
   - simulation timing
-  - movement or ball behavior
+  - player locomotion values
+  - ball physics values
+  - passing, shooting, or tackle balance
   - AI decisions
   - FO4 control mapping
-  - player models and animations
   - multiplayer or game modes
 ```
 
