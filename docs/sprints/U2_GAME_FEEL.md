@@ -54,6 +54,26 @@ Make every pass, shot, tackle, goal, replay, and camera transition feel more res
 - Reuse objects in hot loops.
 - Preserve WebGL and Canvas fallback paths.
 
+## Implemented
+
+- Frame-rate-independent camera easing.
+- Deterministic bounded camera impulses.
+- Strong-shot, tackle, and goal feedback hooks.
+- Shared flash decay behavior.
+- Speed-based ball trail length and opacity in Canvas fallback.
+- Height-aware ball shadow in Canvas fallback.
+- Particle budgets for desktop, low-power, and reduced-motion modes.
+- Reduced-motion disables camera shake and shortens flash emphasis.
+- Automated presentation tests for camera, impulse, trail, shadow, and budgets.
+
+## Remaining
+
+- Add a lightweight WebGL ball trail without per-frame object creation.
+- Add contextual grass, dust, and rain contact particles within the active budget.
+- Layer action and crowd audio with cooldowns.
+- Refine goal and replay emphasis.
+- Perform manual WebGL, Canvas fallback, low-power, and reduced-motion validation.
+
 ## Out of scope
 
 - Locomotion tuning
@@ -63,15 +83,6 @@ Make every pass, shot, tackle, goal, replay, and camera transition feel more res
 - New animations or player-model replacement
 - Multiplayer and modes
 - Full cinematic cutscenes
-
-## Implementation sequence
-
-1. Add centralized game-feel configuration.
-2. Isolate camera impulse and smoothing helpers.
-3. Add bounded visual feedback hooks to existing action events.
-4. Add pooled particles and audio cooldowns.
-5. Add reduced-motion and low-power guards.
-6. Run automated validation and manual browser checks.
 
 ## Acceptance criteria
 
