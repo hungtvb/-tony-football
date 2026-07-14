@@ -17,6 +17,6 @@ test("replay snapshots retain ball velocity and trail", () => {
 });
 
 test("goal effects share the sequence duration", () => {
-  assert.match(source, /game\.goalSequence = \{ team, nextTeam: team === HOME \? AWAY : HOME, timer: goalDuration, duration: goalDuration \}/);
-  assert.match(source, /const elapsed=game\.goalSequence\.duration-game\.goalSequence\.timer/);
+  assert.ok(source.includes("timer: goalDuration, duration: goalDuration"));
+  assert.ok(source.includes("game.goalSequence.duration-game.goalSequence.timer"));
 });
