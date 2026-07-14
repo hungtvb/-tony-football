@@ -70,8 +70,15 @@ for (const contract of [
 for (const legacyPrimitive of ["attach(\"spine_01\"", "patchGeometry", "new THREE.SphereGeometry(.82,20,16)"]) {
   if (gameSource.includes(legacyPrimitive)) throw new Error(`game.js: legacy primitive player/ball rendering returned: ${legacyPrimitive}`);
 }
-if (!indexSource.includes("BUILD 19.0 · ASSET REBUILD") || !indexSource.includes("game.js?v=19.0.0")) {
-  throw new Error("index.html: missing Build 19 asset rebuild version markers");
+
+for (const pageContract of [
+  "u1-match-experience.css",
+  "game.js?v=20.0.0",
+  "class=\"match-hud\"",
+  "class=\"overlay-card pre-match-card\"",
+  "class=\"overlay-card pause-card\""
+]) {
+  if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
 }
 
-console.log(`Player assets valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
+console.log(`Player assets and U1 page contract valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
