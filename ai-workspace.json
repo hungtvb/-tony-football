@@ -1,0 +1,15 @@
+{
+  "version": 5,
+  "entryPoint": "AGENTS.md",
+  "currentSprint": "G1",
+  "activeSprintFile": "docs/sprints/G1_FIXED_SIMULATION.md",
+  "readOrder": [
+    "docs/00_PROJECT_CONTEXT.md",
+    "docs/01_ACTIVE_SPRINT.md",
+    "docs/03_DEV_RULES.md",
+    "docs/sprints/G1_FIXED_SIMULATION.md",
+    "docs/gameplay/SIMULATION.md",
+    "docs/adr/ADR-001-FIXED-TIMESTEP.md"
+  ],
+  "outOfScope": ["multiplayer", "game modes", "career", "tournament", "backend"]
+}
