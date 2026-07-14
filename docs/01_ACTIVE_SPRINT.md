@@ -8,21 +8,29 @@ Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/U2_GAME_FEEL.md
 Primary specs:
   - docs/ui/GAME_FEEL.md
-Delivered focus:
-  - frame-rate-independent camera follow
-  - bounded camera impulses
+Delivered:
+  - frame-rate-independent camera smoothing
+  - bounded deterministic camera impulses
   - Canvas and WebGL ball trails
-  - contextual grass, dust, and rain particles
-  - cooldown-based audio feedback
-  - goal and replay presentation polish
-  - reduced-motion and low-power fallbacks
-Remaining validation:
-  - WebGL browser smoke test
-  - Canvas fallback smoke test
-  - sound on/off
-  - reduced-motion
-  - low-power device
-  - narrow and desktop layouts
+  - height-aware ball shadow
+  - contextual particles with device budgets
+  - cooldown-based action audio
+  - reduced-motion goal presentation
+  - replay-aware ball trail snapshots
+  - shared goal-sequence duration
+  - monotonic audio cooldown clock
+Validation complete:
+  - syntax validation
+  - asset and UI contract validation
+  - simulation tests
+  - presentation tests
+  - runtime regression tests
+Remaining:
+  - manual WebGL and Canvas fallback validation
+  - classic, dry, clear, and rain validation
+  - sound on/off validation
+  - reduced-motion and low-power validation
+  - narrow and desktop layout validation
 Do not modify:
   - simulation timing
   - player locomotion values
