@@ -3,7 +3,7 @@
 ```yaml
 Sprint: G1
 Title: Fixed Simulation Foundation
-Status: Planned
+Status: In Progress
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/G1_FIXED_SIMULATION.md
 Primary spec:
