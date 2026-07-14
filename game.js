@@ -11,6 +11,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
 import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
+import { createGameFeelController } from "./src/game/presentation/GameFeelController.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -98,6 +99,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
     goalSequence: null, goalScorer: null, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
+  const gameFeel = createGameFeelController();
   let players = [];
   const FO4_CONTROLS = Object.freeze({
     sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
@@ -267,7 +269,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
     const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot");
     if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}
-    game.stats.shots[player.team] += 1; announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
+    game.stats.shots[player.team] += 1; const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
 
   function tackle(player) {
@@ -278,7 +280,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     for (let i = 0; i < 5; i += 1) spawnParticle(player.x + player.dirX * 14, player.y + player.dirY * 14, i % 2 ? "#b7cf75" : "#5d8a49", .5);
     if (ball.owner === opponent && Math.random() < chance) {
       ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
-      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; announce(`${player.name} đoạt bóng!`); kickSound(.3);
+      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`); kickSound(.3);
     }
   }
 
@@ -450,7 +452,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   function goal(team) {
     if (game.goalSequence) return;
     const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
-    game.score[team] += 1; game.flash = 1; game.shake = 18; ball.owner = null; game.goalScorer = scorer; goalSound();
+    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.owner = null; game.goalScorer = scorer; goalSound();
     game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
     game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: 3.65 };
     for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", 3.65, player === scorer ? 1 : .65);
@@ -504,7 +506,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     const follow = game.state === "playing" ? .085 : 0;
     const desiredX = lerp(W / 2, ball.x, follow);
     const desiredY = lerp(H / 2, ball.y, follow);
-    const ease = 1 - Math.exp(-dt * 3.4);
+    const ease = gameFeel.cameraEase(dt,game.replay.active);
     camera.x = lerp(camera.x, desiredX, ease);
     camera.y = lerp(camera.y, desiredY, ease);
     camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * 2.8));
@@ -513,7 +515,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   }
 
   function update(dt) {
-    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); game.flash = Math.max(0, game.flash - dt * 1.3); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
     for (const player of players) {
@@ -922,7 +924,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,lowPowerDevice?66:60,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
     else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,lowPowerDevice?26:20,lowPowerDevice?38:31+targetZ*.18);cameraLook.set(targetX,1.2,targetZ);}
     else{cameraTarget.set(targetX,(lowPowerDevice?52:44)+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),(lowPowerDevice?62:52)+targetZ*.08);cameraLook.set(targetX,.7,targetZ);}
-    camera3D.position.lerp(cameraTarget,replayFrame ? .12 : .055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
+    const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
   }
