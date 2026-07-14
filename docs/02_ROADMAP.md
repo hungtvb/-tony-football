@@ -1,8 +1,9 @@
 # Development Roadmap
 
-## Phase 1 — Foundation
-- **G1** Fixed Simulation Foundation
-- **U1** HUD Hierarchy and Cleanup
+## Phase 1 — Foundation and Match Experience
+- **G1** Fixed Simulation Foundation — Done
+- **U1** Match Experience and HUD Hierarchy — In Progress
+- **U2** Game Feel and Presentation Feedback — Planned
 
 ## Phase 2 — Core Gameplay
 - **G2** Player Locomotion
@@ -20,17 +21,17 @@
 - **A6** Goalkeeper AI
 - **A7** Fair Difficulty
 
-## Phase 4 — UI/UX
-- **U2** Pre-Match Setup
-- **U3** Settings System
-- **U4** Radar Upgrade
-- **U5** Controls and Onboarding
-- **U6** Pause and Result Screens
-- **U7** Responsive and Accessibility
+## Phase 4 — Expanded UI/UX
+- **U3** Settings Implementation
+- **U4** Advanced Radar Modes
+- **U5** Controls and First-Match Onboarding
+- **U6** Match Statistics and Result Experience
+- **U7** Responsive and Accessibility Polish
 
 ## Phase 5 — Quality
 - **Q1** Debug Tools
 - **Q2** Deterministic Scenario Tests
 - **Q3** Balance and Performance
 
+## Execution rule
 Do not begin a later sprint until the active sprint is merged and verified unless the user explicitly changes priority.
