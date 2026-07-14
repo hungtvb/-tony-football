@@ -10,26 +10,37 @@
 
 ## Camera
 
-- Use smooth follow with a small dead zone.
+- Use smooth follow with frame-rate-independent easing.
 - Zoom changes must be gradual and bounded.
-- Shake is an impulse that decays quickly.
+- Shake is a deterministic impulse that decays quickly.
 - Normal passes use no shake.
-- Strong shots, posts, hard tackles, and goals may trigger small shake.
+- Strong shots, hard tackles, and goals may trigger small shake.
+- Reduced-motion mode disables camera offset while retaining non-motion feedback.
 - Goal emphasis must not prevent player control after replay completes.
 
 ## Ball
 
 - Trail length and opacity scale with visual speed.
 - Trail must disappear quickly at low speed.
+- Low-power and reduced-motion modes use shorter trails.
 - Spin cues are visual only.
-- Airborne ball shadow must communicate height without becoming detached or distracting.
+- Airborne ball shadow becomes smaller and lighter as height increases.
+- Canvas and WebGL paths may use different rendering techniques but must communicate the same state.
 
 ## Impact feedback
 
-- Use short-lived pooled particles.
+- Use short-lived pooled or capped particles.
 - Avoid full-screen white flashes.
 - Contact feedback should be localized where practical.
 - Do not spawn particles every simulation tick.
+
+## Particle budgets
+
+- Desktop budget: 240 active particles.
+- Low-power budget: 90 active particles.
+- Reduced-motion budget: 36 active particles.
+- Spawns above the active budget are discarded rather than allocating more objects.
+- WebGL draw range must respect the same active budget as Canvas.
 
 ## Goal feedback
 
@@ -52,7 +63,7 @@
 
 ## Performance
 
-- Pool reusable particle and impulse objects.
+- Pool reusable particle and impulse objects where practical.
 - Cap active effects.
 - Avoid DOM creation in the main loop.
 - Disable expensive effects on low-power devices.
