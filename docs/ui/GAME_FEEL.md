@@ -10,61 +10,50 @@
 
 ## Camera
 
-- Use smooth follow with frame-rate-independent easing.
-- Zoom changes must be gradual and bounded.
-- Shake is a deterministic impulse that decays quickly.
+- Camera follow uses frame-rate-independent easing.
+- Shake is a deterministic bounded impulse that decays quickly.
 - Normal passes use no shake.
-- Strong shots, hard tackles, and goals may trigger small shake.
-- Reduced-motion mode disables camera offset while retaining non-motion feedback.
-- Goal emphasis must not prevent player control after replay completes.
+- Strong shots, hard tackles, and goals may trigger small impulses.
+- Reduced-motion disables camera offsets.
 
 ## Ball
 
 - Trail length and opacity scale with visual speed.
-- Trail must disappear quickly at low speed.
-- Low-power and reduced-motion modes use shorter trails.
-- Spin cues are visual only.
-- Airborne ball shadow becomes smaller and lighter as height increases.
-- Canvas and WebGL paths may use different rendering techniques but must communicate the same state.
+- Trail disappears quickly at low speed.
+- Canvas and WebGL paths share the same trail policy.
+- WebGL trail reuses a fixed buffer and does not allocate objects each frame.
+- Airborne Canvas shadow communicates height with bounded scale and opacity.
 
 ## Impact feedback
 
-- Use short-lived pooled or capped particles.
-- Avoid full-screen white flashes.
-- Contact feedback should be localized where practical.
-- Do not spawn particles every simulation tick.
+- Shot and tackle contact points emit contextual particles.
+- Classic and elite pitches use grass palettes.
+- Dry pitch uses dust palettes.
+- Rain overrides pitch context and uses splash palettes.
+- Burst counts scale down on low-power and reduced-motion devices.
+- Active particles always respect the central particle budget.
 
-## Particle budgets
+## Goal and replay
 
-- Desktop budget: 240 active particles.
-- Low-power budget: 90 active particles.
-- Reduced-motion budget: 36 active particles.
-- Spawns above the active budget are discarded rather than allocating more objects.
-- WebGL draw range must respect the same active budget as Canvas.
-
-## Goal feedback
-
-- Use a brief score emphasis, crowd rise, camera impulse, and existing replay badge/flow.
-- Keep the sequence short enough to preserve match pace.
-- Reduced-motion mode uses opacity and audio emphasis instead of scale, shake, or aggressive movement.
+- Goal feedback uses score emphasis, crowd/stadium pulse, camera impulse, flash, and the existing replay flow.
+- Reduced-motion uses a shorter goal sequence and restrained pulse.
+- Replay timing and football simulation remain authoritative outside presentation controllers.
 
 ## Audio
 
-- Reuse the current Web Audio setup.
-- Add cooldowns for repetitive effects.
-- Crowd layers should rise for shots and goals, then settle.
-- Muting must silence all new layers.
-
-## Weather
-
-- Clear: restrained grass or dust contact.
-- Rain: restrained splash feedback.
-- Weather feedback is cosmetic and must not change physics.
+- Existing Web Audio output is preserved.
+- Kick, whistle, and goal channels use cooldowns to avoid stacking.
+- Kick tone profile scales with power.
+- Muting silences all presentation audio.
 
 ## Performance
 
-- Pool reusable particle and impulse objects where practical.
-- Cap active effects.
-- Avoid DOM creation in the main loop.
-- Disable expensive effects on low-power devices.
-- Preserve Canvas fallback with simpler equivalents.
+- Reuse buffers and controller state in hot paths.
+- Cap active particles by device capability.
+- Avoid per-frame DOM creation.
+- Preserve Canvas fallback.
+- Preserve low-power and reduced-motion fallbacks.
+
+## Validation
+
+Automated tests cover camera easing, impulse behavior, flash decay, trail policy, WebGL trail buffers, shadow scaling, device budgets, audio cooldowns, and contextual particle selection. Manual browser validation remains required before merge.
