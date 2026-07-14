@@ -9,6 +9,8 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
+import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -1172,12 +1174,22 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   function whistle(long = false) { tone(1450, long ? .5 : .25, "sine", .03); tone(1750, long ? .42 : .18, "sine", .02, .08); }
   function goalSound() { [392,523,659,784].forEach((note,index) => tone(note,.42,"square",.025,index*.09)); }
 
-  function loop(now) {
-    const dt = Math.min(.033, (now - game.lastTime) / 1000 || .016); game.lastTime = now; update(dt); render(now);
+  function simulationStep(dt) {
+    update(dt);
     if (game.messageTimer > 0) game.messageTimer -= dt;
-    if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
-    updateUI(); requestAnimationFrame(loop);
   }
+
+  function renderFrame(_alpha, now) {
+    render(now);
+    if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
+    updateUI();
+  }
+
+  const simulationLoop = createSimulationLoop({
+    update: simulationStep,
+    render: renderFrame,
+    clockOptions: gameplayConfig.simulation,
+  });
 
   function onKeyDown(event) {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
@@ -1218,5 +1230,5 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
   window.addEventListener("blur", () => { input.keys.clear();input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;input.bufferedAction=null;input.qTapStart=0;input.qConsumed=false;if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
-  init3D(); createTeams(); updateUI(); requestAnimationFrame(loop);
+  init3D(); createTeams(); updateUI(); simulationLoop.start();
 })();

@@ -2,10 +2,11 @@
   "name": "tony-football-max",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "A polished 6v6 mini football game that runs in the browser.",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --check game.js && node --check server.mjs && node scripts/validate-assets.mjs"
+    "test": "node --check game.js && node --check server.mjs && node scripts/validate-assets.mjs && node --test tests/simulation/*.test.mjs"
   },
   "dependencies": {
     "three": "0.185.1"
