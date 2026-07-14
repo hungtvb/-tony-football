@@ -13,6 +13,7 @@ import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
 import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
 import { createGameFeelController } from "./src/game/presentation/GameFeelController.js";
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
+import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -102,6 +103,7 @@ import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
   };
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const gameFeel = createGameFeelController({ lowPowerDevice, reducedMotion });
+  const audioFeedback = createAudioFeedbackController();
   let players = [];
   const FO4_CONTROLS = Object.freeze({
     sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
@@ -1175,9 +1177,10 @@ import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
     osc.type = type; osc.frequency.value = frequency; gain.gain.setValueAtTime(volume, audioContext.currentTime + delay); gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + delay + duration);
     osc.connect(gain).connect(audioContext.destination); osc.start(audioContext.currentTime + delay); osc.stop(audioContext.currentTime + delay + duration);
   }
-  function kickSound(power) { tone(110 + power * 90, .08, "triangle", .035 + power * .025); }
-  function whistle(long = false) { tone(1450, long ? .5 : .25, "sine", .03); tone(1750, long ? .42 : .18, "sine", .02, .08); }
-  function goalSound() { [392,523,659,784].forEach((note,index) => tone(note,.42,"square",.025,index*.09)); }
+  function audioNow() { return audioContext?.currentTime ?? performance.now() / 1000; }
+  function kickSound(power) { if(!audioFeedback.canPlay("kick",audioNow()))return;const profile=audioFeedback.kickProfile(power);tone(profile.frequency,profile.duration,"triangle",profile.volume); }
+  function whistle(long = false) { if(!audioFeedback.canPlay("whistle",audioNow()))return;tone(1450,long?.5:.25,"sine",.03);tone(1750,long?.42:.18,"sine",.02,.08); }
+  function goalSound() { if(!audioFeedback.canPlay("goal",audioNow()))return;[392,523,659,784].forEach((note,index)=>tone(note,.42,"square",.025,index*.09)); }
 
   function simulationStep(dt) {
     update(dt);
