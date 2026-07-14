@@ -33,8 +33,6 @@ jobs:
           if grep -q 'audioContext?.currentTime ?? performance.now() / 1000' game.js; then
             node scripts/apply-u2-review-fixes.mjs
           fi
-      - name: Run test suite
-        run: npm test
       - name: Commit applied review fixes
         run: |
           if ! git diff --quiet -- game.js; then
@@ -44,3 +42,5 @@ jobs:
             git commit -m "fix(u2): resolve reviewed runtime regressions [u2-review-fixed]"
             git push origin HEAD:feature/ui-u2-game-feel
           fi
+      - name: Run test suite
+        run: npm test
