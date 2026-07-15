@@ -1,82 +1,68 @@
 # Camera and HUD — Source of Truth
 
 ## Principles
-1. The pitch, ball, and controlled player are always visually dominant.
-2. Camera motion must improve anticipation, not simply center the ball.
-3. HUD information appears only where and when it helps a decision.
-4. The radar is a pure spatial instrument and contains no instructional text.
-5. WebGL and Canvas use the same camera and HUD state.
-6. Reduced-motion settings affect camera impulses and UI transitions.
+1. The pitch and active play remain the visual priority.
+2. Camera motion reveals useful space without chasing every small ball movement.
+3. Faster play shows more field, not less.
+4. Radar plots contain only field geometry and gameplay markers.
+5. Text, tutorials, commentary, and notices never cover the radar plot.
+6. Presentation state must not change gameplay state.
+7. Reduced-motion users receive the same information without nonessential animation.
 
 ## Camera contract
 
-### Framing
-- Camera framing considers the ball, selected player, attack direction, viewport aspect ratio, and replay state.
-- The lower-left and lower-right playable areas must not be cropped under normal match zoom.
-- Narrow layouts use wider zoom bounds and larger UI safe margins.
+### Normal play
+- Use a bounded logical zoom derived from ball speed.
+- Faster ball movement lowers logical zoom to reveal more field.
+- Apply velocity look-ahead with a strict maximum distance.
+- Apply a horizontal and vertical dead zone before moving the frame target.
+- Clamp the target to a safe range that preserves useful field edges.
+- Smooth position and zoom independently with frame-rate-safe exponential easing.
 
-### Dead zone
-- Small movement inside the dead zone does not move the camera target.
-- The target eases only after ball or selected player pressure approaches a dead-zone boundary.
-- Dead-zone dimensions are normalized to viewport size.
+### WebGL
+- Broadcast, tactical, and close presets consume the shared logical frame target.
+- Broadcast distance scales with logical zoom.
+- Goal and replay camera branches remain authoritative during their sequences.
+- Camera shake is presentation-only and applied after the stable target is calculated.
 
-### Look-ahead
-- Look-ahead favors the current attack direction and ball velocity.
-- It is clamped so the ball and selected player remain inside the safe area.
-- It decreases near restarts, goals, pause, and replay.
-
-### Safe area
-- The ball and selected player should remain inside configurable horizontal and vertical margins.
-- HUD occupancy contributes to safe margins.
-- Camera clamping must not expose space outside the pitch.
-
-### Zoom
-- Base zoom responds to aspect ratio, not device labels.
-- Dynamic zoom changes are subtle and rate-limited.
-- Counterattacks may zoom out slightly; no rapid pumping is allowed.
+### Canvas fallback
+- Keep the full playable field visible.
+- Do not introduce a crop or zoom transform unless parity tests and responsive validation are added first.
 
 ## Radar contract
-- No text, labels, hints, mode names, or status strings inside the radar plot bounds.
-- Ball marker has the highest contrast.
-- Selected-player marker is distinct from ordinary teammates by shape or ring, not color alone.
-- Team and opponent markers remain distinguishable under common color-vision deficiencies.
-- Goalkeeper markers may use a secondary shape treatment.
-- Radar opacity and scale must not obscure live play.
+- Map world positions using playable pitch bounds rather than the full canvas bounds.
+- Draw pitch boundary, halfway line, and center circle without labels.
+- Home and away players use distinct team colors.
+- The selected player has a separate outer ring.
+- The ball uses the highest-contrast marker and a dark outline.
+- No `fillText` or instructional content is allowed inside the radar renderer.
+
+## HUD safe regions
+- Bottom left: compact selected-player identity and stamina.
+- Bottom center: radar only.
+- Bottom right: contextual controls.
+- Commentary and notices stay above the radar on desktop.
+- On narrow layouts, transient commentary moves to a top safe region.
+- Overlay elements must not hide the lower-left or lower-right playable corners.
 
 ## HUD hierarchy
-1. Ball and selected player in the world.
-2. Power during an active charge.
-3. Radar during spatial decisions.
-4. Score and match clock.
-5. Player identity and stamina.
-6. Context hints and transient notices.
-
-## Visibility rules
-- Power bar: visible only while charging or briefly settling after release.
-- Player identity: appears on selection change and fades to a compact state.
-- Stamina: compact by default; more prominent below warning thresholds.
-- Context hint: transient, rate-limited, and placed outside radar bounds.
-- Debug information: never visible in production mode.
+1. Pitch, ball, and selected player.
+2. Radar during transitions and off-screen play.
+3. Score and clock.
+4. Selected-player identity and stamina.
+5. Contextual controls and commentary.
+6. Technical status, which should disappear after initialization.
 
 ## Motion contract
-- Common transitions use restrained 150–250 ms easing.
-- Score changes may use a single pulse or flip.
-- Radar markers do not animate in ways that distort position.
-- Reduced motion removes camera shake and large transforms while preserving state changes.
+- Score changes may use a short emphasis animation.
+- Player identity changes may use a restrained fade/slide.
+- Low stamina may use a gentle warning state, never a rapid flash.
+- Contextual controls may reduce prominence after onboarding.
+- All nonessential transitions are removed under `prefers-reduced-motion`.
 
-## Responsive contract
-- HUD uses safe-area insets and minimum tap/reading sizes.
-- Narrow layouts prioritize pitch visibility over decorative chrome.
-- Radar and controls may move, but never overlap.
-- Scoreboard remains readable without spanning excessive width.
-
-## Testing contract
-Required automated or source-level scenarios:
-- aspect-ratio-aware zoom bounds;
-- look-ahead clamp;
-- dead-zone stability;
-- safe-area preservation;
-- no text nodes inside radar bounds;
-- power/context visibility rules;
-- reduced-motion fallback;
-- WebGL/Canvas shared camera state.
+## Validation contract
+- Camera unit tests cover zoom direction, look-ahead cap, dead zone, and safe-area bounds.
+- Runtime contracts confirm WebGL consumes the shared frame target.
+- Radar contracts confirm no text rendering and configured marker hierarchy.
+- CSS contracts confirm commentary cannot overlap the radar at desktop and narrow breakpoints.
+- Manual validation covers lower-corner visibility, desktop, narrow layout, replay, Canvas fallback, and reduced motion.
