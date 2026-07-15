@@ -16,7 +16,7 @@ import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
-import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepVelocity } from "./src/game/gameplay/PlayerLocomotion.js";
+import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity } from "./src/game/gameplay/PlayerLocomotion.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -331,11 +331,8 @@ import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepVelocity
   }
 
   function moveToward(player, tx, ty, speed, dt) {
-    const dx = tx - player.x; const dy = ty - player.y; const n = normalize(dx, dy);
-    const wantedX = n.x * speed; const wantedY = n.y * speed; const response = 1 - Math.exp(-dt * 8);
-    player.vx = lerp(player.vx, wantedX, response); player.vy = lerp(player.vy, wantedY, response);
-    if (Math.hypot(dx, dy) < 8) { player.vx *= .7; player.vy *= .7; }
-    if (Math.abs(player.vx) + Math.abs(player.vy) > 4) { const dir = normalize(player.vx, player.vy); player.dirX = dir.x; player.dirY = dir.y; }
+    const movement=stepTowardTarget({x:player.x,y:player.y,vx:player.vx,vy:player.vy,dirX:player.dirX,dirY:player.dirY,targetX:tx,targetY:ty,speed,dt,config:locomotionConfig.ai});
+    player.vx=movement.vx;player.vy=movement.vy;player.dirX=movement.dirX;player.dirY=movement.dirY;
   }
 
   function passingLaneRisk(from,to,team) {
