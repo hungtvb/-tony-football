@@ -18,6 +18,7 @@ import { createContextualParticlePolicy } from "./src/game/presentation/Contextu
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
 import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
 import { captureEligibility, dribbleAnchor } from "./src/game/gameplay/BallControl.js";
+import { beginReceiving, controlPossession, createPossessionLifecycle, releasePossession, settleLoose } from "./src/game/gameplay/PossessionLifecycle.js";
 import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity, webGLHeading } from "./src/game/gameplay/PlayerLocomotion.js";
 
 (() => {
@@ -97,7 +98,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     }
   }
 
-  const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, height: 0, vz: 0, curve: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0 };
+  const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, height: 0, vz: 0, curve: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0, possession: createPossessionLifecycle() };
   const game = {
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
@@ -151,7 +152,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     });
     const taker = team === HOME ? players[4] : players[10];
     taker.x = W / 2 + (team === HOME ? -26 : 26); taker.y = H / 2;
-    ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.height=0;ball.vz=0;ball.curve=0;ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null; ball.angle = 0; ball.spin = 0;
+    ball.x = W / 2; ball.y = H / 2; ball.vx = ball.vy = 0; ball.height=0;ball.vz=0;ball.curve=0;ball.owner = null; ball.lastTouch = null; ball.lock = .8; ball.pendingPass = null; ball.angle = 0; ball.spin = 0; ball.possession=createPossessionLifecycle();
     game.selected = team === HOME ? taker : closestPlayer(HOME, ball, false);input.lastMode=team===HOME?"attack":"defense";input.bufferedAction=null;
     game.kickOffTimer = 1.25; announce(team === HOME ? "Tony FC giao bóng!" : "Neon United giao bóng!");
   }
@@ -209,12 +210,14 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if(candidates[0]?.score>20){game.selected=candidates[0].player;tone(610,.035,"sine",.025);}
   }
 
-  function setOwner(player) {
+  function possessionId(player) { return player ? `${player.team}:${player.index}` : null; }
+
+  function setOwner(player, touchOutcome = "clean") {
     if (ball.pendingPass && player.team === ball.pendingPass.team) {
       if (player.team === HOME) game.stats.completed += 1;
       ball.pendingPass = null;
     } else if (ball.pendingPass && player.team !== ball.pendingPass.team) ball.pendingPass = null;
-    ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;ball.height=0;ball.vz=0;ball.curve=0;player.controlBoost=.28;
+    ball.possession=beginReceiving(ball.possession,possessionId(player));ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;ball.height=0;ball.vz=0;ball.curve=0;ball.possession=controlPossession(ball.possession,possessionId(player),touchOutcome);player.controlBoost=.28;
     triggerAnimation(player, "receive", .2);
     if (player.team === HOME && player.role !== "GK") game.selected = player;
     if(player===game.selected&&input.bufferedAction&&performance.now()<=input.bufferedAction.expires){const buffered=input.bufferedAction;input.bufferedAction=null;executeAttackAction(buffered.code,buffered.charge,buffered.modifiers);}
@@ -225,7 +228,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function releaseBall(player, dx, dy, speed, type) {
-    const n = normalize(dx, dy); ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : type === "loft" ? .3 : .2;
+    const n = normalize(dx, dy); ball.possession=releasePossession(ball.possession,type,possessionId(player));ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : type === "loft" ? .3 : .2;
     ball.x = player.x + n.x * (player.radius + 10); ball.y = player.y + n.y * (player.radius + 10);
     ball.vx = n.x * speed + player.vx * .25; ball.vy = n.y * speed + player.vy * .25;
     ball.height=0;ball.vz=type==="loft"?10.8:type==="shot"?1.8:0;ball.curve=type==="shot"?clamp(n.y*1.45,-1.05,1.05):0;ball.spin = (player.team === HOME ? 1 : -1) * speed * .012;
@@ -289,7 +292,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     player.cooldown = .7; triggerAnimation(player, "tackle", .38); const chance = .48 + (player.rating - opponent.rating) * .012;
     spawnContextParticles(player.x+player.dirX*14,player.y+player.dirY*14,.8);
     if (ball.owner === opponent && Math.random() < chance) {
-      ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
+      ball.possession=releasePossession(ball.possession,"tackle",possessionId(opponent));ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
       ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`); kickSound(.3);
     }
   }
@@ -424,7 +427,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 
   function updateBall(dt) {
     ball.angle += ball.spin * dt; ball.spin *= Math.pow(.55, dt);ball.curve*=Math.pow(.3,dt);
-    if (ball.lock > 0) ball.lock -= dt;
+    if (ball.lock > 0) ball.lock -= dt; else if(!ball.owner&&ball.possession.state==="released") ball.possession=settleLoose(ball.possession);
     if (ball.pendingPass) { ball.pendingPass.timer -= dt; if (ball.pendingPass.timer <= 0) ball.pendingPass = null; }
     if (ball.owner) {
       const owner=ball.owner;ball.height=0;ball.vz=0;const precision=owner===game.selected&&!owner.sprinting;const speed=Math.hypot(owner.vx,owner.vy);const touch=Math.sin(owner.stepPhase);if(Math.abs(touch)>.82)owner.dribbleSide=touch>0?1:-1;const mode=owner.sprinting?"sprint":precision?"precision":"normal";const anchor=dribbleAnchor({owner,mode,stepPhase:owner.stepPhase,config:ballControlConfig.dribble});const follow=1-Math.exp(-dt*anchor.followRate);ball.x=lerp(ball.x,anchor.x,follow);ball.y=lerp(ball.y,anchor.y,follow);ball.vx=owner.vx;ball.vy=owner.vy;
@@ -457,7 +460,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   function goal(team) {
     if (game.goalSequence) return;
     const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
-    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.owner = null; game.goalScorer = scorer; goalSound();
+    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.possession=releasePossession(ball.possession,"goal",possessionId(ball.owner));ball.owner = null; game.goalScorer = scorer; goalSound();
     game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
     const goalDuration=reducedMotion?3.15:3.65; game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: goalDuration, duration: goalDuration };
     for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", goalDuration, player === scorer ? 1 : .65);
