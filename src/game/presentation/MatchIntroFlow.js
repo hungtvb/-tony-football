@@ -5,10 +5,11 @@ import {
 
 const params = new URLSearchParams(window.location.search);
 const debugScenario = params.get("debugScenario");
+const introDisabled = params.has("skipIntro");
 const fastMode = params.has("visualTest") || params.has("introTest");
 const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const timings = fastMode
-  ? { versus: 120, countdown: 90, kickoff: 110 }
+  ? { versus: 520, countdown: 220, kickoff: 300 }
   : reducedMotion
     ? { versus: 220, countdown: 140, kickoff: 180 }
     : { versus: 1350, countdown: 650, kickoff: 700 };
@@ -125,8 +126,7 @@ const presentation = createMatchPresentationState({
   onChange: ({ current }) => {
     ensureOverlay();
     overlay.dataset.stage = current;
-    if (current === MATCH_PRESENTATION_STATES.IDLE) delete document.body.dataset.introStage;
-    else document.body.dataset.introStage = current;
+    document.body.dataset.introStage = current;
     record(current);
   },
 });
@@ -156,8 +156,8 @@ function setCountdown(value) {
   ensureOverlay();
   overlay.dataset.countdown = String(value).toLowerCase().replaceAll(" ", "-");
   const countdown = overlay.querySelector("#introCountdown");
-  countdown.classList.remove("pulse");
   countdown.textContent = value;
+  countdown.classList.remove("pulse");
   void countdown.offsetWidth;
   countdown.classList.add("pulse");
   record(`countdown:${value}`);
@@ -176,7 +176,7 @@ function startNativeMatch() {
 }
 
 async function beginMatchIntro() {
-  if (running || debugScenario || !playButton) return;
+  if (running || debugScenario || introDisabled || !playButton) return;
 
   running = true;
   skipRequested = false;
@@ -224,7 +224,7 @@ document.addEventListener(
   "click",
   (event) => {
     const target = event.target instanceof Element ? event.target.closest("#playButton") : null;
-    if (!target || allowNativeStart || debugScenario) return;
+    if (!target || allowNativeStart || debugScenario || introDisabled) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     void beginMatchIntro();
@@ -234,8 +234,7 @@ document.addEventListener(
 
 window.__TONY_MATCH_INTRO__ = {
   ready: true,
-  disabled: Boolean(debugScenario),
-  reducedMotion,
+  disabled: Boolean(debugScenario || introDisabled),
   timings: { ...timings },
   history,
   start: beginMatchIntro,
