@@ -33,7 +33,11 @@ jobs:
           if grep -q 'function moveToward(player, tx, ty, speed, dt)' game.js && ! grep -q 'stepTowardTarget' game.js; then
             node scripts/apply-g2-ai-locomotion.mjs
           fi
-      - name: Run test suite
+      - name: Verify AI arrival behavior
+        run: node --test --test-name-pattern="AI target locomotion preserves" tests/gameplay/PlayerLocomotion.test.mjs
+      - name: Verify AI arrival damping
+        run: node --test --test-name-pattern="AI target locomotion damps" tests/gameplay/PlayerLocomotion.test.mjs
+      - name: Run full test suite
         run: npm test
       - name: Commit integrated AI locomotion
         run: |
