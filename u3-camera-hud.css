@@ -93,7 +93,7 @@
 }
 
 .match-toast {
-  bottom: clamp(124px, 11vw, 174px);
+  bottom: clamp(190px, 15vw, 236px);
   max-width: min(500px, 64%);
   background: rgba(2, 8, 9, .84);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
