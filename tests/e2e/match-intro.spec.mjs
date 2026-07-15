@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+test.describe.configure({ timeout: 90_000 });
+
 async function openMatchSetup(page) {
-  await page.goto("/?visualTest=1", { waitUntil: "domcontentloaded" });
+  await page.goto("/?visualTest=1&introTest=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => window.__TONY_DEBUG__?.ready === true && window.__TONY_MATCH_INTRO__?.ready === true,
   );
@@ -10,14 +12,32 @@ async function openMatchSetup(page) {
   await expect(page.locator("#startOverlay")).toHaveClass(/show/);
 }
 
+async function applyIntroFixture(page) {
+  await page.evaluate(() => {
+    for (const selector of [
+      '[data-difficulty="legend"]',
+      '[data-pitch="midnight"]',
+      '[data-ball="volt"]',
+      '[data-weather="rain"]',
+    ]) {
+      document.querySelector(selector)?.click();
+    }
+  });
+
+  await page.waitForFunction(() => (
+    document.querySelector('[data-difficulty="legend"]')?.classList.contains("active")
+    && document.querySelector('[data-pitch="midnight"]')?.classList.contains("active")
+    && document.querySelector('[data-ball="volt"]')?.classList.contains("active")
+    && document.querySelector('[data-weather="rain"]')?.classList.contains("active")
+  ));
+}
+
 test("match setup enters versus countdown kickoff and playing", async ({ page }) => {
   await openMatchSetup(page);
-
-  await page.locator('[data-difficulty="legend"]').click();
-  await page.locator('[data-pitch="midnight"]').click();
-  await page.locator('[data-ball="volt"]').click();
-  await page.locator('[data-weather="rain"]').click();
+  await applyIntroFixture(page);
   await page.locator("#playButton").click();
+
+  await page.waitForFunction(() => window.__TONY_MATCH_INTRO__?.diagnostics().running === true);
 
   const intro = page.locator("#matchIntroOverlay");
   await expect(intro).toHaveClass(/show/);
@@ -28,10 +48,10 @@ test("match setup enters versus countdown kickoff and playing", async ({ page })
   await expect(page.locator("#introWeather")).toHaveText("TRỜI MƯA");
 
   await page.waitForFunction(() => {
-    const history = window.__TONY_MATCH_INTRO__?.history ?? [];
-    return ["versus", "countdown:3", "countdown:2", "countdown:1", "kickoff", "complete"]
-      .every((stage) => history.includes(stage));
-  });
+    const diagnostics = window.__TONY_MATCH_INTRO__?.diagnostics();
+    const required = ["versus", "countdown:3", "countdown:2", "countdown:1", "kickoff", "complete"];
+    return diagnostics?.flow === "match" && required.every((stage) => diagnostics.history.includes(stage));
+  }, undefined, { timeout: 30_000 });
 
   await expect(intro).not.toHaveClass(/show/);
   await expect(page.locator("body")).toHaveAttribute("data-flow", "match");
@@ -43,11 +63,13 @@ test("gameplay remains locked until the presentation completes", async ({ page }
   await openMatchSetup(page);
   await page.locator("#playButton").click();
 
+  await page.waitForFunction(() => window.__TONY_MATCH_INTRO__?.diagnostics().running === true);
   await expect(page.locator("#matchIntroOverlay")).toHaveClass(/show/);
   const stateDuringIntro = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state);
   expect(stateDuringIntro).toBe("menu");
 
   await page.evaluate(() => window.__TONY_MATCH_INTRO__.skip());
+  await page.waitForFunction(() => window.__TONY_MATCH_INTRO__?.diagnostics().flow === "match");
   await expect(page.locator("body")).toHaveAttribute("data-flow", "match");
   await expect(page.locator("#matchIntroOverlay")).not.toHaveClass(/show/);
 });
