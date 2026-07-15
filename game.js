@@ -16,7 +16,7 @@ import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
-import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity } from "./src/game/gameplay/PlayerLocomotion.js";
+import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity, webGLHeading } from "./src/game/gameplay/PlayerLocomotion.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -351,10 +351,10 @@ import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTa
     if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
     const controlledLocomotion=locomotionConfig.controlled;const hasMove=controlMagnitude>controlledLocomotion.minimumMoveMagnitude;
     if(precision&&!attacking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const face=normalize(markTarget.x-player.x,markTarget.y-player.y);player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*20));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*20));}}
-    const canSprint=sprinting&&!precision&&player.stamina>controlledLocomotion.sprintStaminaThreshold;const boost=canSprint?controlledLocomotion.sprintMultiplier:1;
+    const wasSprinting=player.sprinting;const canSprint=sprinting&&!precision&&player.stamina>controlledLocomotion.sprintStaminaThreshold;const boost=canSprint?controlledLocomotion.sprintMultiplier:1;
     player.sprinting=canSprint&&hasMove;player.controlBoost=Math.max(0,player.controlBoost-dt);const baseSpeed=marking?controlledLocomotion.markingSpeed:precision?controlledLocomotion.precisionSpeed:controlledLocomotion.baseSpeed;const speed=baseSpeed*boost*controlMagnitude;
     if(hasMove){
-      const turn=chooseTurnResponse({currentX:player.vx||controlX,currentY:player.vy||controlY,desiredX:controlX,desiredY:controlY,config:controlledLocomotion,boosted:player.controlBoost>0});const response=marking?controlledLocomotion.markingResponse:precision?controlledLocomotion.precisionResponse:turn.response;const velocity=stepVelocity({vx:player.vx,vy:player.vy,desiredX:controlX,desiredY:controlY,targetSpeed:speed,dt,response,turnGrip:turn.turnGrip});player.vx=velocity.vx;player.vy=velocity.vy;
+      const turn=chooseTurnResponse({currentX:player.vx||controlX,currentY:player.vy||controlY,desiredX:controlX,desiredY:controlY,config:controlledLocomotion,boosted:player.controlBoost>0});const baseResponse=marking?controlledLocomotion.markingResponse:precision?controlledLocomotion.precisionResponse:turn.response;const response=chooseSprintTransitionResponse({wasSprinting,sprinting:player.sprinting,baseResponse,config:controlledLocomotion});const velocity=stepVelocity({vx:player.vx,vy:player.vy,desiredX:controlX,desiredY:controlY,targetSpeed:speed,dt,response,turnGrip:turn.turnGrip});player.vx=velocity.vx;player.vy=velocity.vy;
       const face=marking&&markTarget?normalize(markTarget.x-player.x,markTarget.y-player.y):{x:controlX,y:controlY};const facing=stepFacing({dirX:player.dirX,dirY:player.dirY,targetX:face.x,targetY:face.y,dt,response:controlledLocomotion.facingResponse});player.dirX=facing.dirX;player.dirY=facing.dirY;
     }else{const velocity=dampVelocity({vx:player.vx,vy:player.vy,dt,damping:controlledLocomotion.stopDamping});player.vx=velocity.vx;player.vy=velocity.vy;}
     player.stamina=stepStamina({stamina:player.stamina,moving:hasMove,sprinting:player.sprinting,precision,magnitude:input.magnitude,dt,config:controlledLocomotion});
@@ -904,7 +904,7 @@ import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTa
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
     if(view.rig){updateRigPlayer(player,pose,view,now,speed);return;}
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
-    const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=pose.motionYaw??Math.atan2(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025-(pose.turnLean||0)*.16; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
+    const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=pose.motionYaw??webGLHeading(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025-(pose.turnLean||0)*.16; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
@@ -943,7 +943,7 @@ import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTa
     const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
     if(selected){ctx.strokeStyle=!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
-    ctx.rotate(Math.atan2(pose.dirY,pose.dirX)+Math.PI/2);ctx.lineCap="round";
+    ctx.rotate(canvasHeading(pose.dirX,pose.dirY));ctx.lineCap="round";
     ctx.strokeStyle=sock;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-6,10);ctx.lineTo(-7+stride,25);ctx.moveTo(6,10);ctx.lineTo(7-stride,25);ctx.stroke();ctx.strokeStyle="#191c1b";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-10+stride,26);ctx.lineTo(-5+stride,26);ctx.moveTo(3-stride,26);ctx.lineTo(10-stride,26);ctx.stroke();
     ctx.fillStyle=shorts;ctx.beginPath();ctx.roundRect(-11,4,22,12,4);ctx.fill();ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(-13,-15,26,22,7);ctx.fill();ctx.fillStyle=home?"#161b19":"#e4f5f3";ctx.fillRect(-12,-5,24,3);
     ctx.strokeStyle=jersey;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-11,-9);ctx.lineTo(-18-stride*.35,3);ctx.moveTo(11,-9);ctx.lineTo(18+stride*.35,3);ctx.stroke();ctx.strokeStyle=skin;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-18-stride*.35,3);ctx.lineTo(-20-stride*.35,9);ctx.moveTo(18+stride*.35,3);ctx.lineTo(20+stride*.35,9);ctx.stroke();
@@ -1053,7 +1053,7 @@ import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTa
     }
     const strideScale = clamp(speed / 170, .45, 1.3); const stride = running ? Math.sin(player.stepPhase) * 5.5 * strideScale : 0;
     const bob = running ? Math.abs(Math.sin(player.stepPhase)) * -1.8 : 0;
-    const angle = Math.atan2(player.dirY, player.dirX) + Math.PI / 2;
+    const angle = canvasHeading(player.dirX, player.dirY);
     if (divePose) ctx.rotate(player.animPower * divePose * .72);
     ctx.rotate(angle); ctx.translate(0, bob - kickPose * 1.5); ctx.scale(1 + receivePose * .06, 1 - receivePose * .08);
     const keeper = player.role === "GK";
