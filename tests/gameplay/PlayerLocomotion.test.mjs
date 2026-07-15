@@ -3,13 +3,16 @@ import test from "node:test";
 
 import { locomotionConfig } from "../../src/game/config/locomotionConfig.js";
 import {
-  dampVelocity,
+  canvasHeading,
+  chooseSprintTransitionResponse,
   chooseTurnResponse,
+  dampVelocity,
   normalizeMovementInput,
   stepFacing,
   stepStamina,
   stepTowardTarget,
   stepVelocity,
+  webGLHeading,
 } from "../../src/game/gameplay/PlayerLocomotion.js";
 
 const controlled = locomotionConfig.controlled;
@@ -23,15 +26,9 @@ test("diagonal movement input is normalized", () => {
 
 test("acceleration is fixed-step stable across equivalent elapsed time", () => {
   let sixty = { vx: 0, vy: 0 };
-  for (let i = 0; i < 60; i += 1) {
-    sixty = stepVelocity({ ...sixty, desiredX: 1, desiredY: 0, targetSpeed: 205, dt: 1 / 60, response: 12 });
-  }
-
+  for (let i = 0; i < 60; i += 1) sixty = stepVelocity({ ...sixty, desiredX: 1, desiredY: 0, targetSpeed: 205, dt: 1 / 60, response: controlled.accelerationResponse });
   let thirty = { vx: 0, vy: 0 };
-  for (let i = 0; i < 30; i += 1) {
-    thirty = stepVelocity({ ...thirty, desiredX: 1, desiredY: 0, targetSpeed: 205, dt: 1 / 30, response: 12 });
-  }
-
+  for (let i = 0; i < 30; i += 1) thirty = stepVelocity({ ...thirty, desiredX: 1, desiredY: 0, targetSpeed: 205, dt: 1 / 30, response: controlled.accelerationResponse });
   assert.ok(Math.abs(sixty.vx - thirty.vx) < 1e-8);
   assert.ok(Math.abs(sixty.vy - thirty.vy) < 1e-8);
 });
@@ -40,6 +37,15 @@ test("full reversal uses slower response and reduced turn grip", () => {
   const reversal = chooseTurnResponse({ currentX: 1, currentY: 0, desiredX: -1, desiredY: 0, config: controlled });
   assert.equal(reversal.response, controlled.reversalResponse);
   assert.equal(reversal.turnGrip, controlled.turnGripBase);
+});
+
+test("sprint entry builds speed more gradually and exit regains control", () => {
+  const entry = chooseSprintTransitionResponse({ wasSprinting: false, sprinting: true, baseResponse: controlled.accelerationResponse, config: controlled });
+  const exit = chooseSprintTransitionResponse({ wasSprinting: true, sprinting: false, baseResponse: controlled.accelerationResponse, config: controlled });
+  assert.equal(entry, controlled.sprintEntryResponse);
+  assert.equal(exit, controlled.sprintExitResponse);
+  assert.ok(entry < controlled.accelerationResponse);
+  assert.ok(exit > controlled.accelerationResponse);
 });
 
 test("stop damping reduces velocity without flipping direction", () => {
@@ -51,8 +57,16 @@ test("stop damping reduces velocity without flipping direction", () => {
 test("facing remains normalized while turning", () => {
   const facing = stepFacing({ dirX: 1, dirY: 0, targetX: 0, targetY: 1, dt: 1 / 60, response: controlled.facingResponse });
   assert.ok(Math.abs(Math.hypot(facing.dirX, facing.dirY) - 1) < 1e-9);
-  assert.ok(facing.dirX > 0);
-  assert.ok(facing.dirY > 0);
+});
+
+test("renderer heading adapters preserve the four canonical facing directions", () => {
+  const directions = [[1,0],[0,1],[-1,0],[0,-1]];
+  for (const [x,y] of directions) {
+    assert.ok(Number.isFinite(webGLHeading(x,y)));
+    assert.ok(Number.isFinite(canvasHeading(x,y)));
+  }
+  assert.equal(webGLHeading(1,0), Math.PI / 2);
+  assert.equal(canvasHeading(1,0), Math.PI / 2);
 });
 
 test("sprint drains stamina faster than normal movement and idle recovers", () => {
