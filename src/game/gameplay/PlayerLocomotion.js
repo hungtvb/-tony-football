@@ -32,6 +32,12 @@ export function chooseTurnResponse({ currentX, currentY, desiredX, desiredY, con
   return Object.freeze({ response, turnDot, turnGrip });
 }
 
+export function chooseSprintTransitionResponse({ wasSprinting, sprinting, baseResponse, config }) {
+  if (sprinting && !wasSprinting) return config.sprintEntryResponse;
+  if (!sprinting && wasSprinting) return config.sprintExitResponse;
+  return baseResponse;
+}
+
 export function stepVelocity({ vx, vy, desiredX, desiredY, targetSpeed, dt, response, turnGrip = 1 }) {
   const alpha = exponentialResponse(response, dt);
   return Object.freeze({
@@ -54,6 +60,14 @@ export function stepFacing({ dirX, dirY, targetX, targetY, dt, response }) {
     dirY || 0,
   );
   return Object.freeze({ dirX: blended.x, dirY: blended.y });
+}
+
+export function webGLHeading(dirX, dirY) {
+  return Math.atan2(dirX, dirY);
+}
+
+export function canvasHeading(dirX, dirY) {
+  return Math.atan2(dirY, dirX) + Math.PI / 2;
 }
 
 export function stepTowardTarget({ x, y, vx, vy, dirX, dirY, targetX, targetY, speed, dt, config }) {
