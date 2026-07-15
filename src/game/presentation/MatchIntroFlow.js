@@ -6,9 +6,12 @@ import {
 const params = new URLSearchParams(window.location.search);
 const debugScenario = params.get("debugScenario");
 const fastMode = params.has("visualTest") || params.has("introTest");
+const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const timings = fastMode
   ? { versus: 120, countdown: 90, kickoff: 110 }
-  : { versus: 1350, countdown: 650, kickoff: 700 };
+  : reducedMotion
+    ? { versus: 220, countdown: 140, kickoff: 180 }
+    : { versus: 1350, countdown: 650, kickoff: 700 };
 
 const playButton = document.getElementById("playButton");
 const matchSetup = document.getElementById("startOverlay");
@@ -122,7 +125,8 @@ const presentation = createMatchPresentationState({
   onChange: ({ current }) => {
     ensureOverlay();
     overlay.dataset.stage = current;
-    document.body.dataset.introStage = current;
+    if (current === MATCH_PRESENTATION_STATES.IDLE) delete document.body.dataset.introStage;
+    else document.body.dataset.introStage = current;
     record(current);
   },
 });
@@ -151,7 +155,11 @@ async function waitStage(duration, token) {
 function setCountdown(value) {
   ensureOverlay();
   overlay.dataset.countdown = String(value).toLowerCase().replaceAll(" ", "-");
-  overlay.querySelector("#introCountdown").textContent = value;
+  const countdown = overlay.querySelector("#introCountdown");
+  countdown.classList.remove("pulse");
+  countdown.textContent = value;
+  void countdown.offsetWidth;
+  countdown.classList.add("pulse");
   record(`countdown:${value}`);
 }
 
@@ -227,6 +235,7 @@ document.addEventListener(
 window.__TONY_MATCH_INTRO__ = {
   ready: true,
   disabled: Boolean(debugScenario),
+  reducedMotion,
   timings: { ...timings },
   history,
   start: beginMatchIntro,
