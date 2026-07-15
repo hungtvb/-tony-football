@@ -46,6 +46,6 @@ test("U3 HUD stylesheet is loaded after U1 and reserves a desktop toast gap abov
   const u1 = index.indexOf('href="u1-match-experience.css"');
   const u3 = index.indexOf('href="u3-camera-hud.css"');
   assert.ok(u1 >= 0 && u3 > u1);
-  assert.match(css, /\.match-toast\s*\{[^}]*bottom:\s*clamp\(196px, 16vw, 236px\)/s);
+  assert.match(css, /\.match-toast\s*\{[^}]*bottom:\s*clamp\(190px, 15vw, 236px\)/s);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.match-toast\s*\{[^}]*top:\s*8px/s);
 });
