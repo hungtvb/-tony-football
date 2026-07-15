@@ -3,33 +3,33 @@
 ```yaml
 Sprint: U3.3
 Title: Match Presentation
-Status: Implementation — Match Intro Foundation
+Status: Implementation — Goal Presentation and Replay Polish
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/U3_3_MATCH_PRESENTATION.md
 Primary goals:
-  - transition from Match Setup into gameplay through a broadcast VS screen
-  - reflect selected difficulty, pitch, ball, and weather
-  - run a deterministic 3 · 2 · 1 countdown and Kick Off stage
-  - keep gameplay input locked until native match initialization
-  - preserve immediate Restart and Play Again behavior
+  - detect confirmed score changes without moving score ownership out of game.js
+  - present a broadcast Goal → Score → Replay sequence
+  - reflect scoring team and live scoreline
+  - keep controls, goal delay, replay buffer, and kickoff behavior unchanged
+  - support desktop, narrow-landscape, and reduced-motion presentation
 Architecture:
-  - presentation state machine remains separate from simulation state
-  - MatchIntroFlow captures only the initial Start action
-  - game.js remains owner of reset, whistle, clock, kickoff, and simulation
+  - GoalPresentationFlow observes score DOM changes only while body flow is match
+  - GoalPresentationState owns presentation stages independently from simulation state
+  - game.js remains owner of goals, score, scorer animation, replay frames, and kickoff
+  - deterministic preview and hold hooks exist only for browser validation
 Validation required:
-  - state transition unit tests
-  - runtime integration contracts
-  - desktop Playwright flow
-  - narrow-landscape Playwright flow
-  - existing camera, HUD, pause, replay, and static-deploy tests
+  - goal presentation state transition unit tests
+  - runtime ownership and stylesheet contracts
+  - desktop Playwright goal flow
+  - narrow-landscape Playwright goal flow
+  - existing intro, camera, HUD, pause, replay, and static-deploy tests
 Do not modify:
+  - goal detection thresholds or goal sequence duration
+  - replay recording duration, frame rate, or playback calculation
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
   - FO4 control mapping
-  - AI tactics or formations
-  - Main Menu and Match Setup destination semantics
 Next slices:
-  - goal presentation and replay polish
   - result screen and match statistics
 ```
 
