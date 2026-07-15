@@ -11,10 +11,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  unit:
+    name: Unit and contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,25 +28,91 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Install dependencies and browser
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: Run unit test suite
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit validation
         shell: bash
         run: |
           set -o pipefail
-          npm test 2>&1 | tee unit-test.log
-      - name: Run browser validation
-        run: npm run test:e2e
-      - name: Upload test evidence
+          npm run test:unit 2>&1 | tee unit-test.log
+      - name: Upload unit evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: u3-2-test-evidence
+          name: unit-test-evidence
+          path: unit-test.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  playwright-desktop:
+    name: Playwright desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run desktop browser validation
+        run: npm run test:e2e:desktop
+      - name: Upload desktop evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-desktop-evidence
           path: |
-            unit-test.log
             playwright-report
             test-results
           if-no-files-found: ignore
           retention-days: 14
+
+  playwright-narrow:
+    name: Playwright narrow landscape
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run narrow browser validation
+        run: npm run test:e2e:narrow
+      - name: Upload narrow evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-narrow-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs:
+      - unit
+      - playwright-desktop
+      - playwright-narrow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required jobs
+        run: |
+          test "${{ needs.unit.result }}" = "success"
+          test "${{ needs.playwright-desktop.result }}" = "success"
+          test "${{ needs.playwright-narrow.result }}" = "success"
