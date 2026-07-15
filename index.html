@@ -18,7 +18,7 @@
       {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}
     </script>
   </head>
-  <body>
+  <body data-flow="main-menu">
     <main class="app-shell match-app">
       <header class="topbar match-topbar">
         <div class="brand compact-brand">
@@ -72,9 +72,27 @@
             </section>
           </section>
 
-          <div id="startOverlay" class="game-overlay show pre-match-overlay">
+          <div id="mainMenuOverlay" class="game-overlay show main-menu-overlay" role="dialog" aria-modal="true" aria-labelledby="mainMenuTitle">
+            <div class="overlay-card main-menu-card">
+              <section class="main-menu-hero">
+                <span class="eyebrow"><i></i> TONY FOOTBALL EXPERIENCE</span>
+                <div class="main-menu-logo" aria-hidden="true"><span>TF</span><b>MAX</b></div>
+                <h2 id="mainMenuTitle">SẴN SÀNG RA SÂN?</h2>
+                <p>Chọn chế độ chơi, chuẩn bị đội hình và bước vào trận cầu 6v6 tốc độ cao.</p>
+                <button id="quickMatchButton" class="primary-button main-menu-primary"><span>▶</span><b>QUICK MATCH</b><small>THIẾT LẬP TRẬN ĐẤU</small></button>
+              </section>
+              <section class="main-menu-modes" aria-label="Chế độ chơi">
+                <article class="mode-card active"><span>01</span><div><b>QUICK MATCH</b><small>Trận đấu 6v6 tùy chỉnh</small></div><em>PLAY</em></article>
+                <article class="mode-card locked" aria-disabled="true"><span>02</span><div><b>TRAINING</b><small>Luyện kỹ năng và tình huống</small></div><em>SOON</em></article>
+                <article class="mode-card locked" aria-disabled="true"><span>03</span><div><b>TOURNAMENT</b><small>Chinh phục Tony Cup</small></div><em>SOON</em></article>
+              </section>
+            </div>
+          </div>
+
+          <div id="startOverlay" class="game-overlay pre-match-overlay">
             <div class="overlay-card pre-match-card">
               <div class="pre-match-header">
+                <button id="setupBackButton" class="setup-back-button" aria-label="Quay lại màn hình đầu">← MÀN HÌNH ĐẦU</button>
                 <span class="eyebrow"><i></i> QUICK MATCH · 6V6</span>
                 <span class="match-chip">150 GIÂY</span>
               </div>
@@ -172,5 +190,6 @@
     </main>
 
     <script type="module" src="game.js?v=20.0.0"></script>
+    <script type="module" src="src/game/presentation/MainMenuFlow.js?v=1.0.0"></script>
   </body>
 </html>
