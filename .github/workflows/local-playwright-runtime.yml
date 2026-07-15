@@ -14,7 +14,7 @@ jobs:
   package-runtime:
     name: Package local runtime
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,8 +25,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies and Playwright Chromium
+        run: |
+          npm ci
+          npx playwright install chromium
 
       - name: Package source and dependencies
         shell: bash
@@ -38,12 +40,22 @@ jobs:
             --exclude=playwright-report \
             --exclude=test-results \
             -czf /tmp/tony-local-playwright-runtime.tgz .
+          tar -czf /tmp/tony-playwright-browsers.tgz -C "$HOME/.cache" ms-playwright
 
       - name: Upload local runtime
         uses: actions/upload-artifact@v4
         with:
           name: tony-local-playwright-runtime
           path: /tmp/tony-local-playwright-runtime.tgz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Playwright browsers
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-playwright-browsers
+          path: /tmp/tony-playwright-browsers.tgz
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
