@@ -1,40 +1,40 @@
 # Active Sprint
 
 ```yaml
-Sprint: G2
-Title: Player Movement and Locomotion
+Sprint: G3
+Title: Ball Control and First Touch
 Status: Implementation Complete — Manual Validation Pending
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/G2_PLAYER_MOVEMENT.md
+Sprint document: docs/sprints/G3_BALL_CONTROL_FIRST_TOUCH.md
 Primary specs:
-  - docs/gameplay/PLAYER_MOVEMENT.md
+  - docs/gameplay/BALL_CONTROL.md
 Delivered:
-  - centralized locomotion configuration
-  - pure deterministic locomotion helpers
-  - normalized diagonal input
-  - controlled-player acceleration, reversal, stop damping, facing, sprint, and stamina integration
-  - AI moveToward integration through shared target locomotion
-  - tuned acceleration, reversal, sprint entry, and sprint exit response
-  - shared WebGL and Canvas heading adapters
-  - kickoff, pause/resume, player-switch, and exhausted-sprint runtime contracts
+  - centralized ball-control configuration
+  - deterministic capture eligibility and first-touch scoring
+  - explicit loose, receiving, controlled, and released possession lifecycle
+  - clean, cushioned, heavy, and rejected first-touch outcomes
+  - cushioned residual velocity and loose-ball recapture locks
+  - precision, normal, and sprint dribble anchors
+  - replay owner identity and possession snapshots
+  - standard read-only CI with migration scripts removed
 Validation complete:
-  - movement unit tests
-  - fixed-step acceleration equivalence
-  - AI arrival and arrival-damping regression tests
-  - sprint transition and renderer heading tests
+  - capture lock, height, goalkeeper range, cooldown, and last-touch tests
+  - first-touch score, classification, and four outcome tests
+  - possession lifecycle and kickoff reset tests
+  - replay possession and cushioned-velocity regression contracts
   - clean-branch full repository npm test
 Remaining:
-  - manual acceleration, stop, 90-degree, and 180-degree validation
-  - manual sprint hold/release and low-stamina validation
-  - manual marking and precision movement validation
-  - manual WebGL and Canvas fallback orientation validation
-  - desktop and narrow-layout browser validation
+  - manual slow, fast, aerial, awkward-angle, precision, and sprint reception validation
+  - manual goalkeeper pickup and distribution validation
+  - manual buffered action, player switching, and post-tackle recovery validation
+  - manual replay, WebGL, Canvas fallback, desktop, and narrow-layout validation
 Do not modify:
   - simulation timing
   - FO4 control mapping
-  - ball physics or ownership rules
-  - passing, shooting, tackle, or goalkeeper balance
-  - AI decisions or team tactics
+  - pass or shot power balance
+  - tackle success probability
+  - goalkeeper decisions
+  - AI tactics or formations
   - multiplayer or game modes
 ```
 

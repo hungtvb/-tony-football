@@ -6,8 +6,8 @@
 - **U2** Game Feel and Presentation Feedback — Done
 
 ## Phase 2 — Core Gameplay
-- **G2** Player Locomotion — In Progress
-- **G3** Ball Control — Planned
+- **G2** Player Locomotion — Done
+- **G3** Ball Control and First Touch — In Progress
 - **G4** Passing — Planned
 - **G5** Shooting — Planned
 - **G6** Physical Contest — Planned
