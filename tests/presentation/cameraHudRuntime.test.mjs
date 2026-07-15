@@ -5,7 +5,6 @@ import test from "node:test";
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../../u3-camera-hud.css", import.meta.url), "utf8");
-const harness = await readFile(new URL("../../scripts/apply-u3-1-playwright-harness.mjs", import.meta.url), "utf8");
 
 function functionSource(name, nextName) {
   const start = game.indexOf(`  function ${name}`);
@@ -51,7 +50,9 @@ test("U3 HUD stylesheet is loaded after U1 and reserves a desktop toast gap abov
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.match-toast\s*\{[^}]*top:\s*8px/s);
 });
 
-test("Playwright harness uses the existing pause overlay UI binding", () => {
-  assert.match(harness, /ui\.pause\.classList\.remove\("show"\)/);
-  assert.doesNotMatch(harness, /ui\.pauseOverlay/);
+test("integrated Playwright harness uses the existing pause overlay UI binding", () => {
+  const source = functionSource("applyDebugScenario", "resize");
+  assert.match(source, /ui\.pause\.classList\.remove\("show"\)/);
+  assert.doesNotMatch(source, /ui\.pauseOverlay/);
+  assert.match(game, /window\.__TONY_DEBUG__/);
 });
