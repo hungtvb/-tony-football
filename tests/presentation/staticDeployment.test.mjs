@@ -18,6 +18,7 @@ test("Three.js import map uses browser-accessible HTTPS modules", () => {
 test("Vercel publishes the generated static bundle instead of the Node development server", () => {
   assert.equal(packageJson.scripts.start, "node scripts/dev-server.mjs");
   assert.equal(packageJson.scripts.build, "node scripts/build-static.mjs");
+  assert.equal(vercel.framework, null);
   assert.equal(vercel.buildCommand, "npm run build");
   assert.equal(vercel.outputDirectory, "dist");
 });
