@@ -1,13 +1,18 @@
 import { expect, test } from "@playwright/test";
 
 async function openGame(page) {
-  await page.goto("/?visualTest=1");
-  await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
+  await page.goto("/?visualTest=1&skipIntro=1");
+  await page.waitForFunction(
+    () => window.__TONY_DEBUG__?.ready === true && window.__TONY_MATCH_INTRO__?.ready === true,
+  );
 }
 
 async function startQuickMatch(page) {
   await page.locator("#quickMatchButton").click();
   await page.locator("#playButton").click();
+  await expect.poll(
+    () => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state),
+  ).toBe("playing");
   await page.keyboard.press("Escape");
   await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
 }
