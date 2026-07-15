@@ -1,3 +1,5 @@
+import "./MatchIntroFlow.js";
+
 const mainMenu = document.getElementById("mainMenuOverlay");
 const matchSetup = document.getElementById("startOverlay");
 const pauseOverlay = document.getElementById("pauseOverlay");
