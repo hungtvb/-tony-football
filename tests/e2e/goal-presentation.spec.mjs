@@ -13,11 +13,13 @@ async function openGoalTest(page) {
 test("goal presentation shows team score and replay stages", async ({ page }) => {
   await openGoalTest(page);
 
-  await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.preview({
-    team: "home",
-    score: [2, 1],
-    replay: true,
-  }));
+  await page.evaluate(() => {
+    void window.__TONY_GOAL_PRESENTATION__.preview({
+      team: "home",
+      score: [2, 1],
+      replay: true,
+    });
+  });
 
   await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__.diagnostics().running === true);
 
