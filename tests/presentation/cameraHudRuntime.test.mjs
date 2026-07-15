@@ -14,6 +14,14 @@ function functionSource(name, nextName) {
   return game.slice(start, end);
 }
 
+function sourceBetween(startMarker, endMarker) {
+  const start = game.indexOf(startMarker);
+  const end = game.indexOf(endMarker, start + startMarker.length);
+  assert.ok(start >= 0, `${startMarker} must exist`);
+  assert.ok(end > start, `${endMarker} must follow ${startMarker}`);
+  return game.slice(start, end);
+}
+
 test("runtime imports shared camera framing policy", () => {
   assert.match(game, /cameraHudConfig/);
   assert.match(game, /cameraFrameTarget/);
@@ -51,7 +59,7 @@ test("U3 HUD stylesheet is loaded after U1 and reserves a desktop toast gap abov
 });
 
 test("integrated Playwright harness uses the existing pause overlay UI binding", () => {
-  const source = functionSource("applyDebugScenario", "resize");
+  const source = sourceBetween("  function applyDebugScenario", "  window.__TONY_DEBUG__");
   assert.match(source, /ui\.pause\.classList\.remove\("show"\)/);
   assert.doesNotMatch(source, /ui\.pauseOverlay/);
   assert.match(game, /window\.__TONY_DEBUG__/);
