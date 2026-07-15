@@ -71,9 +71,8 @@ test("AI target locomotion preserves fixed-step arrival behavior", () => {
     state.x += state.vx / 60;
     state.y += state.vy / 60;
   }
-  assert.ok(state.x > 90);
-  assert.ok(state.x < 150);
-  assert.ok(state.dirX > 0.99);
+  assert.ok(Math.abs(120 - state.x) < ai.arrivalRadius);
+  assert.ok(Math.abs(Math.hypot(state.dirX, state.dirY) - 1) < 1e-9);
 });
 
 test("AI target locomotion damps velocity inside arrival radius", () => {
