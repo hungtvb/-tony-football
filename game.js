@@ -74,7 +74,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     staminaBar: $("staminaBar"), staminaText: $("staminaText"), playerName: $("playerName"),
     playerNumber: $("playerNumber"), playerRating: $("playerRating"), possessionStat: $("possessionStat"),
     possessionBar: $("possessionBar"), homeShots: $("homeShots"), awayShots: $("awayShots"), passStat: $("passStat"),
-    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard"),assetStatus:$("assetStatus")
+    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard"),assetStatus:$("assetStatus"),playerCard:document.querySelector(".hud-player-card")
   };
 
   const formations = {
@@ -107,7 +107,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
     camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
-    goalSequence: null, goalScorer: null, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
+    goalSequence: null, goalScorer: null, hud: { selectedKey: "", playerChangeTimer: null }, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const gameFeel = createGameFeelController({ lowPowerDevice, reducedMotion });
@@ -1165,10 +1165,20 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     ui.gameClock.textContent = `${String(matchMinute).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
     ui.homeScore.textContent = game.score[HOME]; ui.awayScore.textContent = game.score[AWAY];
     const player = game.selected; if (player) {
+      const selectedKey=`${player.team}:${player.index}`;
+      if(game.hud.selectedKey&&game.hud.selectedKey!==selectedKey&&ui.playerCard){
+        ui.playerCard.classList.remove("player-change");void ui.playerCard.offsetWidth;ui.playerCard.classList.add("player-change");
+        clearTimeout(game.hud.playerChangeTimer);game.hud.playerChangeTimer=setTimeout(()=>ui.playerCard?.classList.remove("player-change"),320);
+      }
+      game.hud.selectedKey=selectedKey;
       ui.playerName.textContent = player.name; ui.playerNumber.textContent = player.number; ui.playerRating.textContent = player.rating;
       ui.staminaBar.style.width = `${player.stamina}%`; ui.staminaText.textContent = `${Math.round(player.stamina)}%`;
-      ui.staminaBar.style.background = player.stamina < 25 ? "#e95e4e" : "linear-gradient(90deg,#b78a2f,#ffdc78)";
+      const lowStamina=player.stamina<25;ui.playerCard?.classList.toggle("low-stamina",lowStamina);
+      ui.staminaBar.style.background = lowStamina ? "linear-gradient(90deg,#b63f35,#ff8c78)" : "linear-gradient(90deg,#b78a2f,#ffdc78)";
     }
+    const onboardingElapsed=MATCH_SECONDS-game.time;const hintsActive=Boolean(input.actionStart||input.magnitude>.05||game.state!=="playing");
+    ui.controlsCard?.classList.toggle("hints-dimmed",onboardingElapsed>18&&!hintsActive);
+    ui.controlsCard?.classList.toggle("hints-active",hintsActive);
     const totalPossession = game.stats.possession[0] + game.stats.possession[1]; const homePossession = totalPossession ? Math.round(game.stats.possession[0] / totalPossession * 100) : 50;
     ui.possessionStat.textContent = `${homePossession}%`; ui.possessionBar.style.width = `${homePossession}%`;
     ui.homeShots.textContent = game.stats.shots[HOME]; ui.awayShots.textContent = game.stats.shots[AWAY];
