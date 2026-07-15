@@ -17,7 +17,7 @@ import { createAudioFeedbackController } from "./src/game/presentation/AudioFeed
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
 import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
-import { captureEligibility, dribbleAnchor } from "./src/game/gameplay/BallControl.js";
+import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore, resolveFirstTouch } from "./src/game/gameplay/BallControl.js";
 import { beginReceiving, controlPossession, createPossessionLifecycle, releasePossession, settleLoose } from "./src/game/gameplay/PossessionLifecycle.js";
 import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity, webGLHeading } from "./src/game/gameplay/PlayerLocomotion.js";
 
@@ -441,7 +441,11 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
         for (const player of players) {
           const d=distance(player,ball);const eligibility=captureEligibility({distance:d,ballHeight:ball.height,ballSpeed:Math.hypot(ball.vx,ball.vy),locked:ball.lock>0,playerCooldown:player.cooldown,isGoalkeeper:player.role==="GK",isLastTouch:player===ball.lastTouch,config:ballControlConfig.capture});if(eligibility.eligible&&d<best){pickup=player;best=d;}
         }
-        if (pickup) setOwner(pickup);
+        if (pickup) {
+          const ballSpeed=Math.hypot(ball.vx,ball.vy);const precision=pickup===game.selected&&input.keys.has(FO4_CONTROLS.shield);const score=firstTouchScore({ballSpeed,incomingX:ball.vx,incomingY:ball.vy,facingX:pickup.dirX,facingY:pickup.dirY,ballHeight:ball.height,playerSpeed:Math.hypot(pickup.vx,pickup.vy),rating:pickup.rating,precision,sprinting:pickup.sprinting,config:ballControlConfig.firstTouch,captureConfig:ballControlConfig.capture});const outcome=classifyFirstTouch(score,ballControlConfig.firstTouch);const touch=resolveFirstTouch({outcome,ballX:ball.x,ballY:ball.y,ballVx:ball.vx,ballVy:ball.vy,receiver:pickup});
+          ball.x=touch.x;ball.y=touch.y;ball.vx=touch.vx;ball.vy=touch.vy;ball.lock=Math.max(ball.lock,touch.lock);
+          if(touch.controls)setOwner(pickup,outcome);else{ball.owner=null;ball.lastTouch=pickup;ball.possession=releasePossession(beginReceiving(ball.possession,possessionId(pickup)),outcome,possessionId(pickup));pickup.cooldown=Math.max(pickup.cooldown,touch.lock);triggerAnimation(pickup,"receive",outcome==="heavy"?.26:.18);}
+        }
       }
     }
 
