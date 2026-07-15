@@ -42,7 +42,8 @@ test("pause setup and main menu buttons lead to different destinations", async (
   await expect(page.locator("body")).toHaveAttribute("data-flow", "match-setup");
 
   await page.locator("#playButton").click();
-  await page.keyboard.press("Escape");
+  await page.locator("#pauseButton").click();
+  await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
   await page.locator("#mainMenuButton").click();
 
   await expect(page.locator("#mainMenuOverlay")).toHaveClass(/show/);
