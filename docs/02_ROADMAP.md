@@ -22,13 +22,13 @@
 - **A7** Fair Difficulty
 
 ## Phase 4 — Expanded UI/UX
-- **U3.1** Camera and HUD — In Progress
-- **U3.2** Match Flow and Pause Navigation — Planned
-- **U3.3** Match Customization — Planned
+- **U3.1** Camera and HUD — Implementation Complete, Manual Closeout Pending
+- **U3.2** Match Flow and Pause Navigation — Done
+- **U3.3** Match Presentation — In Progress (Post-Match Hub)
 - **U3.4** UI Foundation and Design Tokens — Planned
 - **U4** Advanced Radar Modes — Planned
 - **U5** Controls and First-Match Onboarding — Planned
-- **U6** Match Statistics and Result Experience — Planned
+- **U6** Advanced Statistics and Result Depth — Planned
 - **U7** Responsive and Accessibility Polish — Planned
 
 ## Phase 5 — Quality

@@ -3,34 +3,35 @@
 ```yaml
 Sprint: U3.3
 Title: Match Presentation
-Status: Implementation — Goal Presentation and Replay Polish
+Status: Implementation — Post-Match Hub and Result Summary
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/U3_3_MATCH_PRESENTATION.md
 Primary goals:
-  - detect confirmed score changes without moving score ownership out of game.js
-  - present a broadcast Goal → Score → Replay sequence
-  - reflect scoring team and live scoreline
-  - keep controls, goal delay, replay buffer, and kickoff behavior unchanged
-  - support desktop, narrow-landscape, and reduced-motion presentation
+  - replace the single-action Full Time card with a complete post-match decision hub
+  - present win, draw, or loss copy from the native final score
+  - surface possession, shots, and Tony FC pass accuracy from existing match statistics
+  - provide Play Again, Match Setup, and Main Menu actions without duplicating reset logic
+  - preserve selected difficulty, pitch, ball, and weather when playing again
+  - support desktop, narrow-landscape, keyboard focus, and reduced motion
 Architecture:
-  - GoalPresentationFlow observes score DOM changes only while body flow is match
-  - GoalPresentationState owns presentation stages independently from simulation state
-  - game.js remains owner of goals, score, scorer animation, replay frames, and kickoff
-  - deterministic preview and hold hooks exist only for browser validation
+  - PostMatchSummary is a pure model that normalizes final score and statistics
+  - PostMatchHub enhances the existing result DOM and observes the native result overlay
+  - hidden pause actions remain the single bridge into game.js setup and main-menu reset behavior
+  - game.js remains owner of match time, final score, statistics, endMatch, reset, and startMatch
 Validation required:
-  - goal presentation state transition unit tests
-  - runtime ownership and stylesheet contracts
-  - desktop Playwright goal flow
-  - narrow-landscape Playwright goal flow
-  - existing intro, camera, HUD, pause, replay, and static-deploy tests
+  - post-match summary unit tests for win, draw, loss, and invalid values
+  - desktop and narrow-landscape Playwright result flow
+  - Play Again retains current match setup and begins immediately
+  - Match Setup and Main Menu actions expose only one overlay surface
+  - existing intro, goal, camera, HUD, pause, replay, and static-deploy tests
 Do not modify:
-  - goal detection thresholds or goal sequence duration
-  - replay recording duration, frame rate, or playback calculation
+  - match duration or end-match timing
+  - score or statistics ownership
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
   - FO4 control mapping
 Next slices:
-  - result screen and match statistics
+  - U3 integrated browser audit and closeout
 ```
 
 Only one sprint may be active at a time.

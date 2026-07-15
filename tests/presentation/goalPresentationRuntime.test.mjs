@@ -36,11 +36,12 @@ test("goal presentation exposes goal score replay and completion stages", () => 
 
 test("goal card starts after native highlight and clears before native replay", () => {
   assert.match(goalFlow, /leadIn: 460, goal: 500, score: 380, replayMax: 1800/);
-  assert.match(goalFlow, /timelinePhase = "native-highlight"/);
+  assert.match(goalFlow, /setTimelinePhase\("native-highlight"\)/);
   assert.match(goalFlow, /await wait\(timings\.leadIn, token\)/);
   assert.match(goalFlow, /setVisible\(false\);\n    if \(replay\)/);
   assert.match(goalFlow, /waitForNativeReplayEnd/);
-  assert.match(goalFlow, /timelinePhase = "native-replay"/);
+  assert.match(goalFlow, /setTimelinePhase\("native-replay"\)/);
+  assert.match(goalFlow, /timelineHistory: timelineHistory\.map/);
 });
 
 
