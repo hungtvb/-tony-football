@@ -11,6 +11,10 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
 import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
+import { createGameFeelController } from "./src/game/presentation/GameFeelController.js";
+import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
+import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
+import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -30,7 +34,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
   const WORLD_SCALE = .1;
   const playerViews = new Map();
-  let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
+  let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;
   const ledViews = []; const goalNetViews = [];const stadiumLightViews=[];
   const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
@@ -98,6 +102,10 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
     goalSequence: null, goalScorer: null, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const gameFeel = createGameFeelController({ lowPowerDevice, reducedMotion });
+  const audioFeedback = createAudioFeedbackController();
+  const contextualParticles = createContextualParticlePolicy({ lowPowerDevice, reducedMotion });
   let players = [];
   const FO4_CONTROLS = Object.freeze({
     sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
@@ -267,7 +275,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
     const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot");
     if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}
-    game.stats.shots[player.team] += 1; announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
+    game.stats.shots[player.team] += 1; spawnContextParticles(player.x+player.dirX*18,player.y+player.dirY*18,.55+power*1.2); const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
 
   function tackle(player) {
@@ -275,10 +283,10 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     const opponent = ball.owner && ball.owner.team !== player.team ? ball.owner : closestPlayer(player.team === HOME ? AWAY : HOME, player);
     if (!opponent || distance(player, opponent) > 48) return;
     player.cooldown = .7; triggerAnimation(player, "tackle", .38); const chance = .48 + (player.rating - opponent.rating) * .012;
-    for (let i = 0; i < 5; i += 1) spawnParticle(player.x + player.dirX * 14, player.y + player.dirY * 14, i % 2 ? "#b7cf75" : "#5d8a49", .5);
+    spawnContextParticles(player.x+player.dirX*14,player.y+player.dirY*14,.8);
     if (ball.owner === opponent && Math.random() < chance) {
       ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
-      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; announce(`${player.name} đoạt bóng!`); kickSound(.3);
+      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`); kickSound(.3);
     }
   }
 
@@ -435,7 +443,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
       }
     }
 
-    ball.trail.unshift({ x: ball.x, y: ball.y, height:ball.height }); if (ball.trail.length > 8) ball.trail.pop();
+    const visualSpeed=Math.hypot(ball.vx,ball.vy);const trailLimit=gameFeel.trailPointCount(visualSpeed);ball.trail.unshift({ x: ball.x, y: ball.y, height:ball.height }); while(ball.trail.length>trailLimit)ball.trail.pop();
     const inGoalMouth = ball.y > FIELD.goalTop && ball.y < FIELD.goalBottom;
     if(inGoalMouth&&ball.height<3.25&&ball.x>FIELD.right+20){goal(HOME);return;}
     if(inGoalMouth&&ball.height<3.25&&ball.x<FIELD.left-20){goal(AWAY);return;}
@@ -450,10 +458,10 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   function goal(team) {
     if (game.goalSequence) return;
     const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
-    game.score[team] += 1; game.flash = 1; game.shake = 18; ball.owner = null; game.goalScorer = scorer; goalSound();
+    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.owner = null; game.goalScorer = scorer; goalSound();
     game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
-    game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: 3.65 };
-    for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", 3.65, player === scorer ? 1 : .65);
+    const goalDuration=reducedMotion?3.15:3.65; game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: goalDuration, duration: goalDuration };
+    for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", goalDuration, player === scorer ? 1 : .65);
     for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
     announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(team);
     ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.toggle("show", game.replay.active);
@@ -461,7 +469,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
 
   function captureReplayFrame() {
     return {
-      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle },
+      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle, vx: ball.vx, vy: ball.vy, trail: ball.trail.map((point)=>({x:point.x,y:point.y,height:point.height})) },
       players: players.map((player) => ({ x: player.x, y: player.y, vx: player.vx, vy: player.vy, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: player.anim, animTime: player.animTime, animDuration: player.animDuration, animPower: player.animPower }))
     };
   }
@@ -488,8 +496,14 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   }
 
   function spawnParticle(x, y, color, energy = 1) {
+    if (game.particles.length >= gameFeel.particleBudget()) return;
     const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 150 * energy;
     game.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: .4 + Math.random() * .7, max: 1.1, color, size: 2 + Math.random() * 4 });
+  }
+
+  function spawnContextParticles(x,y,energy=1){
+    const burst=contextualParticles.burst({energy,weather:game.weather,pitchStyle:game.pitchStyle});
+    for(let i=0;i<burst.count;i+=1)spawnParticle(x,y,burst.colors[i%burst.colors.length],burst.energy);
   }
 
   function updateParticles(dt) {
@@ -504,7 +518,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     const follow = game.state === "playing" ? .085 : 0;
     const desiredX = lerp(W / 2, ball.x, follow);
     const desiredY = lerp(H / 2, ball.y, follow);
-    const ease = 1 - Math.exp(-dt * 3.4);
+    const ease = gameFeel.cameraEase(dt,game.replay.active);
     camera.x = lerp(camera.x, desiredX, ease);
     camera.y = lerp(camera.y, desiredY, ease);
     camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * 2.8));
@@ -513,7 +527,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   }
 
   function update(dt) {
-    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); game.flash = Math.max(0, game.flash - dt * 1.3); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
     for (const player of players) {
@@ -571,7 +585,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     floodLight.shadow.bias = -.00035; scene3D.add(floodLight);
     rimLight = new THREE.DirectionalLight(0x70dcff, 1.4); rimLight.position.set(48, 25, -35); scene3D.add(rimLight);
 
-    createPitch3D(); createGrass3D(); createStadium3D(); createGoals3D(); createAtmosphere3D(); createBall3D(); createParticleView(); createChargeView();applyStadiumLighting();
+    createPitch3D(); createGrass3D(); createStadium3D(); createGoals3D(); createAtmosphere3D(); createBall3D(); ballTrailView=createBallTrail3D(THREE,{maxPoints:gameFeel.config.ball.trailMaxPoints});scene3D.add(ballTrailView.line); createParticleView(); createChargeView();applyStadiumLighting();
     if(!lowPowerDevice){composer3D=new EffectComposer(renderer3D);composer3D.setPixelRatio(Math.min(window.devicePixelRatio||1,2));composer3D.setSize(W,H);composer3D.addPass(new RenderPass(scene3D,camera3D));const ssao=new SSAOPass(scene3D,camera3D,W,H,24);ssao.kernelRadius=10;ssao.minDistance=.002;ssao.maxDistance=.12;composer3D.addPass(ssao);const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.16,.48,.88);composer3D.addPass(bloom);composer3D.addPass(new SMAAPass(W*(window.devicePixelRatio||1),H*(window.devicePixelRatio||1)));composer3D.addPass(new OutputPass());}
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
@@ -900,7 +914,7 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   }
 
   function updateParticleView() {
-    const positions=particleView.geometry.attributes.position.array; const colors=particleView.geometry.attributes.color.array; const count=Math.min(300,game.particles.length);
+    const positions=particleView.geometry.attributes.position.array; const colors=particleView.geometry.attributes.color.array; const count=Math.min(gameFeel.particleBudget(),game.particles.length);
     for(let i=0;i<count;i+=1){const p=game.particles[i];const j=i*3;positions[j]=worldX(p.x);positions[j+1]=.35+Math.max(0,(p.max-p.life))*1.8;positions[j+2]=worldZ(p.y);const color=new THREE.Color(p.color);colors[j]=color.r;colors[j+1]=color.g;colors[j+2]=color.b;}
     particleView.geometry.setDrawRange(0,count);particleView.geometry.attributes.position.needsUpdate=true;particleView.geometry.attributes.color.needsUpdate=true;
   }
@@ -908,13 +922,13 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   function updateAtmosphere3D(now) {
     const raining=game.weather==="rain";rainView.visible=raining;const wetEase=.04;pitchView.material.roughness=lerp(pitchView.material.roughness,raining ? .42 : .94,wetEase);pitchView.material.metalness=lerp(pitchView.material.metalness,raining ? .08 : 0,wetEase);pitchView.material.color.lerp(raining?wetPitchColor:dryPitchColor,wetEase);
     if(raining){const last=rainView.userData.lastTime||now;const dt=Math.min(.05,(now-last)/1000);rainView.userData.lastTime=now;const positions=rainView.geometry.attributes.position.array;const speeds=rainView.userData.speeds;for(let i=0;i<speeds.length;i+=1){const j=i*6;const fall=speeds[i]*30*dt;positions[j]-=2.6*dt;positions[j+3]-=2.6*dt;positions[j+1]-=fall;positions[j+4]-=fall;if(positions[j+1]<.5){positions[j+1]=48;positions[j+4]=47.1;}if(positions[j]<-70){positions[j]+=140;positions[j+3]+=140;}}rainView.geometry.attributes.position.needsUpdate=true;}else rainView.userData.lastTime=now;
-    for(const net of goalNetViews){const impact=game.goalSequence?Math.sin((3.65-game.goalSequence.timer)*22)*Math.exp(-(3.65-game.goalSequence.timer)*1.8):0;net.scale.x=1+Math.abs(impact)*.13;net.material.opacity=.34+Math.abs(impact)*.36;}
+    for(const net of goalNetViews){const elapsed=game.goalSequence?game.goalSequence.duration-game.goalSequence.timer:0;const impact=game.goalSequence?Math.sin(elapsed*22)*Math.exp(-elapsed*1.8):0;net.scale.x=1+Math.abs(impact)*.13;net.material.opacity=.34+Math.abs(impact)*.36;}
   }
 
   function render3D(now) {
     const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
-    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); updateParticleView(); updateAtmosphere3D(now);
+    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
     if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
     const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
@@ -922,8 +936,8 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,lowPowerDevice?66:60,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
     else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,lowPowerDevice?26:20,lowPowerDevice?38:31+targetZ*.18);cameraLook.set(targetX,1.2,targetZ);}
     else{cameraTarget.set(targetX,(lowPowerDevice?52:44)+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),(lowPowerDevice?62:52)+targetZ*.08);cameraLook.set(targetX,.7,targetZ);}
-    camera3D.position.lerp(cameraTarget,replayFrame ? .12 : .055);if(game.shake>.5){camera3D.position.x+=(Math.random()-.5)*game.shake*.018;camera3D.position.y+=(Math.random()-.5)*game.shake*.012;}camera3D.lookAt(cameraLook);
-    const stadiumPulse=game.goalSequence?1+Math.sin(now*.018)*.45:1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
+    const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
+    const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
   }
 
@@ -1074,8 +1088,8 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
   function drawBall() {
     const style=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;
     ctx.save();
-    for (let i = ball.trail.length - 1; i >= 0; i -= 1) { const point = ball.trail[i]; ctx.globalAlpha = (1 - i / ball.trail.length) * .08; ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(point.x, point.y, ball.radius * (1 - i / 12), 0, Math.PI * 2); ctx.fill(); }
-    ctx.globalAlpha = 1; ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.beginPath(); ctx.ellipse(ball.x + 5, ball.y + 9, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+    const visualSpeed=Math.hypot(ball.vx,ball.vy);for(let i=ball.trail.length-1;i>=0;i-=1){const point=ball.trail[i];ctx.globalAlpha=gameFeel.trailOpacity(i,ball.trail.length,visualSpeed);ctx.fillStyle="white";ctx.beginPath();ctx.arc(point.x,point.y,Math.max(1.5,ball.radius*(1-i/(ball.trail.length+4))),0,Math.PI*2);ctx.fill();}
+    const shadow=gameFeel.ballShadow(ball.height||0);ctx.globalAlpha=shadow.opacity;ctx.fillStyle="black";ctx.beginPath();ctx.ellipse(ball.x+5,ball.y+9,12*shadow.scale,5*shadow.scale,0,0,Math.PI*2);ctx.fill();
     ctx.translate(ball.x, ball.y); ctx.rotate(ball.angle);
     const ballShade=ctx.createRadialGradient(-3,-4,1,0,0,ball.radius+2);ballShade.addColorStop(0,"#fff");ballShade.addColorStop(.56,cssColor(style.base));ballShade.addColorStop(1,"#747d78");
     ctx.fillStyle=ballShade;ctx.beginPath();ctx.arc(0,0,ball.radius,0,Math.PI*2);ctx.fill();ctx.save();ctx.clip();ctx.strokeStyle=style.stroke;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,-3);ctx.bezierCurveTo(-3,-8,3,-8,11,-2);ctx.moveTo(-9,6);ctx.bezierCurveTo(-2,1,4,2,10,7);ctx.moveTo(-4,-11);ctx.bezierCurveTo(1,-4,-1,4,4,11);ctx.stroke();ctx.fillStyle=cssColor(style.patch);for(const [x,y,r] of [[-4,-4,.2],[5,2,-.25],[-2,7,.1]]){ctx.save();ctx.translate(x,y);ctx.rotate(r);ctx.beginPath();ctx.moveTo(-3,-1);ctx.quadraticCurveTo(0,-4,4,-2);ctx.lineTo(2,2);ctx.quadraticCurveTo(-1,4,-4,1);ctx.closePath();ctx.fill();ctx.restore();}ctx.restore();ctx.strokeStyle=style.stroke;ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(0,0,ball.radius,0,Math.PI*2);ctx.stroke();
@@ -1170,9 +1184,10 @@ import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
     osc.type = type; osc.frequency.value = frequency; gain.gain.setValueAtTime(volume, audioContext.currentTime + delay); gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + delay + duration);
     osc.connect(gain).connect(audioContext.destination); osc.start(audioContext.currentTime + delay); osc.stop(audioContext.currentTime + delay + duration);
   }
-  function kickSound(power) { tone(110 + power * 90, .08, "triangle", .035 + power * .025); }
-  function whistle(long = false) { tone(1450, long ? .5 : .25, "sine", .03); tone(1750, long ? .42 : .18, "sine", .02, .08); }
-  function goalSound() { [392,523,659,784].forEach((note,index) => tone(note,.42,"square",.025,index*.09)); }
+  function audioNow() { return performance.now() / 1000; }
+  function kickSound(power) { if(!audioFeedback.canPlay("kick",audioNow()))return;const profile=audioFeedback.kickProfile(power);tone(profile.frequency,profile.duration,"triangle",profile.volume); }
+  function whistle(long = false) { if(!audioFeedback.canPlay("whistle",audioNow()))return;tone(1450,long?.5:.25,"sine",.03);tone(1750,long?.42:.18,"sine",.02,.08); }
+  function goalSound() { if(!audioFeedback.canPlay("goal",audioNow()))return;[392,523,659,784].forEach((note,index)=>tone(note,.42,"square",.025,index*.09)); }
 
   function simulationStep(dt) {
     update(dt);

@@ -4,31 +4,33 @@
 Build Tony Football into a polished browser-based 6v6 football game with responsive controls, readable football behavior, strong AI, and a focused game UI.
 
 ## Current objective
-Improve the complete pre-match and in-match experience without changing core gameplay behavior.
+Improve moment-to-moment game feel without changing football rules, control mapping, AI decisions, or core movement and ball tuning.
 
 ## Current phase
 Phase 1 — Foundation and presentation quality.
 
 ## Completed
 - G1 — Fixed Simulation Foundation
+- U1 — Match Experience and HUD Hierarchy
 
 ## Current sprint
-U1 — Match Experience and HUD Hierarchy.
+U2 — Game Feel and Match Feedback.
 
 ## Priority order
-1. Gameplay visibility
-2. HUD clarity and hierarchy
-3. Pre-match setup clarity
-4. Radar readability
-5. Controls discoverability
-6. Settings and pause UX
-7. Responsive behavior and accessibility
+1. Camera readability and smoothness
+2. Ball and impact feedback
+3. Goal and replay presentation
+4. Audio feedback
+5. Weather-aware particles
+6. Reduced-motion and low-power fallbacks
+7. Stable performance
 
 ## Explicitly out of scope
-- Gameplay tuning
+- Player locomotion tuning
+- Ball physics tuning
+- Passing, shooting, or tackle balance
 - AI behavior changes
-- Player locomotion changes
-- Ball physics changes
+- FO4 control remapping
 - Local or online multiplayer
 - Additional game modes
 - Tournament or career mode
@@ -40,5 +42,6 @@ U1 — Match Experience and HUD Hierarchy.
 - Preserve Canvas 2D fallback.
 - Preserve player-model and animation fallback behavior.
 - Preserve GitHub Pages deployment.
-- Apply UI UX Pro Max principles: strong hierarchy, low clutter, clear feedback, consistent spacing, responsive interaction, and accessible states.
+- Respect `prefers-reduced-motion` and low-power-device fallbacks.
+- Effects must improve feedback without obscuring the ball, players, radar, score, or controls.
 - Refactor incrementally rather than rewriting the game.
