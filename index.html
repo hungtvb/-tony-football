@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="u1-match-experience.css" />
     <link rel="stylesheet" href="u3-camera-hud.css" />
+    <link rel="stylesheet" href="u3-match-flow.css" />
     <link rel="preload" href="assets/models/football-character-v2.glb?v=16.0.0" as="fetch" type="model/gltf-binary" crossorigin />
     <script type="importmap">
       {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}
@@ -134,8 +135,12 @@
               <div class="pause-menu">
                 <span class="eyebrow">MATCH PAUSED</span>
                 <h2 id="pauseTitle">TẠM DỪNG</h2>
-                <button id="resumeButton" class="primary-button">TIẾP TỤC</button>
-                <button id="restartButton" class="secondary-button">CHƠI LẠI</button>
+                <div class="pause-actions">
+                  <button id="resumeButton" class="primary-button">TIẾP TỤC</button>
+                  <button id="restartButton" class="secondary-button">CHƠI LẠI</button>
+                  <button id="setupButton" class="tertiary-button">VỀ THIẾT LẬP TRẬN</button>
+                  <button id="mainMenuButton" class="tertiary-button danger">VỀ MÀN HÌNH ĐẦU</button>
+                </div>
                 <div class="pause-help"><kbd>ESC</kbd><span>Quay lại trận đấu</span></div>
               </div>
               <aside class="pause-summary">
