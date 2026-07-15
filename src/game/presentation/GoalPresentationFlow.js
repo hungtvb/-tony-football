@@ -8,10 +8,10 @@ const visualTestMode = params.has("visualTest");
 const goalTestMode = params.has("goalTest");
 const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const timings = reducedMotion
-  ? { goal: 80, score: 80, replay: 100 }
+  ? { leadIn: 40, goal: 60, score: 60, replayMax: 120 }
   : visualTestMode
-    ? { goal: 450, score: 320, replay: 520 }
-    : { goal: 920, score: 680, replay: 1180 };
+    ? { leadIn: 140, goal: 260, score: 220, replayMax: 900 }
+    : { leadIn: 460, goal: 500, score: 380, replayMax: 1800 };
 
 const homeScore = document.getElementById("homeScore");
 const awayScore = document.getElementById("awayScore");
@@ -22,6 +22,7 @@ let overlay = null;
 let running = false;
 let runToken = 0;
 let testHoldReleased = !goalTestMode;
+let timelinePhase = "idle";
 
 const TEAMS = Object.freeze({
   home: Object.freeze({ key: "home", name: "TONY FC", crest: "TF", accent: "gold" }),
@@ -150,35 +151,62 @@ async function waitForTestRelease(token) {
   return token === runToken;
 }
 
+async function waitForNativeReplayEnd(token) {
+  const deadline = performance.now() + timings.replayMax;
+  while (performance.now() < deadline) {
+    if (token !== runToken) return false;
+    if (!replayIsActive()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+  return token === runToken;
+}
+
 async function startPresentation({ team = "home", score = readScores(), replay = replayIsActive() } = {}) {
   const token = ++runToken;
   running = true;
   testHoldReleased = !goalTestMode;
+  timelinePhase = "native-highlight";
   if (presentation.state !== GOAL_PRESENTATION_STATES.HIDDEN) presentation.reset({ reason: "new-goal" });
 
   applySnapshot({ team, score, replay });
-  setVisible(true);
-  setPhase("GOAL MOMENT");
-  presentation.transition(GOAL_PRESENTATION_STATES.GOAL, { team, score, replay });
-
-  if (!await waitForTestRelease(token)) return;
-  if (!await wait(timings.goal, token)) return;
-
-  setPhase("SCORE UPDATE");
-  presentation.transition(GOAL_PRESENTATION_STATES.SCORE, { team, score, replay });
-  if (!await wait(timings.score, token)) return;
-
-  if (replay) {
-    setPhase("INSTANT REPLAY");
-    presentation.transition(GOAL_PRESENTATION_STATES.REPLAY, { team, score, replay });
-    if (!await wait(timings.replay, token)) return;
-  }
-
-  presentation.transition(GOAL_PRESENTATION_STATES.COMPLETE, { team, score, replay });
   setVisible(false);
-  presentation.transition(GOAL_PRESENTATION_STATES.HIDDEN, { team, score, replay });
-  delete document.body.dataset.goalPresentation;
-  running = false;
+
+  try {
+    // Let the native flash and scoreboard pop finish before presenting the score card.
+    if (!await wait(timings.leadIn, token)) return;
+
+    setVisible(true);
+    setPhase("GOAL MOMENT");
+    presentation.transition(GOAL_PRESENTATION_STATES.GOAL, { team, score, replay });
+    timelinePhase = "goal-card";
+
+    if (!await waitForTestRelease(token)) return;
+    if (!await wait(timings.goal, token)) return;
+
+    setPhase("SCORE UPDATE");
+    presentation.transition(GOAL_PRESENTATION_STATES.SCORE, { team, score, replay });
+    timelinePhase = "score-card";
+    if (!await wait(timings.score, token)) return;
+
+    // Reveal the actual native replay instead of covering it with another full-screen card.
+    setVisible(false);
+    if (replay) {
+      setPhase("INSTANT REPLAY");
+      presentation.transition(GOAL_PRESENTATION_STATES.REPLAY, { team, score, replay });
+      timelinePhase = "native-replay";
+      if (!await waitForNativeReplayEnd(token)) return;
+    }
+
+    presentation.transition(GOAL_PRESENTATION_STATES.COMPLETE, { team, score, replay });
+    presentation.transition(GOAL_PRESENTATION_STATES.HIDDEN, { team, score, replay });
+  } finally {
+    if (token === runToken) {
+      setVisible(false);
+      delete document.body.dataset.goalPresentation;
+      timelinePhase = "idle";
+      running = false;
+    }
+  }
 }
 
 function detectScoreChange() {
@@ -214,6 +242,7 @@ window.__TONY_GOAL_PRESENTATION__ = {
     state: presentation.state,
     history: [...history],
     visible: overlay?.classList.contains("show") ?? false,
+    timelinePhase,
     team: overlay?.dataset.team ?? null,
     scores: readScores(),
     goalTestMode,

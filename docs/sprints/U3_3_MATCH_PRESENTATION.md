@@ -38,10 +38,12 @@ Main Menu
 
 ```text
 Confirmed score increase
-  → Goal hero
-    → Updated scoreline
-      → Instant replay treatment when available
-        → Return to native goal sequence
+  → Native flash + scoreboard pop
+    → Goal hero
+      → Updated scoreline
+        → Goal card clears
+          → Native instant replay remains visible
+            → Return to native kickoff
 ```
 
 ### Delivered scope
@@ -54,6 +56,14 @@ Confirmed score increase
 - Goal overlay is non-interactive and does not intercept controls or own simulation timing.
 - Deterministic preview and hold hooks support desktop and narrow-landscape Playwright validation.
 - Reduced-motion users receive short stage timings without losing the stage order.
+
+### Timing coordination
+
+- The presentation waits 460 ms in normal mode so the native goal flash and 420 ms scoreboard pop remain unobstructed.
+- The visible Goal and Score card occupies 880 ms total in normal mode.
+- The card is hidden before the Replay state so the native replay footage is visible rather than covered by a second full-screen treatment.
+- Replay completion follows the existing replay badge with a bounded fallback; the presentation never extends the native 3.65 second goal sequence.
+- Visual-test and reduced-motion modes preserve the same ordering with accelerated timings.
 
 ## Architecture
 
@@ -91,7 +101,9 @@ These boundaries allow later result and statistics presentation slices to evolve
 - A home score increase presents Tony FC and the updated scoreline.
 - An away score increase presents Neon United and the updated scoreline.
 - Score resets or unchanged score renders do not trigger a goal presentation.
+- Native goal flash and scoreboard pop complete before the presentation card appears.
 - Goal, Score, Replay, and Complete stages occur in order when replay is available.
+- The presentation card is hidden during the native Replay stage.
 - Presentation completes without a Replay stage when replay is unavailable.
 - The overlay does not alter native score, goal delay, replay, or kickoff behavior.
 - Desktop and narrow-landscape Playwright projects pass.
