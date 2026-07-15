@@ -1,43 +1,40 @@
 # Active Sprint
 
 ```yaml
-Sprint: U2
-Title: Game Feel and Match Feedback
+Sprint: G2
+Title: Player Movement and Locomotion
 Status: Implementation Complete — Manual Validation Pending
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/U2_GAME_FEEL.md
+Sprint document: docs/sprints/G2_PLAYER_MOVEMENT.md
 Primary specs:
-  - docs/ui/GAME_FEEL.md
+  - docs/gameplay/PLAYER_MOVEMENT.md
 Delivered:
-  - frame-rate-independent camera smoothing
-  - bounded deterministic camera impulses
-  - Canvas and WebGL ball trails
-  - height-aware ball shadow
-  - contextual particles with device budgets
-  - cooldown-based action audio
-  - reduced-motion goal presentation
-  - replay-aware ball trail snapshots
-  - shared goal-sequence duration
-  - monotonic audio cooldown clock
+  - centralized locomotion configuration
+  - pure deterministic locomotion helpers
+  - normalized diagonal input
+  - controlled-player acceleration, reversal, stop damping, facing, sprint, and stamina integration
+  - AI moveToward integration through shared target locomotion
+  - tuned acceleration, reversal, sprint entry, and sprint exit response
+  - shared WebGL and Canvas heading adapters
+  - kickoff, pause/resume, player-switch, and exhausted-sprint runtime contracts
 Validation complete:
-  - syntax validation
-  - asset and UI contract validation
-  - simulation tests
-  - presentation tests
-  - runtime regression tests
+  - movement unit tests
+  - fixed-step acceleration equivalence
+  - AI arrival and arrival-damping regression tests
+  - sprint transition and renderer heading tests
+  - clean-branch full repository npm test
 Remaining:
-  - manual WebGL and Canvas fallback validation
-  - classic, dry, clear, and rain validation
-  - sound on/off validation
-  - reduced-motion and low-power validation
-  - narrow and desktop layout validation
+  - manual acceleration, stop, 90-degree, and 180-degree validation
+  - manual sprint hold/release and low-stamina validation
+  - manual marking and precision movement validation
+  - manual WebGL and Canvas fallback orientation validation
+  - desktop and narrow-layout browser validation
 Do not modify:
   - simulation timing
-  - player locomotion values
-  - ball physics values
-  - passing, shooting, or tackle balance
-  - AI decisions
   - FO4 control mapping
+  - ball physics or ownership rules
+  - passing, shooting, tackle, or goalkeeper balance
+  - AI decisions or team tactics
   - multiplayer or game modes
 ```
 

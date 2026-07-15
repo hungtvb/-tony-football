@@ -2,15 +2,15 @@
 
 ## Phase 1 — Foundation and Match Experience
 - **G1** Fixed Simulation Foundation — Done
-- **U1** Match Experience and HUD Hierarchy — In Progress
-- **U2** Game Feel and Presentation Feedback — Planned
+- **U1** Match Experience and HUD Hierarchy — Done
+- **U2** Game Feel and Presentation Feedback — Done
 
 ## Phase 2 — Core Gameplay
-- **G2** Player Locomotion
-- **G3** Ball Control
-- **G4** Passing
-- **G5** Shooting
-- **G6** Physical Contest
+- **G2** Player Locomotion — In Progress
+- **G3** Ball Control — Planned
+- **G4** Passing — Planned
+- **G5** Shooting — Planned
+- **G6** Physical Contest — Planned
 
 ## Phase 3 — AI
 - **A1** Player AI Foundation
