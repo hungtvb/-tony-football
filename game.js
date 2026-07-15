@@ -15,6 +15,8 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
+import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
+import { chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepVelocity } from "./src/game/gameplay/PlayerLocomotion.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -350,16 +352,15 @@ import { createContextualParticlePolicy } from "./src/game/presentation/Contextu
     const attacking=isAttacking();const sprinting=input.keys.has(FO4_CONTROLS.sprint);
     const precision=input.keys.has(FO4_CONTROLS.shield);const marking=!attacking&&input.keys.has(FO4_CONTROLS.shoot);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
     if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
-    const hasMove=controlMagnitude>.03;
+    const controlledLocomotion=locomotionConfig.controlled;const hasMove=controlMagnitude>controlledLocomotion.minimumMoveMagnitude;
     if(precision&&!attacking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const face=normalize(markTarget.x-player.x,markTarget.y-player.y);player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*20));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*20));}}
-    const boost = sprinting && !precision && player.stamina > 2 ? 1.42 : 1;
-    player.sprinting = sprinting && !precision && player.stamina > 2 && hasMove;
-    player.controlBoost=Math.max(0,player.controlBoost-dt);const speed=(marking?158:precision?132:205)*boost*controlMagnitude;
-    if (hasMove) {
-      const current=normalize(player.vx||controlX,player.vy||controlY);const turnDot=current.x*controlX+current.y*controlY;const response=(marking?14:precision?18:player.controlBoost>0?16:turnDot<-.15?8:12);const turnGrip=clamp(.72+(turnDot+1)*.14,.72,1);player.vx=lerp(player.vx,controlX*speed*turnGrip,1-Math.exp(-dt*response));player.vy=lerp(player.vy,controlY*speed*turnGrip,1-Math.exp(-dt*response));
-      const face=marking&&markTarget?normalize(markTarget.x-player.x,markTarget.y-player.y):{x:controlX,y:controlY};player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*18));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*18));const facing=normalize(player.dirX,player.dirY);player.dirX=facing.x;player.dirY=facing.y;
-      player.stamina=clamp(player.stamina-dt*(player.sprinting?11*input.magnitude:precision ? .35 : 1.1),0,100);
-    } else { player.vx*=Math.pow(.0018,dt);player.vy*=Math.pow(.0018,dt);player.stamina=clamp(player.stamina+dt*(precision?6.2:5),0,100); }
+    const canSprint=sprinting&&!precision&&player.stamina>controlledLocomotion.sprintStaminaThreshold;const boost=canSprint?controlledLocomotion.sprintMultiplier:1;
+    player.sprinting=canSprint&&hasMove;player.controlBoost=Math.max(0,player.controlBoost-dt);const baseSpeed=marking?controlledLocomotion.markingSpeed:precision?controlledLocomotion.precisionSpeed:controlledLocomotion.baseSpeed;const speed=baseSpeed*boost*controlMagnitude;
+    if(hasMove){
+      const turn=chooseTurnResponse({currentX:player.vx||controlX,currentY:player.vy||controlY,desiredX:controlX,desiredY:controlY,config:controlledLocomotion,boosted:player.controlBoost>0});const response=marking?controlledLocomotion.markingResponse:precision?controlledLocomotion.precisionResponse:turn.response;const velocity=stepVelocity({vx:player.vx,vy:player.vy,desiredX:controlX,desiredY:controlY,targetSpeed:speed,dt,response,turnGrip:turn.turnGrip});player.vx=velocity.vx;player.vy=velocity.vy;
+      const face=marking&&markTarget?normalize(markTarget.x-player.x,markTarget.y-player.y):{x:controlX,y:controlY};const facing=stepFacing({dirX:player.dirX,dirY:player.dirY,targetX:face.x,targetY:face.y,dt,response:controlledLocomotion.facingResponse});player.dirX=facing.dirX;player.dirY=facing.dirY;
+    }else{const velocity=dampVelocity({vx:player.vx,vy:player.vy,dt,damping:controlledLocomotion.stopDamping});player.vx=velocity.vx;player.vy=velocity.vy;}
+    player.stamina=stepStamina({stamina:player.stamina,moving:hasMove,sprinting:player.sprinting,precision,magnitude:input.magnitude,dt,config:controlledLocomotion});
   }
 
   function updateAI(player, dt) {
