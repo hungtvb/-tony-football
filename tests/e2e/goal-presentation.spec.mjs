@@ -44,7 +44,7 @@ test("goal presentation yields native highlight and replay windows", async ({ pa
 
   await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.releaseTestHold());
   await page.waitForFunction(() => (
-    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "native-replay"
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().history.includes("replay")
   ));
   await expect(overlay).not.toHaveClass(/show/);
 
