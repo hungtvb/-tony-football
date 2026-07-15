@@ -10,28 +10,24 @@ Primary specs:
   - docs/gameplay/BALL_CONTROL.md
 Delivered:
   - centralized ball-control configuration
-  - deterministic capture, first-touch, dribble-anchor, and possession lifecycle modules
-  - capture eligibility integrated into loose-ball pickup
-  - explicit loose, receiving, controlled, and released lifecycle metadata
+  - deterministic capture eligibility and first-touch scoring
+  - explicit loose, receiving, controlled, and released possession lifecycle
   - clean, cushioned, heavy, and rejected first-touch outcomes
-  - cushioned touches retain controlled residual velocity
-  - heavy and rejected touches remain loose with recapture locks
+  - cushioned residual velocity and loose-ball recapture locks
   - precision, normal, and sprint dribble anchors
-  - pass, shot, loft, tackle, goal, and kickoff lifecycle transitions
-  - replay frames include owner identity and possession snapshot
-  - standard read-only CI restored and migration scripts removed
+  - replay owner identity and possession snapshots
+  - standard read-only CI with migration scripts removed
 Validation complete:
-  - capture lock and goalkeeper-range tests
-  - last-touch recapture prevention
-  - first-touch scoring, classification, and outcome tests
-  - possession lifecycle transition tests
-  - precision versus sprint dribble-anchor tests
-  - runtime integration and legacy-boundary contracts
-  - clean-branch full repository npm test pending latest head
+  - capture lock, height, goalkeeper range, cooldown, and last-touch tests
+  - first-touch score, classification, and four outcome tests
+  - possession lifecycle and kickoff reset tests
+  - replay possession and cushioned-velocity regression contracts
+  - clean-branch full repository npm test
 Remaining:
-  - manual slow/fast/aerial/sprint/precision reception validation
-  - manual goalkeeper, buffered-action, player-switch, and tackle recovery validation
-  - replay, WebGL, Canvas fallback, desktop, and narrow-layout validation
+  - manual slow, fast, aerial, awkward-angle, precision, and sprint reception validation
+  - manual goalkeeper pickup and distribution validation
+  - manual buffered action, player switching, and post-tackle recovery validation
+  - manual replay, WebGL, Canvas fallback, desktop, and narrow-layout validation
 Do not modify:
   - simulation timing
   - FO4 control mapping
