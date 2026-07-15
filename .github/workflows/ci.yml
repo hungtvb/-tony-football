@@ -51,10 +51,10 @@ jobs:
           retention-days: 14
       - name: Commit visual harness integration
         run: |
-          if ! git diff --quiet -- game.js package.json package-lock.json; then
+          if ! git diff --quiet -- game.js index.html package.json package-lock.json; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add game.js package.json package-lock.json
+            git add game.js index.html package.json package-lock.json
             git commit -m "test(e2e): integrate deterministic browser validation"
             git push origin HEAD:feature/u3-1-camera-hud
           fi
