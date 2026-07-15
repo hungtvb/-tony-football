@@ -18,6 +18,7 @@ const awayScore = document.getElementById("awayScore");
 const replayBadge = document.getElementById("replayBadge");
 const pitchPanel = document.querySelector(".match-pitch");
 const history = [];
+const timelineHistory = [];
 let overlay = null;
 let running = false;
 let runToken = 0;
@@ -134,6 +135,16 @@ function setPhase(label) {
   overlay.querySelector("#goalPresentationPhase").textContent = label;
 }
 
+function setTimelinePhase(phase) {
+  timelinePhase = phase;
+  const snapshot = Object.freeze({
+    phase,
+    visible: overlay?.classList.contains("show") ?? false,
+  });
+  timelineHistory.push(snapshot);
+  window.dispatchEvent(new CustomEvent("tony:goal-presentation-timeline", { detail: snapshot }));
+}
+
 async function wait(duration, token) {
   const deadline = performance.now() + duration;
   while (performance.now() < deadline) {
@@ -165,11 +176,11 @@ async function startPresentation({ team = "home", score = readScores(), replay =
   const token = ++runToken;
   running = true;
   testHoldReleased = !goalTestMode;
-  timelinePhase = "native-highlight";
   if (presentation.state !== GOAL_PRESENTATION_STATES.HIDDEN) presentation.reset({ reason: "new-goal" });
 
   applySnapshot({ team, score, replay });
   setVisible(false);
+  setTimelinePhase("native-highlight");
 
   try {
     // Let the native flash and scoreboard pop finish before presenting the score card.
@@ -178,14 +189,14 @@ async function startPresentation({ team = "home", score = readScores(), replay =
     setVisible(true);
     setPhase("GOAL MOMENT");
     presentation.transition(GOAL_PRESENTATION_STATES.GOAL, { team, score, replay });
-    timelinePhase = "goal-card";
+    setTimelinePhase("goal-card");
 
     if (!await waitForTestRelease(token)) return;
     if (!await wait(timings.goal, token)) return;
 
     setPhase("SCORE UPDATE");
     presentation.transition(GOAL_PRESENTATION_STATES.SCORE, { team, score, replay });
-    timelinePhase = "score-card";
+    setTimelinePhase("score-card");
     if (!await wait(timings.score, token)) return;
 
     // Reveal the actual native replay instead of covering it with another full-screen card.
@@ -193,7 +204,7 @@ async function startPresentation({ team = "home", score = readScores(), replay =
     if (replay) {
       setPhase("INSTANT REPLAY");
       presentation.transition(GOAL_PRESENTATION_STATES.REPLAY, { team, score, replay });
-      timelinePhase = "native-replay";
+      setTimelinePhase("native-replay");
       if (!await waitForNativeReplayEnd(token)) return;
     }
 
@@ -203,7 +214,7 @@ async function startPresentation({ team = "home", score = readScores(), replay =
     if (token === runToken) {
       setVisible(false);
       delete document.body.dataset.goalPresentation;
-      timelinePhase = "idle";
+      setTimelinePhase("idle");
       running = false;
     }
   }
@@ -241,6 +252,7 @@ window.__TONY_GOAL_PRESENTATION__ = {
     running,
     state: presentation.state,
     history: [...history],
+    timelineHistory: timelineHistory.map((entry) => ({ ...entry })),
     visible: overlay?.classList.contains("show") ?? false,
     timelinePhase,
     team: overlay?.dataset.team ?? null,

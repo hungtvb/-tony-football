@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.mjs";
 
 async function openPostMatch(page) {
   await page.goto("/?visualTest=1&skipIntro=1", { waitUntil: "domcontentloaded" });
@@ -40,6 +40,7 @@ test("post-match hub renders the final score, statistics, and three actions", as
 
   const diagnostics = await page.evaluate(() => window.__TONY_POST_MATCH__.diagnostics());
   expect(diagnostics.competingVisible).toEqual([]);
+  expect(diagnostics.presentationCount).toBe(1);
 });
 
 test("play again keeps the selected match setup and starts immediately", async ({ page }) => {

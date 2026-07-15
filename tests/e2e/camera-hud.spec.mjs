@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.mjs";
 
 async function openScenario(page, scenario) {
   const consoleErrors = [];
@@ -14,7 +14,9 @@ async function openScenario(page, scenario) {
   const diagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(diagnostics.visualTestMode).toBe(true);
   expect(diagnostics.renderer).toBe("webgl");
-  await page.waitForTimeout(150);
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
   expect(consoleErrors).toEqual([]);
 }
 

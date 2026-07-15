@@ -20,6 +20,8 @@ const competingOverlays = [
 let currentSummary = null;
 let resultSetupButton = null;
 let resultMainMenuButton = null;
+let presentationCount = 0;
+let resultObserver = null;
 
 function ensureStylesheet() {
   if (document.querySelector('link[data-u3-post-match="true"]')) return;
@@ -149,20 +151,29 @@ function renderSummary(summary) {
 }
 
 function presentResult(summary = readSummary(), { focus = true } = {}) {
-  enhanceResultCard();
-  hideCompetingOverlays();
-  renderSummary(summary);
-  resultOverlay.classList.add("show");
-  resultOverlay.setAttribute("aria-hidden", "false");
-  document.body.dataset.flow = "result";
-  if (focus) requestAnimationFrame(() => playAgainButton?.focus());
+  presentationCount += 1;
+  resultObserver?.disconnect();
+  try {
+    enhanceResultCard();
+    hideCompetingOverlays();
+    renderSummary(summary);
+    if (!resultOverlay.classList.contains("show")) resultOverlay.classList.add("show");
+    resultOverlay.setAttribute("aria-hidden", "false");
+    document.body.dataset.flow = "result";
+    if (focus) requestAnimationFrame(() => playAgainButton?.focus());
+  } finally {
+    resultObserver?.observe(resultOverlay, { attributes: true, attributeFilter: ["class"] });
+  }
 }
 
 ensureStylesheet();
 enhanceResultCard();
 
-const resultObserver = new MutationObserver(() => {
-  if (resultOverlay?.classList.contains("show")) presentResult(readSummary());
+resultObserver = new MutationObserver(() => {
+  if (
+    resultOverlay?.classList.contains("show")
+    && document.body.dataset.flow !== "result"
+  ) presentResult(readSummary());
 });
 if (resultOverlay) resultObserver.observe(resultOverlay, { attributes: true, attributeFilter: ["class"] });
 
@@ -174,6 +185,7 @@ window.__TONY_POST_MATCH__ = {
     flow: document.body.dataset.flow ?? null,
     outcome: currentSummary?.outcome ?? null,
     summary: currentSummary,
+    presentationCount,
     competingVisible: competingOverlays.filter((overlay) => overlay?.classList.contains("show")).map((overlay) => overlay.id),
   }),
 };

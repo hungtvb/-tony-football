@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.mjs";
 
 test.describe.configure({ timeout: 60_000 });
 
@@ -27,7 +27,9 @@ test("goal presentation yields native highlight and replay windows", async ({ pa
   const overlay = page.locator("#goalPresentationOverlay");
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_GOAL_PRESENTATION__.diagnostics();
-    return diagnostics.timelinePhase === "native-highlight" && diagnostics.visible === false;
+    return diagnostics.timelineHistory.some(({ phase, visible }) => (
+      phase === "native-highlight" && visible === false
+    ));
   });
 
   await page.waitForFunction(() => (
@@ -67,7 +69,9 @@ test("score observer automatically presents an away goal after the highlight lea
 
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_GOAL_PRESENTATION__.diagnostics();
-    return diagnostics.timelinePhase === "native-highlight" && diagnostics.visible === false;
+    return diagnostics.timelineHistory.some(({ phase, visible }) => (
+      phase === "native-highlight" && visible === false
+    ));
   });
 
   const overlay = page.locator("#goalPresentationOverlay");
