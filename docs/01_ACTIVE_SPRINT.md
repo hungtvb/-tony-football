@@ -3,19 +3,25 @@
 ```yaml
 Sprint: G2
 Title: Player Movement and Locomotion
-Status: In Progress
+Status: In Progress — Controlled Player Integrated
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/G2_PLAYER_MOVEMENT.md
 Primary specs:
   - docs/gameplay/PLAYER_MOVEMENT.md
-Goals:
-  - responsive input without instant velocity snapping
-  - predictable acceleration and deceleration
-  - natural turns and reversals
-  - coherent sprint entry and exit
-  - stable facing direction and model orientation
-  - matching WebGL and Canvas fallback behavior
-  - deterministic movement at fixed 60 Hz
+Delivered:
+  - centralized locomotion configuration
+  - pure deterministic locomotion helpers
+  - normalized diagonal movement contract
+  - fixed-step acceleration and stop damping tests
+  - reversal grip and facing normalization tests
+  - stamina drain and recovery tests
+  - controlled-player integration through PlayerLocomotion
+  - standard CI restored after guarded integration
+Next:
+  - AI moveToward compatibility
+  - controlled-player tuning for acceleration and reversal feel
+  - WebGL and Canvas orientation coherence
+  - pause, kickoff, and player-switch regressions
 Required validation:
   - movement unit tests
   - 30/60/120 FPS equivalence through the fixed simulation loop
