@@ -16,6 +16,7 @@
     "test:e2e:desktop": "playwright test --project=desktop-chromium",
     "test:e2e:narrow": "playwright test --project=narrow-landscape",
     "test:e2e:intro": "playwright test tests/e2e/match-intro.spec.mjs",
+    "test:e2e:goal": "playwright test tests/e2e/goal-presentation.spec.mjs",
     "test:preflight": "npm run test:unit && npm run test:e2e",
     "test": "npm run test:unit",
     "test:e2e:report": "playwright show-report"
