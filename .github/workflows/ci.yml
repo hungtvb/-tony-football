@@ -28,7 +28,10 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
       - name: Run unit test suite
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee unit-test.log
       - name: Run browser validation
         run: npm run test:e2e
       - name: Upload test evidence
@@ -37,6 +40,7 @@ jobs:
         with:
           name: u3-1-test-evidence
           path: |
+            unit-test.log
             playwright-report
             test-results
           if-no-files-found: ignore
