@@ -3,7 +3,7 @@
 ```yaml
 Sprint: R1
 Title: Engine and Presentation Boundary
-Status: In Progress — Slice A contracts and dependency guardrails
+Status: In Progress — Slice B headless state and lifecycle foundation
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
@@ -29,7 +29,7 @@ Do not modify:
   - FO4 control mapping
   - WebGL, Canvas fallback, models, camera, or presentation behavior
 Next slices:
-  - Slice B Authoritative MatchEngine
+  - complete Slice B gameplay-system migration into MatchEngine
   - Slice C Input and application adapters
   - Slice D Rendering and presentation adapters
   - Slice E Explicit bootstrap and compatibility cleanup

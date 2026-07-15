@@ -7,6 +7,7 @@
 - HUD, pre-match, radar, controls, pause, and settings source-of-truth documents.
 - R1 immutable game-command, ordered event, and read-only snapshot contracts.
 - Headless engine dependency guardrails and focused contract tests.
+- Headless match-state factory and MatchEngine lifecycle foundation with stable 6v6 entities.
 
 ### Changed
 - Active sprint moved from G1 to U1.

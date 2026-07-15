@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice A contracts and dependency guardrails
+Status: In Progress — Slice B headless state and lifecycle foundation
 
 ## Objective
 

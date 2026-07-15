@@ -27,7 +27,7 @@ Before modifying code:
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, HUD and overlay DOM | Presentation projection; not gameplay authority |
 | `game.js` | Current composition root plus authoritative match state, simulation updates, input, rendering, replay, audio, DOM and debug wiring | Primary R1 extraction target |
-| `src/game/engine/` | R1 command, event, and snapshot contracts | Headless only; no DOM, Three.js, Canvas, audio, or render-frame dependencies |
+| `src/game/engine/` | R1 command, event, snapshot, state factory, and headless MatchEngine lifecycle | Headless only; no DOM, Three.js, Canvas, audio, or render-frame dependencies |
 | `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Uses `FixedClock`; exposes interpolation alpha |
 | `scripts/dev-server.mjs` | Local static development server | Development only; never the Vercel production entry point |
 | `scripts/build-static.mjs` | Produces the static `dist` bundle | Vercel publishes `dist` |
@@ -64,7 +64,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Gameplay tuning | `src/game/config/gameplayConfig.js` | Config | Simulation and gameplay contracts | Inject into engine; never read from renderer |
 | Player movement, facing and stamina | `src/game/gameplay/PlayerLocomotion.js`, `src/game/config/locomotionConfig.js`, `game.js` | Shared helper plus `game.js` | `tests/gameplay/playerLocomotion.test.mjs`, `docs/gameplay/PLAYER_MOVEMENT.md` | Engine owns position/facing/action; renderer maps them to transforms and animation |
 | Ball control and first touch | `src/game/gameplay/BallControl.js`, `src/game/gameplay/PossessionLifecycle.js`, `src/game/config/ballControlConfig.js`, `game.js` | Shared helper plus `game.js` | `tests/gameplay/ballControl.test.mjs`, `tests/gameplay/possessionLifecycle.test.mjs`, `docs/gameplay/BALL_CONTROL.md` | Engine owns ball and possession lifecycle |
-| Match lifecycle, score, statistics and clock | `game.js` | `game.js` | Presentation contracts and Playwright match flows | Move to headless `MatchEngine`; publish lifecycle and score events |
+| Match lifecycle, score, statistics and clock | `src/game/engine/MatchEngine.js`, `src/game/engine/MatchState.js`; compatibility runtime remains in `game.js` | Headless engine foundation plus legacy runtime | `tests/engine/MatchEngine.test.mjs`, presentation contracts and Playwright match flows | Migrate existing runtime systems to the engine incrementally, then remove duplicate ownership |
 | FO4 keyboard mapping and action buffering | `game.js`, `docs/ui/CONTROLS.md` | `game.js` browser listeners | Gameplay contracts and Playwright controls flow | Browser input adapter produces immutable commands |
 | AI decisions and goalkeeper behavior | `game.js` | `game.js` | Existing gameplay and visual scenarios | AI produces commands; engine applies outcomes |
 | Replay recording and playback | `game.js` | `game.js` | Replay presentation contracts | Engine owns replay facts; presentation owns playback projection |
