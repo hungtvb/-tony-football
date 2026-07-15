@@ -1,40 +1,33 @@
 # Active Sprint
 
 ```yaml
-Sprint: G2
-Title: Player Movement and Locomotion
-Status: Implementation Complete — Manual Validation Pending
+Sprint: G3
+Title: Ball Control and First Touch
+Status: In Progress
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/G2_PLAYER_MOVEMENT.md
+Sprint document: docs/sprints/G3_BALL_CONTROL_FIRST_TOUCH.md
 Primary specs:
-  - docs/gameplay/PLAYER_MOVEMENT.md
-Delivered:
-  - centralized locomotion configuration
-  - pure deterministic locomotion helpers
-  - normalized diagonal input
-  - controlled-player acceleration, reversal, stop damping, facing, sprint, and stamina integration
-  - AI moveToward integration through shared target locomotion
-  - tuned acceleration, reversal, sprint entry, and sprint exit response
-  - shared WebGL and Canvas heading adapters
-  - kickoff, pause/resume, player-switch, and exhausted-sprint runtime contracts
-Validation complete:
-  - movement unit tests
-  - fixed-step acceleration equivalence
-  - AI arrival and arrival-damping regression tests
-  - sprint transition and renderer heading tests
-  - clean-branch full repository npm test
-Remaining:
-  - manual acceleration, stop, 90-degree, and 180-degree validation
-  - manual sprint hold/release and low-stamina validation
-  - manual marking and precision movement validation
-  - manual WebGL and Canvas fallback orientation validation
-  - desktop and narrow-layout browser validation
+  - docs/gameplay/BALL_CONTROL.md
+Goals:
+  - make first touch depend on incoming ball speed, angle, height, and player movement
+  - replace sticky possession with explicit capture, controlled, loose, and released states
+  - keep dribble distance readable at walk, run, sprint, and precision pace
+  - preserve deterministic fixed-step behavior
+  - keep passing, shooting, tackle, goalkeeper, and AI-decision balance unchanged
+Required validation:
+  - possession-state unit tests
+  - first-touch outcome tests
+  - dribble-anchor distance tests
+  - high-speed and aerial-ball rejection tests
+  - kickoff, replay, player-switch, and pause/resume regressions
+  - WebGL and Canvas fallback manual validation
 Do not modify:
   - simulation timing
   - FO4 control mapping
-  - ball physics or ownership rules
-  - passing, shooting, tackle, or goalkeeper balance
-  - AI decisions or team tactics
+  - pass and shot power balance
+  - tackle success balance
+  - goalkeeper decision logic
+  - AI tactical decisions or formations
   - multiplayer or game modes
 ```
 
