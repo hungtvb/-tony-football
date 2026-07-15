@@ -1,0 +1,27 @@
+export const cameraHudConfig = Object.freeze({
+  camera: Object.freeze({
+    baseZoom: 1.0,
+    minZoom: 0.94,
+    maxZoom: 1.035,
+    speedZoomOutStart: 180,
+    speedZoomOutRange: 620,
+    maxSpeedZoomOut: 0.055,
+    deadZoneX: 118,
+    deadZoneY: 64,
+    lookAheadMax: 74,
+    lookAheadSpeed: 420,
+    safeInsetX: 92,
+    safeInsetTop: 66,
+    safeInsetBottom: 112,
+    followRate: 4.6,
+    zoomRate: 2.8,
+  }),
+  radar: Object.freeze({
+    width: 260,
+    height: 140,
+    plotPadding: 10,
+    selectedRadius: 4.8,
+    ballRadius: 3.8,
+    playerRadius: 2.7,
+  }),
+});

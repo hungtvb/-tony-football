@@ -15,6 +15,8 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
+import { cameraHudConfig } from "./src/game/config/cameraHudConfig.js";
+import { cameraFrameTarget, cameraZoomForSpeed } from "./src/game/presentation/CameraFraming.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
 import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
 import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore, resolveFirstTouch } from "./src/game/gameplay/BallControl.js";
@@ -42,7 +44,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;
   const ledViews = []; const goalNetViews = [];const stadiumLightViews=[];
-  const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+  const visualTestMode = new URLSearchParams(location.search).get("visualTest") === "1";
+  const lowPowerDevice = visualTestMode || matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
   const wetPitchColor = new THREE.Color(0xb7d8c8); const dryPitchColor = new THREE.Color(0xffffff);
@@ -72,7 +75,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     staminaBar: $("staminaBar"), staminaText: $("staminaText"), playerName: $("playerName"),
     playerNumber: $("playerNumber"), playerRating: $("playerRating"), possessionStat: $("possessionStat"),
     possessionBar: $("possessionBar"), homeShots: $("homeShots"), awayShots: $("awayShots"), passStat: $("passStat"),
-    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard"),assetStatus:$("assetStatus")
+    replayBadge: $("replayBadge"),controlsMode:$("controlsMode"),controlsCard:$("controlsCard"),assetStatus:$("assetStatus"),playerCard:document.querySelector(".hud-player-card")
   };
 
   const formations = {
@@ -105,7 +108,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
     camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
     replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
-    goalSequence: null, goalScorer: null, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
+    goalSequence: null, goalScorer: null, hud: { selectedKey: "", playerChangeTimer: null }, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const gameFeel = createGameFeelController({ lowPowerDevice, reducedMotion });
@@ -519,17 +522,19 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 
   function updateCamera(dt) {
     const camera = game.camera;
+    const config = cameraHudConfig.camera;
+    const active = game.state === "playing" || game.state === "paused";
     const ballSpeed = Math.hypot(ball.vx, ball.vy);
-    camera.targetZoom = game.state === "playing" ? clamp(1.025 + ballSpeed / 9000, 1.025, 1.075) : 1;
-    const follow = game.state === "playing" ? .085 : 0;
-    const desiredX = lerp(W / 2, ball.x, follow);
-    const desiredY = lerp(H / 2, ball.y, follow);
-    const ease = gameFeel.cameraEase(dt,game.replay.active);
-    camera.x = lerp(camera.x, desiredX, ease);
-    camera.y = lerp(camera.y, desiredY, ease);
-    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * 2.8));
-    const halfW = W / (camera.zoom * 2); const halfH = H / (camera.zoom * 2);
-    camera.x = clamp(camera.x, halfW, W - halfW); camera.y = clamp(camera.y, halfH, H - halfH);
+    camera.targetZoom = active ? cameraZoomForSpeed(ballSpeed, config) : config.baseZoom;
+    const frame = active ? cameraFrameTarget({
+      cameraX: camera.x, cameraY: camera.y, subjectX: ball.x, subjectY: ball.y,
+      velocityX: ball.vx, velocityY: ball.vy, worldWidth: W, worldHeight: H,
+      viewportWidth: W, viewportHeight: H, zoom: camera.targetZoom, config,
+    }) : { x: W / 2, y: H / 2 };
+    const followEase = 1 - Math.exp(-dt * config.followRate);
+    camera.x = lerp(camera.x, frame.x, followEase);
+    camera.y = lerp(camera.y, frame.y, followEase);
+    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * config.zoomRate));
   }
 
   function update(dt) {
@@ -595,7 +600,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if(!lowPowerDevice){composer3D=new EffectComposer(renderer3D);composer3D.setPixelRatio(Math.min(window.devicePixelRatio||1,2));composer3D.setSize(W,H);composer3D.addPass(new RenderPass(scene3D,camera3D));const ssao=new SSAOPass(scene3D,camera3D,W,H,24);ssao.kernelRadius=10;ssao.minDistance=.002;ssao.maxDistance=.12;composer3D.addPass(ssao);const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.16,.48,.88);composer3D.addPass(bloom);composer3D.addPass(new SMAAPass(W*(window.devicePixelRatio||1),H*(window.devicePixelRatio||1)));composer3D.addPass(new OutputPass());}
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
-    loadPlayerAsset();
+    if (!visualTestMode) loadPlayerAsset();
+    else setAssetStatus("ready","VISUAL TEST · WEBGL","Lightweight deterministic browser validation");
     return true;
   }
 
@@ -936,12 +942,13 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
     ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
     if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
-    const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
+    const framedX=replayFrame?renderBall.x:game.camera.x;const framedY=replayFrame?renderBall.y:game.camera.y;
+    const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,game.camera.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
-    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,lowPowerDevice?66:60,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
-    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,lowPowerDevice?26:20,lowPowerDevice?38:31+targetZ*.18);cameraLook.set(targetX,1.2,targetZ);}
-    else{cameraTarget.set(targetX,(lowPowerDevice?52:44)+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),(lowPowerDevice?62:52)+targetZ*.08);cameraLook.set(targetX,.7,targetZ);}
+    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,(lowPowerDevice?66:60)*zoomScale,30*zoomScale+targetZ*.04);cameraLook.set(targetX,0,targetZ);}
+    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,(lowPowerDevice?26:20)*zoomScale,(lowPowerDevice?38:31)*zoomScale+targetZ*.14);cameraLook.set(targetX,1.2,targetZ);}
+    else{cameraTarget.set(targetX,(lowPowerDevice?54:47)*zoomScale,(lowPowerDevice?66:57)*zoomScale+targetZ*.06);cameraLook.set(targetX,.7,targetZ);}
     const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
@@ -1145,10 +1152,14 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function drawRadar() {
-    const rw = radar.width; const rh = radar.height; rctx.clearRect(0,0,rw,rh); rctx.fillStyle = "#073522"; rctx.fillRect(0,0,rw,rh);
-    rctx.strokeStyle = "rgba(255,255,255,.42)"; rctx.lineWidth = 1; rctx.strokeRect(5,5,rw-10,rh-10); rctx.beginPath(); rctx.moveTo(rw/2,5); rctx.lineTo(rw/2,rh-5); rctx.stroke();
-    for (const player of players) { rctx.fillStyle = player.team === HOME ? "#e1bb58" : "#47c9d4"; rctx.beginPath(); rctx.arc(player.x/W*rw,player.y/H*rh,player===game.selected?4:2.7,0,Math.PI*2); rctx.fill(); }
-    rctx.fillStyle = "white"; rctx.beginPath(); rctx.arc(ball.x/W*rw,ball.y/H*rh,2.2,0,Math.PI*2); rctx.fill();
+    const config=cameraHudConfig.radar;const rw=radar.width;const rh=radar.height;const pad=config.plotPadding;const plotW=rw-pad*2;const plotH=rh-pad*2;
+    const mapX=(value)=>pad+clamp((value-FIELD.left)/(FIELD.right-FIELD.left),0,1)*plotW;
+    const mapY=(value)=>pad+clamp((value-FIELD.top)/(FIELD.bottom-FIELD.top),0,1)*plotH;
+    rctx.clearRect(0,0,rw,rh);rctx.fillStyle="#062d1e";rctx.fillRect(0,0,rw,rh);
+    rctx.strokeStyle="rgba(236,248,241,.5)";rctx.lineWidth=1;rctx.strokeRect(pad,pad,plotW,plotH);rctx.beginPath();rctx.moveTo(rw/2,pad);rctx.lineTo(rw/2,rh-pad);rctx.stroke();
+    rctx.beginPath();rctx.arc(rw/2,rh/2,Math.min(plotW,plotH)*.13,0,Math.PI*2);rctx.stroke();
+    for(const player of players){const x=mapX(player.x);const y=mapY(player.y);const selected=player===game.selected;const radius=selected?config.selectedRadius:config.playerRadius;rctx.fillStyle=player.team===HOME?"#f0c85d":"#55d5df";rctx.beginPath();rctx.arc(x,y,radius,0,Math.PI*2);rctx.fill();if(selected){rctx.strokeStyle="#fff3bd";rctx.lineWidth=1.7;rctx.beginPath();rctx.arc(x,y,radius+2.2,0,Math.PI*2);rctx.stroke();}}
+    const bx=mapX(ball.x);const by=mapY(ball.y);rctx.fillStyle="#ffffff";rctx.strokeStyle="#101615";rctx.lineWidth=2;rctx.beginPath();rctx.arc(bx,by,config.ballRadius,0,Math.PI*2);rctx.fill();rctx.stroke();
   }
 
   function updateUI(scoringTeam = null) {
@@ -1156,10 +1167,20 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     ui.gameClock.textContent = `${String(matchMinute).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
     ui.homeScore.textContent = game.score[HOME]; ui.awayScore.textContent = game.score[AWAY];
     const player = game.selected; if (player) {
+      const selectedKey=`${player.team}:${player.index}`;
+      if(game.hud.selectedKey&&game.hud.selectedKey!==selectedKey&&ui.playerCard){
+        ui.playerCard.classList.remove("player-change");void ui.playerCard.offsetWidth;ui.playerCard.classList.add("player-change");
+        clearTimeout(game.hud.playerChangeTimer);game.hud.playerChangeTimer=setTimeout(()=>ui.playerCard?.classList.remove("player-change"),320);
+      }
+      game.hud.selectedKey=selectedKey;
       ui.playerName.textContent = player.name; ui.playerNumber.textContent = player.number; ui.playerRating.textContent = player.rating;
       ui.staminaBar.style.width = `${player.stamina}%`; ui.staminaText.textContent = `${Math.round(player.stamina)}%`;
-      ui.staminaBar.style.background = player.stamina < 25 ? "#e95e4e" : "linear-gradient(90deg,#b78a2f,#ffdc78)";
+      const lowStamina=player.stamina<25;ui.playerCard?.classList.toggle("low-stamina",lowStamina);
+      ui.staminaBar.style.background = lowStamina ? "linear-gradient(90deg,#b63f35,#ff8c78)" : "linear-gradient(90deg,#b78a2f,#ffdc78)";
     }
+    const onboardingElapsed=MATCH_SECONDS-game.time;const hintsActive=Boolean(input.actionStart||input.magnitude>.05||game.state!=="playing");
+    ui.controlsCard?.classList.toggle("hints-dimmed",onboardingElapsed>18&&!hintsActive);
+    ui.controlsCard?.classList.toggle("hints-active",hintsActive);
     const totalPossession = game.stats.possession[0] + game.stats.possession[1]; const homePossession = totalPossession ? Math.round(game.stats.possession[0] / totalPossession * 100) : 50;
     ui.possessionStat.textContent = `${homePossession}%`; ui.possessionBar.style.width = `${homePossession}%`;
     ui.homeShots.textContent = game.stats.shots[HOME]; ui.awayShots.textContent = game.stats.shots[AWAY];
@@ -1251,5 +1272,50 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   window.addEventListener("blur", () => { input.keys.clear();input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;input.bufferedAction=null;input.qTapStart=0;input.qConsumed=false;if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
+  function applyDebugScenario(name = "normal-play") {
+    if (game.state !== "playing") startMatch();
+    game.replay.active = false; game.replay.frames.length = 0; ui.replayBadge.classList.remove("show");
+    ball.owner = null; ball.vx = 0; ball.vy = 0; ball.height = 0; ball.vz = 0; ball.lock = 0;
+    const selected = game.selected || players.find((player) => player.team === HOME && player.role !== "GK");
+    if (selected) { selected.stamina = 100; game.selected = selected; }
+    if (name === "lower-left-camera") { ball.x = FIELD.left + 45; ball.y = FIELD.bottom - 42; ball.vx = -260; ball.vy = 170; }
+    else if (name === "lower-right-camera") { ball.x = FIELD.right - 45; ball.y = FIELD.bottom - 42; ball.vx = 260; ball.vy = 170; }
+    else if (name === "radar-crowded") {
+      players.forEach((player, index) => { player.x = W / 2 + (index % 4 - 1.5) * 42; player.y = H / 2 + (Math.floor(index / 4) - 1) * 38; });
+      ball.x = W / 2; ball.y = H / 2; announce("RADAR VISIBILITY CHECK");
+    } else if (name === "low-stamina") {
+      if (selected) selected.stamina = 18; ball.x = selected?.x ?? W / 2; ball.y = selected?.y ?? H / 2;
+    } else if (name === "replay") {
+      game.replay.frames = Array.from({ length: 24 }, (_, index) => ({
+        ball: { x: 430 + index * 10, y: 350, height: 0, angle: 0, vx: 150, vy: 0, trail: [] },
+        players: players.map((player) => ({ x: player.x, y: player.y, vx: 0, vy: 0, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: "idle", animTime: 0, animDuration: 1, animPower: 0 })),
+      }));
+      game.replay.active = true; game.replay.elapsed = 0; ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.add("show");
+    }
+    updateCamera(1 / 60); updateUI();
+    if (name !== "normal-play") {
+      game.state = "paused";
+      ui.pause.classList.remove("show");
+      input.keys.clear();
+    }
+  }
+
+  window.__TONY_DEBUG__ = {
+    ready: false,
+    applyScenario: applyDebugScenario,
+    diagnostics: () => ({
+      camera: { ...game.camera },
+      ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
+      state: game.state,
+      replay: game.replay.active,
+      renderer: use3D ? "webgl" : "canvas",
+      visualTestMode,
+      selectedStamina: game.selected?.stamina ?? null,
+    }),
+  };
+
   init3D(); createTeams(); updateUI(); simulationLoop.start();
+  const debugScenario = new URLSearchParams(location.search).get("debugScenario");
+  if (debugScenario) applyDebugScenario(debugScenario);
+  window.__TONY_DEBUG__.ready = true;
 })();

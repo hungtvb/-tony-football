@@ -1,0 +1,159 @@
+/* U3.1 Camera & HUD overrides — loaded after U1 styles. */
+
+.match-scoreboard {
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: linear-gradient(180deg, rgba(3, 9, 10, .92), rgba(2, 6, 7, .84));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28), inset 0 1px rgba(255, 255, 255, .05);
+  backdrop-filter: blur(14px);
+}
+
+.match-scoreboard .team-score {
+  gap: 8px;
+}
+
+.match-scoreboard .team-score span {
+  color: rgba(235, 242, 238, .74);
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.match-scoreboard strong {
+  min-width: 25px;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+}
+
+.match-scoreboard .match-clock {
+  position: relative;
+  padding-inline: 12px;
+  border-inline: 1px solid rgba(255, 255, 255, .1);
+}
+
+.match-scoreboard .match-clock b {
+  color: #fff1bd;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .045em;
+}
+
+.match-scoreboard .match-clock small {
+  color: rgba(218, 231, 224, .62);
+  letter-spacing: .16em;
+}
+
+.hud-radar {
+  padding: 6px;
+  border-color: rgba(170, 229, 199, .28);
+  background: rgba(2, 12, 9, .8);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .34), inset 0 1px rgba(255, 255, 255, .04);
+}
+
+.hud-radar #radarCanvas {
+  display: block;
+  aspect-ratio: 13 / 7;
+  border-radius: 3px;
+}
+
+.hud-player-card {
+  transform-origin: left bottom;
+}
+
+.hud-player-card.player-change {
+  animation: u31-player-change .28s cubic-bezier(.2, .8, .2, 1);
+}
+
+.hud-player-card.low-stamina {
+  border-left-color: #ef6a58;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .34), 0 0 0 1px rgba(239, 106, 88, .14), inset 0 1px rgba(255, 255, 255, .06);
+}
+
+.hud-player-card.low-stamina .hud-stamina-row,
+.hud-player-card.low-stamina #staminaText {
+  color: #ff9a88;
+}
+
+.hud-player-card.low-stamina .meter {
+  box-shadow: 0 0 12px rgba(239, 106, 88, .18);
+}
+
+.hud-controls {
+  opacity: .92;
+}
+
+.hud-controls.hints-dimmed {
+  opacity: .42;
+  transform: translateY(3px);
+}
+
+.hud-controls.hints-dimmed:hover,
+.hud-controls.hints-dimmed:focus-within,
+.hud-controls.hints-active {
+  opacity: .96;
+  transform: none;
+}
+
+.match-toast {
+  bottom: clamp(190px, 15vw, 236px);
+  max-width: min(500px, 64%);
+  background: rgba(2, 8, 9, .84);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+}
+
+.hud-player-card,
+.hud-controls,
+.hud-radar,
+.match-scoreboard {
+  transition: opacity .2s ease, transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+@keyframes u31-player-change {
+  0% { opacity: .35; transform: translateX(-10px) scale(.985); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (max-width: 760px) {
+  .match-scoreboard {
+    gap: 5px;
+  }
+
+  .match-scoreboard .match-clock {
+    padding-inline: 6px;
+  }
+
+  .match-toast {
+    top: 8px;
+    bottom: auto;
+    max-width: 58%;
+  }
+
+  .hud-radar {
+    border-color: rgba(170, 229, 199, .34);
+  }
+
+  .hud-controls.hints-dimmed {
+    opacity: .3;
+  }
+}
+
+@media (max-width: 560px) {
+  .match-toast {
+    left: 8px;
+    top: 8px;
+    max-width: calc(100% - 176px);
+    transform: none;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-player-card,
+  .hud-controls,
+  .hud-radar,
+  .match-scoreboard {
+    transition: none;
+  }
+
+  .hud-player-card.player-change {
+    animation: none;
+  }
+}
