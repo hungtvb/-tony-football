@@ -1,45 +1,36 @@
 # Active Sprint
 
 ```yaml
-Sprint: U3.1
-Title: Camera and HUD
-Status: Implementation Complete — Manual Validation Pending
+Sprint: U3.3
+Title: Match Presentation
+Status: Implementation — Match Intro Foundation
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/U3_1_CAMERA_HUD.md
-Primary specs:
-  - docs/ui/CAMERA_HUD.md
-Delivered:
-  - centralized camera and radar configuration
-  - pure camera zoom, look-ahead, dead-zone, and safe-area policy
-  - WebGL broadcast camera integrated with shared frame target
-  - faster play zooms out instead of zooming in
-  - radar uses pitch bounds, high-contrast ball marker, and selected-player ring
-  - radar plot contains no text
-  - commentary toast moved away from radar on desktop and narrow layouts
-  - refined broadcast scoreboard and match-clock hierarchy
-  - restrained selected-player card transition
-  - low-stamina warning state without rapid flashing
-  - contextual control hints dim after onboarding and reactivate during input
-  - reduced-motion support for HUD transitions
-  - standard read-only CI restored and guarded migrations removed
-Validation complete:
-  - camera policy unit tests
-  - runtime camera integration contracts
-  - radar no-text and marker hierarchy contracts
-  - HUD stylesheet ordering and toast-overlap contracts
-  - player transition, stamina, hint visibility, and reduced-motion contracts
-  - clean-branch full repository npm test
-Remaining:
-  - manual lower-left and lower-right visibility validation in WebGL
-  - manual desktop and narrow-layout HUD validation
-  - manual replay and Canvas fallback validation
-  - manual reduced-motion validation
+Sprint document: docs/sprints/U3_3_MATCH_PRESENTATION.md
+Primary goals:
+  - transition from Match Setup into gameplay through a broadcast VS screen
+  - reflect selected difficulty, pitch, ball, and weather
+  - run a deterministic 3 · 2 · 1 countdown and Kick Off stage
+  - keep gameplay input locked until native match initialization
+  - preserve immediate Restart and Play Again behavior
+Architecture:
+  - presentation state machine remains separate from simulation state
+  - MatchIntroFlow captures only the initial Start action
+  - game.js remains owner of reset, whistle, clock, kickoff, and simulation
+Validation required:
+  - state transition unit tests
+  - runtime integration contracts
+  - desktop Playwright flow
+  - narrow-landscape Playwright flow
+  - existing camera, HUD, pause, replay, and static-deploy tests
 Do not modify:
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
   - FO4 control mapping
   - AI tactics or formations
-  - pause/menu flow, match customization, multiplayer, or game modes
+  - Main Menu and Match Setup destination semantics
+Next slices:
+  - goal presentation and replay polish
+  - result screen and match statistics
 ```
 
 Only one sprint may be active at a time.
