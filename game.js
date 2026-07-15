@@ -15,6 +15,8 @@ import { createGameFeelController } from "./src/game/presentation/GameFeelContro
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
+import { cameraHudConfig } from "./src/game/config/cameraHudConfig.js";
+import { cameraFrameTarget, cameraZoomForSpeed } from "./src/game/presentation/CameraFraming.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
 import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
 import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore, resolveFirstTouch } from "./src/game/gameplay/BallControl.js";
@@ -519,17 +521,19 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 
   function updateCamera(dt) {
     const camera = game.camera;
+    const config = cameraHudConfig.camera;
+    const active = game.state === "playing" || game.state === "paused";
     const ballSpeed = Math.hypot(ball.vx, ball.vy);
-    camera.targetZoom = game.state === "playing" ? clamp(1.025 + ballSpeed / 9000, 1.025, 1.075) : 1;
-    const follow = game.state === "playing" ? .085 : 0;
-    const desiredX = lerp(W / 2, ball.x, follow);
-    const desiredY = lerp(H / 2, ball.y, follow);
-    const ease = gameFeel.cameraEase(dt,game.replay.active);
-    camera.x = lerp(camera.x, desiredX, ease);
-    camera.y = lerp(camera.y, desiredY, ease);
-    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * 2.8));
-    const halfW = W / (camera.zoom * 2); const halfH = H / (camera.zoom * 2);
-    camera.x = clamp(camera.x, halfW, W - halfW); camera.y = clamp(camera.y, halfH, H - halfH);
+    camera.targetZoom = active ? cameraZoomForSpeed(ballSpeed, config) : config.baseZoom;
+    const frame = active ? cameraFrameTarget({
+      cameraX: camera.x, cameraY: camera.y, subjectX: ball.x, subjectY: ball.y,
+      velocityX: ball.vx, velocityY: ball.vy, worldWidth: W, worldHeight: H,
+      viewportWidth: W, viewportHeight: H, zoom: camera.targetZoom, config,
+    }) : { x: W / 2, y: H / 2 };
+    const followEase = 1 - Math.exp(-dt * config.followRate);
+    camera.x = lerp(camera.x, frame.x, followEase);
+    camera.y = lerp(camera.y, frame.y, followEase);
+    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * config.zoomRate));
   }
 
   function update(dt) {
@@ -936,12 +940,13 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
     ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
     if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
-    const targetX=worldX(lerp(W/2,renderBall.x,replayFrame?1:.34));const targetZ=worldZ(lerp(H/2,renderBall.y,replayFrame?1:.18));
+    const framedX=replayFrame?renderBall.x:game.camera.x;const framedY=replayFrame?renderBall.y:game.camera.y;
+    const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,game.camera.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
-    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,lowPowerDevice?66:60,30+targetZ*.05);cameraLook.set(targetX,0,targetZ);}
-    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,lowPowerDevice?26:20,lowPowerDevice?38:31+targetZ*.18);cameraLook.set(targetX,1.2,targetZ);}
-    else{cameraTarget.set(targetX,(lowPowerDevice?52:44)+Math.min(5,Math.hypot(ball.vx,ball.vy)*.004),(lowPowerDevice?62:52)+targetZ*.08);cameraLook.set(targetX,.7,targetZ);}
+    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,(lowPowerDevice?66:60)*zoomScale,30*zoomScale+targetZ*.04);cameraLook.set(targetX,0,targetZ);}
+    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,(lowPowerDevice?26:20)*zoomScale,(lowPowerDevice?38:31)*zoomScale+targetZ*.14);cameraLook.set(targetX,1.2,targetZ);}
+    else{cameraTarget.set(targetX,(lowPowerDevice?54:47)*zoomScale,(lowPowerDevice?66:57)*zoomScale+targetZ*.06);cameraLook.set(targetX,.7,targetZ);}
     const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
@@ -1145,10 +1150,14 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function drawRadar() {
-    const rw = radar.width; const rh = radar.height; rctx.clearRect(0,0,rw,rh); rctx.fillStyle = "#073522"; rctx.fillRect(0,0,rw,rh);
-    rctx.strokeStyle = "rgba(255,255,255,.42)"; rctx.lineWidth = 1; rctx.strokeRect(5,5,rw-10,rh-10); rctx.beginPath(); rctx.moveTo(rw/2,5); rctx.lineTo(rw/2,rh-5); rctx.stroke();
-    for (const player of players) { rctx.fillStyle = player.team === HOME ? "#e1bb58" : "#47c9d4"; rctx.beginPath(); rctx.arc(player.x/W*rw,player.y/H*rh,player===game.selected?4:2.7,0,Math.PI*2); rctx.fill(); }
-    rctx.fillStyle = "white"; rctx.beginPath(); rctx.arc(ball.x/W*rw,ball.y/H*rh,2.2,0,Math.PI*2); rctx.fill();
+    const config=cameraHudConfig.radar;const rw=radar.width;const rh=radar.height;const pad=config.plotPadding;const plotW=rw-pad*2;const plotH=rh-pad*2;
+    const mapX=(value)=>pad+clamp((value-FIELD.left)/(FIELD.right-FIELD.left),0,1)*plotW;
+    const mapY=(value)=>pad+clamp((value-FIELD.top)/(FIELD.bottom-FIELD.top),0,1)*plotH;
+    rctx.clearRect(0,0,rw,rh);rctx.fillStyle="#062d1e";rctx.fillRect(0,0,rw,rh);
+    rctx.strokeStyle="rgba(236,248,241,.5)";rctx.lineWidth=1;rctx.strokeRect(pad,pad,plotW,plotH);rctx.beginPath();rctx.moveTo(rw/2,pad);rctx.lineTo(rw/2,rh-pad);rctx.stroke();
+    rctx.beginPath();rctx.arc(rw/2,rh/2,Math.min(plotW,plotH)*.13,0,Math.PI*2);rctx.stroke();
+    for(const player of players){const x=mapX(player.x);const y=mapY(player.y);const selected=player===game.selected;const radius=selected?config.selectedRadius:config.playerRadius;rctx.fillStyle=player.team===HOME?"#f0c85d":"#55d5df";rctx.beginPath();rctx.arc(x,y,radius,0,Math.PI*2);rctx.fill();if(selected){rctx.strokeStyle="#fff3bd";rctx.lineWidth=1.7;rctx.beginPath();rctx.arc(x,y,radius+2.2,0,Math.PI*2);rctx.stroke();}}
+    const bx=mapX(ball.x);const by=mapY(ball.y);rctx.fillStyle="#ffffff";rctx.strokeStyle="#101615";rctx.lineWidth=2;rctx.beginPath();rctx.arc(bx,by,config.ballRadius,0,Math.PI*2);rctx.fill();rctx.stroke();
   }
 
   function updateUI(scoringTeam = null) {
