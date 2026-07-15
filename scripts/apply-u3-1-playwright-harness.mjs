@@ -15,6 +15,15 @@ game = replaceOnce(
 );
 await writeFile("game.js", game);
 
+let index = await readFile("index.html", "utf8");
+index = replaceOnce(
+  index,
+  '{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}',
+  '{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}',
+  "local Three.js import map",
+);
+await writeFile("index.html", index);
+
 let packageJson = JSON.parse(await readFile("package.json", "utf8"));
 packageJson.scripts["test:e2e"] = "playwright test";
 packageJson.scripts["test:e2e:report"] = "playwright show-report";
