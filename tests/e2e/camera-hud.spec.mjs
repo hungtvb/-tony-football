@@ -7,11 +7,11 @@ async function openScenario(page, scenario) {
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
 
-  await page.goto(`/?debugScenario=${scenario}`);
+  await page.goto(`/?debugScenario=${scenario}`, { waitUntil: "domcontentloaded", timeout: 12_000 });
+  await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true, null, { timeout: 12_000 });
   await expect(page.locator("#startOverlay")).not.toHaveClass(/show/);
   await expect(page.locator("#gameCanvas")).toBeVisible();
-  await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(250);
   expect(consoleErrors).toEqual([]);
 }
 
@@ -49,8 +49,7 @@ test("crowded radar keeps text outside the plot", async ({ page }, testInfo) => 
   await openScenario(page, "radar-crowded");
   await expect(page.locator("#radarCanvas")).toBeVisible();
   await assertNoOverlap(page, ".match-toast", ".hud-radar");
-  const radar = page.locator(".hud-radar");
-  await radar.screenshot({ path: testInfo.outputPath("radar-crowded.png") });
+  await page.locator(".hud-radar").screenshot({ path: testInfo.outputPath("radar-crowded.png") });
 });
 
 test("low stamina exposes a restrained warning state", async ({ page }, testInfo) => {
