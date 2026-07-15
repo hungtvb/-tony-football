@@ -1,8 +1,11 @@
 import { GameCommandBuffer, GameCommandType } from "./GameCommands.js";
 import { GameEventQueue, GameEventType } from "./GameEvents.js";
 import { createMatchSnapshot, createSnapshotFrame } from "./MatchSnapshot.js";
+import { createSeededRandom } from "../core/Random.js";
 import { advanceBallSimulation } from "./BallSimulationSystem.js";
+import { executeKickAction } from "./KickActionSystem.js";
 import { advancePlayerMovement, createFieldBounds } from "./PlayerMovementSystem.js";
+import { executeTackle, triggerTeammateRun } from "./PlayerActionSystem.js";
 import { controlPossession, releasePossession } from "../gameplay/PossessionLifecycle.js";
 import {
   AWAY_TEAM,
@@ -16,13 +19,11 @@ import {
   resetForKickoff
 } from "./MatchState.js";
 
-const actionIntentTypes = new Set([
+const kickActionTypes = new Set([
   GameCommandType.SHORT_PASS,
   GameCommandType.THROUGH_BALL,
   GameCommandType.LOFTED_PASS,
-  GameCommandType.SHOOT,
-  GameCommandType.TACKLE,
-  GameCommandType.TRIGGER_TEAMMATE_RUN
+  GameCommandType.SHOOT
 ]);
 
 function assertDelta(deltaSeconds) {
@@ -44,6 +45,7 @@ export class MatchEngine {
   #commands = new GameCommandBuffer();
   #events = new GameEventQueue();
   #actionIntents = [];
+  #random;
   #previousSnapshot;
   #currentSnapshot;
 
@@ -56,6 +58,7 @@ export class MatchEngine {
     pitchStyle = "classic",
     ballStyle = "classic",
     weather = "clear",
+    randomSeed = "tony-football-r1",
     width = 1200,
     height = 700
   } = {}) {
@@ -71,10 +74,12 @@ export class MatchEngine {
       pitchStyle,
       ballStyle,
       weather,
+      randomSeed,
       width,
       height
     };
     this.#config.field = createFieldBounds(width, height);
+    this.#random = createSeededRandom(randomSeed);
     this.#state = createMatchState(this.#config);
     this.#currentSnapshot = this.#captureSnapshot();
     this.#previousSnapshot = this.#currentSnapshot;
@@ -242,10 +247,52 @@ export class MatchEngine {
       case GameCommandType.SWITCH_PLAYER:
         if (this.#state.match.state === "playing") this.#switchControlledPlayer();
         break;
+      case GameCommandType.TACKLE:
+        if (this.#state.match.state === "playing") this.#applyTackleCommand();
+        break;
+      case GameCommandType.TRIGGER_TEAMMATE_RUN:
+        if (this.#state.match.state === "playing") this.#applyTeammateRunCommand();
+        break;
       default:
-        if (actionIntentTypes.has(command.type) && this.#state.match.state === "playing") {
-          this.#actionIntents.push(command);
+        if (kickActionTypes.has(command.type) && this.#state.match.state === "playing") {
+          this.#applyKickCommand(command);
         }
+    }
+  }
+
+  #applyKickCommand(command) {
+    const previousOwnerId = this.#state.ball.ownerId;
+    const result = executeKickAction(this.#state, command, {
+      field: this.#config.field,
+      height: this.#config.height,
+      random: this.#random
+    });
+    if (!result) return;
+    this.#events.emit(GameEventType.BALL_KICKED, result, { tick: this.#tick });
+    this.#events.emit(GameEventType.POSSESSION_CHANGED, {
+      previousOwnerId,
+      ownerId: null,
+      reason: result.style
+    }, { tick: this.#tick });
+  }
+
+  #applyTackleCommand() {
+    const result = executeTackle(this.#state, { random: this.#random });
+    if (!result) return;
+    this.#events.emit(GameEventType.TACKLE_RESOLVED, result, { tick: this.#tick });
+    if (result.won) {
+      this.#events.emit(GameEventType.POSSESSION_CHANGED, {
+        previousOwnerId: result.previousOwnerId,
+        ownerId: null,
+        reason: "tackle"
+      }, { tick: this.#tick });
+    }
+  }
+
+  #applyTeammateRunCommand() {
+    const result = triggerTeammateRun(this.#state);
+    if (result) {
+      this.#events.emit(GameEventType.TEAMMATE_RUN_TRIGGERED, result, { tick: this.#tick });
     }
   }
 
@@ -323,6 +370,7 @@ export class MatchEngine {
       weather: this.#state.settings.weather,
       runtimeState
     });
+    this.#random = createSeededRandom(this.#config.randomSeed);
     this.#actionIntents.length = 0;
   }
 

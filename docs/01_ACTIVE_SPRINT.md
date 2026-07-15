@@ -3,7 +3,7 @@
 ```yaml
 Sprint: R1
 Title: Engine and Presentation Boundary
-Status: In Progress — Slice B movement and ball simulation
+Status: In Progress — Slice B player actions
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
@@ -29,7 +29,7 @@ Do not modify:
   - FO4 control mapping
   - WebGL, Canvas fallback, models, camera, or presentation behavior
 Next slices:
-  - complete Slice B kick outcomes and AI migration into MatchEngine
+  - complete Slice B goalkeeper and team AI migration into MatchEngine
   - Slice C Input and application adapters
   - Slice D Rendering and presentation adapters
   - Slice E Explicit bootstrap and compatibility cleanup

@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice B movement and ball simulation
+Status: In Progress — Slice B player actions
 
 ## Objective
 
@@ -74,8 +74,11 @@ flowchart LR
 - Slice A contracts and dependency guardrails are complete.
 - Slice B state/lifecycle foundation is complete.
 - Slice B now runs controlled locomotion, stamina, facing, motion state, player bounds/collisions, owned-ball dribbling, loose-ball physics, first touch, possession time, and goal-line detection headlessly inside `MatchEngine`.
+- Slice B now also executes short passes, one-twos, through balls, chipped through balls, lofted passes, power/finesse/chip shots, slide tackles, and teammate runs inside the fixed update.
+- Kick targeting, lead, speed, curve, vertical velocity, release locks, action animation facts, statistics, and tackle odds preserve the compatibility formulas; random outcomes use the engine's seeded source.
+- Successful actions publish explicit ball-kicked, tackle-resolved, teammate-run, and possession events for future presentation adapters.
 - Movement and ball systems reuse the existing locomotion, ball-control, possession, and tuning modules; their fixed-step constants remain unchanged.
-- Passing, shooting, tackling, goalkeeper decisions, and team AI remain queued action intents until their current `game.js` behavior is migrated with focused parity tests.
+- Goalkeeper decisions and team AI remain in `game.js` until migrated with focused parity tests.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 
 ## Out of scope

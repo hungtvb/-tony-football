@@ -23,8 +23,8 @@ R1 architecture gate before returning to G4, U4, U5, or major AI expansion.
 R1 — Engine and Presentation Boundary.
 
 ## Priority order
-1. Complete parity-first migration of authoritative gameplay systems into `MatchEngine`
-2. Move kick outcomes and AI decisions behind command/system boundaries
+1. Complete parity-first migration of goalkeeper and team AI into `MatchEngine`
+2. Validate migrated gameplay systems against the compatibility runtime
 3. Add browser input and application adapters without changing FO4 mappings
 4. Make renderers and presentation consume snapshots and events
 5. Preserve deterministic gameplay and visual parity through compatibility bridges

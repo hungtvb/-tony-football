@@ -21,12 +21,13 @@ test("game commands are immutable serializable contracts", () => {
   const direction = { x: 1, y: 0 };
   const command = createGameCommand(
     GameCommandType.SHOOT,
-    { power: 0.8, direction, modifiers: { finesse: true } },
+    { power: 0.8, playerId: "home-4", direction, modifiers: { finesse: true } },
     { source: GameCommandSource.HUMAN, sequence: 4, targetTick: 20 }
   );
 
   direction.x = -1;
   assert.equal(command.payload.direction.x, 1);
+  assert.equal(command.payload.playerId, "home-4");
   assert.equal(command.sequence, 4);
   assert.equal(command.targetTick, 20);
   assert.ok(Object.isFrozen(command));
@@ -40,6 +41,9 @@ test("game commands reject unknown types and invalid payloads", () => {
   assert.throws(() => createGameCommand(GameCommandType.MOVE, { x: 2, y: 0 }), /move.x/);
   assert.throws(() => createGameCommand(GameCommandType.SET_SPRINT, { active: 1 }), /boolean/);
   assert.throws(() => createGameCommand(GameCommandType.SHORT_PASS, { power: 1.2 }), /between 0 and 1/);
+  assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, playerId: "" }), /non-empty string/);
+  assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, modifiers: { finesse: 1 } }), /boolean/);
+  assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, modifiers: { knuckle: true } }), /not supported/);
   assert.throws(() => createGameCommand(GameCommandType.PAUSE_MATCH, { reason: "menu" }), /does not accept/);
 });
 

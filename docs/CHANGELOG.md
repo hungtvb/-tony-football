@@ -9,6 +9,7 @@
 - Headless engine dependency guardrails and focused contract tests.
 - Headless match-state factory and MatchEngine lifecycle foundation with stable 6v6 entities.
 - Headless fixed-step player movement and ball simulation systems with engine parity coverage.
+- Headless kick, tackle, and teammate-run systems with seeded outcomes and explicit gameplay events.
 
 ### Changed
 - Active sprint moved from G1 to U1.

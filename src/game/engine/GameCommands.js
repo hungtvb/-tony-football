@@ -66,10 +66,24 @@ function validatePayload(type, payload) {
 
   if (kickCommands.has(type)) {
     assertUnitInterval(payload.power, `${type}.power`);
+    if (payload.playerId !== undefined && (typeof payload.playerId !== "string" || !payload.playerId)) {
+      throw new TypeError(`${type}.playerId must be a non-empty string`);
+    }
     if (payload.direction !== undefined) {
       assertPlainRecord(payload.direction, `${type}.direction`);
       assertUnitNumber(payload.direction.x, `${type}.direction.x`);
       assertUnitNumber(payload.direction.y, `${type}.direction.y`);
+    }
+    if (payload.modifiers !== undefined) {
+      assertPlainRecord(payload.modifiers, `${type}.modifiers`);
+      for (const [name, active] of Object.entries(payload.modifiers)) {
+        if (!["oneTwo", "finesse", "chip"].includes(name)) {
+          throw new TypeError(`${type}.modifiers.${name} is not supported`);
+        }
+        if (typeof active !== "boolean") {
+          throw new TypeError(`${type}.modifiers.${name} must be boolean`);
+        }
+      }
     }
   }
 }

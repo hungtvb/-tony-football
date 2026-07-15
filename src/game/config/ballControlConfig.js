@@ -32,8 +32,9 @@ export const ballControlConfig = Object.freeze({
     sprintFollow: 15,
   }),
   release: Object.freeze({
-    passLock: 0.12,
-    shotLock: 0.18,
+    passLock: 0.2,
+    loftPassLock: 0.3,
+    shotLock: 0.13,
     tackleLock: 0.18,
     kickoffLock: 0.8,
   }),

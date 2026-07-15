@@ -66,12 +66,11 @@ test("restart creates fresh entities while preserving selected match settings", 
   assert.equal(snapshot.players.find((player) => player.id === "home-4").x, 690);
 });
 
-test("control commands drive engine-owned movement while actions remain buffered intents", () => {
+test("control commands drive movement and authoritative kick actions", () => {
   const engine = new MatchEngine({ kickoffDelay: 0 });
   engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.APPLICATION });
   engine.enqueue(GameCommandType.MOVE, { x: 1, y: 0 });
   engine.enqueue(GameCommandType.SET_SPRINT, { active: true });
-  engine.enqueue(GameCommandType.SHOOT, { power: 0.7, direction: { x: 1, y: 0 } });
   engine.step(1 / 60);
 
   const player = engine.snapshot.players.find((candidate) => candidate.id === engine.snapshot.match.selectedPlayerId);
@@ -84,10 +83,50 @@ test("control commands drive engine-owned movement while actions remain buffered
     sprinting: true,
     shielding: false
   });
-  const intents = engine.drainActionIntents();
-  assert.equal(intents.length, 1);
-  assert.equal(intents[0].type, GameCommandType.SHOOT);
+  engine.setPossession(player.id, { reason: "test-control" });
+  engine.drainEvents();
+  engine.enqueue(GameCommandType.SHOOT, { power: 0.7, direction: { x: 1, y: 0 } });
+  engine.step(1 / 60);
+
+  assert.equal(engine.snapshot.ball.ownerId, null);
+  assert.equal(engine.snapshot.match.stats.shots[0], 1);
+  assert.deepEqual(
+    engine.drainEvents().map((event) => event.type),
+    [GameEventType.BALL_KICKED, GameEventType.POSSESSION_CHANGED]
+  );
   assert.equal(engine.drainActionIntents().length, 0);
+});
+
+test("tackle and teammate-run commands emit explicit gameplay events", () => {
+  const engine = new MatchEngine({ kickoffDelay: 0, randomSeed: "player-actions" });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+  engine.setPossession("home-4");
+  engine.drainEvents();
+  engine.enqueue(GameCommandType.TRIGGER_TEAMMATE_RUN, {}, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+  assert.deepEqual(
+    engine.drainEvents().map((event) => event.type),
+    [GameEventType.TEAMMATE_RUN_TRIGGERED]
+  );
+});
+
+test("equal kick commands and seeds produce deterministic ball outcomes", () => {
+  function shoot() {
+    const engine = new MatchEngine({ kickoffDelay: 0, randomSeed: "kick-parity" });
+    engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
+    engine.step(1 / 60);
+    engine.setPossession("home-4");
+    engine.enqueue(GameCommandType.SHOOT, {
+      power: 0.65,
+      direction: { x: 1, y: -0.35 },
+      modifiers: { finesse: true }
+    }, { source: GameCommandSource.TEST });
+    engine.step(1 / 60);
+    return engine.snapshot;
+  }
+
+  assert.deepEqual(shoot(), shoot());
 });
 
 test("score and possession facts are engine-owned and event-driven", () => {
