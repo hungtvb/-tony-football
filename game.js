@@ -171,6 +171,26 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     game.state = pause ? "paused" : "playing"; ui.pause.classList.toggle("show", pause); ui.matchState.textContent = pause ? "TẠM DỪNG" : "LIVE";
   }
 
+  function clearActiveInput() {
+    input.keys.clear(); input.actionCode = null; input.actionStart = 0; input.actionCharge = 0; input.actionModifiers = null;
+    input.bufferedAction = null; input.qTapStart = 0; input.qConsumed = false; input.moveX = 0; input.moveY = 0; input.magnitude = 0;
+  }
+
+  function showMatchSetup({ reset = true } = {}) {
+    clearActiveInput();
+    if (reset) resetMatch();
+    game.state = "menu"; game.replay.active = false; game.goalSequence = null; game.goalScorer = null;
+    ui.pause.classList.remove("show"); ui.result.classList.remove("show"); ui.start.classList.add("show");
+    ui.replayBadge.classList.remove("show"); ui.matchState.textContent = "SẴN SÀNG";
+    announce("Chọn thiết lập rồi bắt đầu trận mới.");
+  }
+
+  function showMainMenu() {
+    showMatchSetup({ reset: true });
+    ui.start.dataset.entry = "main-menu";
+    announce("Đã trở về màn hình đầu.");
+  }
+
   function endMatch() {
     game.state = "ended"; ui.result.classList.add("show"); ui.matchState.textContent = "FULL TIME"; whistle(true);
     $("finalHome").textContent = game.score[HOME]; $("finalAway").textContent = game.score[AWAY];
@@ -1266,6 +1286,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   $("pauseButton").addEventListener("click", () => togglePause());
   $("resumeButton").addEventListener("click", () => togglePause(false));
   $("restartButton").addEventListener("click", startMatch);
+  $("setupButton").addEventListener("click", () => showMatchSetup({ reset: true }));
+  $("mainMenuButton").addEventListener("click", showMainMenu);
   $("playAgainButton").addEventListener("click", startMatch);
   $("soundButton").addEventListener("click", () => { game.sound=!game.sound;$("soundButton").classList.toggle("muted",!game.sound);$("soundButton").setAttribute("aria-label",game.sound?"Tắt âm thanh":"Bật âm thanh");if(game.sound)tone(600,.08); });
   window.addEventListener("keydown", onKeyDown, { passive: false }); window.addEventListener("keyup", onKeyUp);

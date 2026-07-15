@@ -38,7 +38,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: u3-1-test-evidence
+          name: u3-2-test-evidence
           path: |
             unit-test.log
             playwright-report

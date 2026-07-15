@@ -1,0 +1,44 @@
+/* U3.2 Match Flow & Pause Navigation */
+.pause-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.pause-actions .secondary-button,
+.pause-actions .tertiary-button {
+  width: 100%;
+}
+
+.tertiary-button {
+  min-height: 44px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 10px;
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.78);
+  font: 700 13px/1 Inter, sans-serif;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+
+.tertiary-button:hover,
+.tertiary-button:focus-visible {
+  border-color: rgba(225,187,88,.5);
+  background: rgba(225,187,88,.08);
+  color: #fff4c7;
+}
+
+.tertiary-button.danger {
+  border-color: rgba(255,120,110,.18);
+  color: rgba(255,210,205,.82);
+}
+
+.tertiary-button.danger:hover,
+.tertiary-button.danger:focus-visible {
+  border-color: rgba(255,120,110,.48);
+  background: rgba(255,120,110,.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tertiary-button { transition: none; }
+}
