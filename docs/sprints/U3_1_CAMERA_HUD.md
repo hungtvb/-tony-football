@@ -7,7 +7,7 @@ Improve match readability and presentation without changing gameplay rules. The 
 - The previous framing could crop the lower-left and lower-right playable areas.
 - Camera tracking followed the ball too literally and zoomed closer as ball speed increased.
 - The commentary toast overlapped the radar plot and hid markers.
-- HUD elements still have similar visual weight and remain visible even when not useful.
+- HUD elements had similar visual weight and remained prominent even when not useful.
 
 ## Scope
 
@@ -26,10 +26,10 @@ Improve match readability and presentation without changing gameplay rules. The 
 
 ### HUD hierarchy
 - Score and time remain glanceable but secondary to the match.
-- Player identity appears briefly on selection changes.
+- Player identity transitions briefly on selection changes.
 - Stamina remains compact and warns gently at low levels.
 - Power appears only while charging an action.
-- Context hints reduce prominence after initial onboarding and never overlap the radar.
+- Context hints reduce prominence after initial onboarding and reactivate during input.
 - Motion follows reduced-motion settings.
 
 ## Out of scope
@@ -61,16 +61,17 @@ Improve match readability and presentation without changing gameplay rules. The 
 - Kept the plot free of text rendering.
 - Moved the commentary toast above the radar on desktop and to a top safe region on narrow layouts.
 
-### U3.1.4 — HUD polish — Next
-- Refine scoreboard and clock weight.
-- Add a restrained selected-player transition.
-- Add a low-stamina warning state.
-- Reduce contextual hint prominence after initial onboarding.
-- Preserve reduced-motion behavior.
+### U3.1.4 — HUD polish — Complete in code
+- Refined scoreboard panel contrast, team-name weight, score numerals, and clock grouping.
+- Added a restrained player-card transition when the controlled player changes.
+- Added a low-stamina class state with warm color emphasis and no rapid flashing.
+- Context controls dim after the first 18 seconds and reactivate during movement or charged actions.
+- Disabled nonessential player-card animation for reduced-motion users.
 
-### U3.1.5 — Validation — In progress
+### U3.1.5 — Validation — Automated complete, manual pending
 - Camera policy and runtime contract tests pass.
 - Radar no-text, marker hierarchy, stylesheet ordering, and overlap contracts pass.
+- HUD player transition, low-stamina, hint visibility, and reduced-motion contracts pass.
 - Full repository tests pass on the integrated source.
 - Manual WebGL lower-corner, desktop, narrow-layout, replay, Canvas fallback, and reduced-motion validation remain.
 
@@ -82,8 +83,10 @@ Improve match readability and presentation without changing gameplay rules. The 
 - Ball and selected-player radar markers are immediately distinguishable.
 - Power and contextual hints do not remain permanently prominent.
 - HUD does not overlap controls, radar, or critical play space on narrow layouts.
+- Low stamina is noticeable without distracting flashing.
+- Player changes receive brief, restrained feedback.
 - No gameplay values or decisions change.
 - CI passes on a clean branch.
 
 ## Current status
-Camera framing and radar cleanup are integrated with automated contracts passing. HUD hierarchy polish and manual browser validation remain. Keep the PR Draft.
+Implementation and automated validation are complete. Manual browser validation remains before the PR can move to Ready for review.
