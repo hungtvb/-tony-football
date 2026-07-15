@@ -4,10 +4,10 @@
 Build Tony Football into a polished browser-based 6v6 football game with responsive controls, readable football behavior, strong AI, and a focused game UI.
 
 ## Current objective
-Close U3.3 with an integrated browser audit, then establish the approved R1 runtime boundary so authoritative gameplay can evolve independently from Three.js, Canvas, DOM presentation, and render frame rate.
+Establish the R1 runtime boundary so authoritative gameplay can evolve independently from Three.js, Canvas, DOM presentation, and render frame rate while preserving current behavior.
 
 ## Current phase
-Phase 4 — Expanded UI/UX, followed by the R1 architecture gate before G4, U4, U5, or major AI expansion.
+R1 architecture gate before returning to G4, U4, U5, or major AI expansion.
 
 ## Completed
 - G1 — Fixed Simulation Foundation
@@ -15,17 +15,19 @@ Phase 4 — Expanded UI/UX, followed by the R1 architecture gate before G4, U4, 
 - G3 — Ball Control and First Touch
 - U1 — Match Experience and HUD Hierarchy
 - U2 — Game Feel and Match Feedback
+- U3.1 — Camera and HUD
 - U3.2 — Match Flow and Pause Navigation
+- U3.3 — Match Presentation
 
 ## Current sprint
-U3.3 — Match Presentation closeout.
+R1 — Engine and Presentation Boundary.
 
 ## Priority order
-1. Complete the integrated U3 browser audit across intro, goal, replay, pause, and post-match flows
-2. Verify desktop, narrow-landscape, WebGL, and Canvas fallback behavior
-3. Close U3.3 documentation and regression evidence
-4. Activate R1 — Engine and Presentation Boundary as the next architecture sprint
-5. Preserve deterministic gameplay and visual parity throughout the R1 migration
+1. Define immutable gameplay commands and deterministic command buffering
+2. Define ordered gameplay events independent of DOM presentation
+3. Define read-only previous/current snapshots with stable entity identifiers
+4. Enforce headless engine dependency boundaries
+5. Preserve deterministic gameplay and visual parity before runtime migration begins
 
 ## Explicitly out of scope
 - Ball physics tuning

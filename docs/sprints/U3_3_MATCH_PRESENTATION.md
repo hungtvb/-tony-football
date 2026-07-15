@@ -1,5 +1,7 @@
 # U3.3 — Match Presentation
 
+Status: Done — merged, production deployed, and covered by desktop/narrow browser validation
+
 ## Objective
 
 Add broadcast-style transitions around the match without changing simulation balance, restart behavior, score ownership, statistics ownership, or replay mechanics.

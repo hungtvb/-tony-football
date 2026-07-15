@@ -5,10 +5,13 @@
 ### Added
 - U1 Match Experience and HUD Hierarchy specifications.
 - HUD, pre-match, radar, controls, pause, and settings source-of-truth documents.
+- R1 immutable game-command, ordered event, and read-only snapshot contracts.
+- Headless engine dependency guardrails and focused contract tests.
 
 ### Changed
 - Active sprint moved from G1 to U1.
 - Roadmap now includes U2 Game Feel after U1.
+- U3.1, U3.2, and U3.3 are closed; R1 Engine and Presentation Boundary is active.
 - Playwright browser validation now uses deterministic local Three.js fixtures,
   single-worker WebGL execution, and state-history assertions instead of transient timing windows.
 

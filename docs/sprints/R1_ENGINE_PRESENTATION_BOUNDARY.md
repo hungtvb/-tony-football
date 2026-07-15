@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: Planned — approved for activation after the U3 integrated browser audit
+Status: In Progress — Slice A contracts and dependency guardrails
 
 ## Objective
 

@@ -27,6 +27,7 @@ Before modifying code:
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, HUD and overlay DOM | Presentation projection; not gameplay authority |
 | `game.js` | Current composition root plus authoritative match state, simulation updates, input, rendering, replay, audio, DOM and debug wiring | Primary R1 extraction target |
+| `src/game/engine/` | R1 command, event, and snapshot contracts | Headless only; no DOM, Three.js, Canvas, audio, or render-frame dependencies |
 | `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Uses `FixedClock`; exposes interpolation alpha |
 | `scripts/dev-server.mjs` | Local static development server | Development only; never the Vercel production entry point |
 | `scripts/build-static.mjs` | Produces the static `dist` bundle | Vercel publishes `dist` |
@@ -58,6 +59,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Question or subsystem | Current source | Current owner | Focused tests/specification | R1 direction |
 | --- | --- | --- | --- | --- |
 | Fixed timestep and render cadence | `src/game/core/FixedClock.js`, `src/game/core/SimulationLoop.js` | Core | `tests/simulation/`, `docs/gameplay/SIMULATION.md`, ADR-001 | Retain unchanged; `MatchEngine` consumes fixed ticks |
+| Commands, events and snapshots | `src/game/engine/` | Engine contracts | `tests/engine/`, R1 sprint document, ADR-002 | Slice A foundation; runtime adapters consume these contracts in later slices |
 | Deterministic randomness | `src/game/core/Random.js` | Core | `tests/simulation/` | Engine-only service with no browser dependency |
 | Gameplay tuning | `src/game/config/gameplayConfig.js` | Config | Simulation and gameplay contracts | Inject into engine; never read from renderer |
 | Player movement, facing and stamina | `src/game/gameplay/PlayerLocomotion.js`, `src/game/config/locomotionConfig.js`, `game.js` | Shared helper plus `game.js` | `tests/gameplay/playerLocomotion.test.mjs`, `docs/gameplay/PLAYER_MOVEMENT.md` | Engine owns position/facing/action; renderer maps them to transforms and animation |
