@@ -1,6 +1,8 @@
 import { GameCommandBuffer, GameCommandType } from "./GameCommands.js";
 import { GameEventQueue, GameEventType } from "./GameEvents.js";
 import { createMatchSnapshot, createSnapshotFrame } from "./MatchSnapshot.js";
+import { advanceBallSimulation } from "./BallSimulationSystem.js";
+import { advancePlayerMovement, createFieldBounds } from "./PlayerMovementSystem.js";
 import { controlPossession, releasePossession } from "../gameplay/PossessionLifecycle.js";
 import {
   AWAY_TEAM,
@@ -72,6 +74,7 @@ export class MatchEngine {
       width,
       height
     };
+    this.#config.field = createFieldBounds(width, height);
     this.#state = createMatchState(this.#config);
     this.#currentSnapshot = this.#captureSnapshot();
     this.#previousSnapshot = this.#currentSnapshot;
@@ -99,7 +102,7 @@ export class MatchEngine {
     this.#previousSnapshot = this.#currentSnapshot;
 
     for (const command of this.#commands.drain()) this.#applyCommand(command);
-    this.#advanceLifecycle(deltaSeconds);
+    if (this.#advanceLifecycle(deltaSeconds)) this.#advanceSimulation(deltaSeconds);
     this.#currentSnapshot = this.#captureSnapshot();
     return this.#currentSnapshot;
   }
@@ -252,7 +255,7 @@ export class MatchEngine {
       if (this.#state.replay.elapsed >= this.#state.replay.duration) this.endReplay();
     }
 
-    if (this.#state.match.state !== "playing") return;
+    if (this.#state.match.state !== "playing") return false;
     if (this.#state.match.goalSequence) {
       this.#state.match.goalSequence.timer = Math.max(
         0,
@@ -266,15 +269,43 @@ export class MatchEngine {
           height: this.#config.height
         });
       }
-      return;
+      return false;
     }
     if (this.#state.match.kickoffTimer > 0) {
       this.#state.match.kickoffTimer = Math.max(0, this.#state.match.kickoffTimer - deltaSeconds);
-      return;
+      return false;
     }
 
     this.#state.match.time = Math.max(0, this.#state.match.time - deltaSeconds);
-    if (this.#state.match.time === 0) this.endMatch();
+    if (this.#state.match.time === 0) {
+      this.endMatch();
+      return false;
+    }
+    return true;
+  }
+
+  #advanceSimulation(deltaSeconds) {
+    const previousOwnerId = this.#state.ball.ownerId;
+    advancePlayerMovement(this.#state, deltaSeconds, { field: this.#config.field });
+    const { goalTeam } = advanceBallSimulation(this.#state, deltaSeconds, {
+      field: this.#config.field
+    });
+    const ownerId = this.#state.ball.ownerId;
+    if (ownerId !== previousOwnerId) {
+      this.#events.emit(GameEventType.POSSESSION_CHANGED, {
+        previousOwnerId,
+        ownerId,
+        reason: this.#state.ball.possession.touchOutcome
+          ?? this.#state.ball.possession.releaseReason
+          ?? "simulation"
+      }, { tick: this.#tick });
+    }
+    if (goalTeam !== null) {
+      const scorer = findPlayer(this.#state, this.#state.ball.lastTouchId);
+      this.recordGoal(goalTeam, {
+        scorerId: scorer?.team === goalTeam ? scorer.id : null
+      });
+    }
   }
 
   #switchControlledPlayer() {

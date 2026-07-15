@@ -66,7 +66,7 @@ test("restart creates fresh entities while preserving selected match settings", 
   assert.equal(snapshot.players.find((player) => player.id === "home-4").x, 690);
 });
 
-test("control commands update engine-owned intent state without moving entities", () => {
+test("control commands drive engine-owned movement while actions remain buffered intents", () => {
   const engine = new MatchEngine({ kickoffDelay: 0 });
   engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.APPLICATION });
   engine.enqueue(GameCommandType.MOVE, { x: 1, y: 0 });
@@ -75,7 +75,9 @@ test("control commands update engine-owned intent state without moving entities"
   engine.step(1 / 60);
 
   const player = engine.snapshot.players.find((candidate) => candidate.id === engine.snapshot.match.selectedPlayerId);
-  assert.equal(player.x, 690);
+  assert.ok(player.x > 690);
+  assert.equal(player.sprinting, true);
+  assert.ok(player.stamina < 100);
   assert.deepEqual(engine.snapshot.match.controls, {
     moveX: 1,
     moveY: 0,

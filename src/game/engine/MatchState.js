@@ -1,4 +1,5 @@
 import { createPossessionLifecycle } from "../gameplay/PossessionLifecycle.js";
+import { ballControlConfig } from "../config/ballControlConfig.js";
 
 export const HOME_TEAM = 0;
 export const AWAY_TEAM = 1;
@@ -82,7 +83,7 @@ export function createMatchPlayers(formations = DEFAULT_FORMATIONS) {
   ];
 }
 
-export function createMatchBall({ width = 1200, height = 700 } = {}) {
+export function createMatchBall({ width = 1200, height = 700, lock = 0 } = {}) {
   return {
     id: MATCH_BALL_ID,
     x: width / 2,
@@ -95,7 +96,7 @@ export function createMatchBall({ width = 1200, height = 700 } = {}) {
     radius: 9,
     ownerId: null,
     lastTouchId: null,
-    lock: 0,
+    lock,
     trail: [],
     pendingPass: null,
     angle: 0,
@@ -144,7 +145,11 @@ export function createMatchState({
     },
     settings: { pitchStyle, ballStyle, weather },
     players,
-    ball: createMatchBall({ width, height }),
+    ball: createMatchBall({
+      width,
+      height,
+      lock: runtimeState === "playing" ? ballControlConfig.release.kickoffLock : 0
+    }),
     selectedPlayerId: players.find((player) => player.team === HOME_TEAM && player.number === 10)?.id ?? players[0].id,
     controls: {
       moveX: 0,
@@ -192,7 +197,11 @@ export function resetForKickoff(state, team, {
     const previous = findPlayer(state, freshPlayer.id);
     return { ...freshPlayer, stamina: Math.max(55, previous?.stamina ?? 100) };
   });
-  state.ball = createMatchBall({ width, height });
+  state.ball = createMatchBall({
+    width,
+    height,
+    lock: ballControlConfig.release.kickoffLock
+  });
   state.match.goalSequence = null;
   state.match.kickoffTimer = kickoffDelay;
   state.controls.moveX = 0;

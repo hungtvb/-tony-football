@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice B headless state and lifecycle foundation
+Status: In Progress — Slice B movement and ball simulation
 
 ## Objective
 
@@ -68,6 +68,15 @@ flowchart LR
 - Initialize presentation modules explicitly; imports must not rely on hidden side effects.
 - Remove temporary DOM/state bridges after equivalent command, event, and snapshot tests pass.
 - Document final module ownership and retain both WebGL and Canvas smoke paths.
+
+## Implementation checkpoint
+
+- Slice A contracts and dependency guardrails are complete.
+- Slice B state/lifecycle foundation is complete.
+- Slice B now runs controlled locomotion, stamina, facing, motion state, player bounds/collisions, owned-ball dribbling, loose-ball physics, first touch, possession time, and goal-line detection headlessly inside `MatchEngine`.
+- Movement and ball systems reuse the existing locomotion, ball-control, possession, and tuning modules; their fixed-step constants remain unchanged.
+- Passing, shooting, tackling, goalkeeper decisions, and team AI remain queued action intents until their current `game.js` behavior is migrated with focused parity tests.
+- The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 
 ## Out of scope
 

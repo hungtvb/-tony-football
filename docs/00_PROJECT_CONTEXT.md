@@ -23,11 +23,11 @@ R1 architecture gate before returning to G4, U4, U5, or major AI expansion.
 R1 — Engine and Presentation Boundary.
 
 ## Priority order
-1. Define immutable gameplay commands and deterministic command buffering
-2. Define ordered gameplay events independent of DOM presentation
-3. Define read-only previous/current snapshots with stable entity identifiers
-4. Enforce headless engine dependency boundaries
-5. Preserve deterministic gameplay and visual parity before runtime migration begins
+1. Complete parity-first migration of authoritative gameplay systems into `MatchEngine`
+2. Move kick outcomes and AI decisions behind command/system boundaries
+3. Add browser input and application adapters without changing FO4 mappings
+4. Make renderers and presentation consume snapshots and events
+5. Preserve deterministic gameplay and visual parity through compatibility bridges
 
 ## Explicitly out of scope
 - Ball physics tuning
