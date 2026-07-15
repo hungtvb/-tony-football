@@ -5,6 +5,8 @@ Gameplay, AI, rendering, input, animation, replay, UI, and asset loading are con
 
 The fixed 60 Hz clock and several gameplay/presentation helpers are already extracted, but authoritative state, browser input, Three.js objects, Canvas rendering, DOM state, match lifecycle, and presentation integration still share one runtime closure. R1 is the approved sprint that establishes the enforceable boundary; it does not replace the existing fixed-timestep work.
 
+Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
+
 ## Target flow
 ```mermaid
 flowchart LR

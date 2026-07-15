@@ -123,6 +123,7 @@ Each slice must retain a temporary compatibility adapter until its focused unit,
 - Existing gameplay tuning and FO4 controls remain unchanged.
 - Unit, contract, desktop Playwright, narrow-landscape Playwright, and Vercel preview smoke checks are green.
 - Architecture ownership is reflected in `docs/05_ARCHITECTURE.md` and enforced by tests.
+- `docs/11_SOURCE_MAP.md` reflects the final entry points, ownership, dependency boundaries, compatibility bridges, and test locations.
 
 ## Activation rule
 

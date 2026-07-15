@@ -10,8 +10,9 @@ Before planning or modifying code, read in this order:
 2. `docs/01_ACTIVE_SPRINT.md`
 3. `docs/03_DEV_RULES.md`
 4. The file referenced by `Sprint document` in `01_ACTIVE_SPRINT.md`
-5. Only the relevant specification files
-6. Only the relevant ADR files
+5. The relevant section of `docs/11_SOURCE_MAP.md`
+6. Only the relevant specification files
+7. Only the relevant ADR files
 
 Do not scan every document by default.
 
