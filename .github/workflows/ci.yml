@@ -12,8 +12,10 @@ permissions:
   contents: read
 
 concurrency:
+  # Do not cancel a nearly completed validation when a new commit arrives.
+  # GitHub keeps the active run and only the newest pending run in this group.
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   unit:
