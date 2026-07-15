@@ -212,12 +212,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 
   function possessionId(player) { return player ? `${player.team}:${player.index}` : null; }
 
-  function setOwner(player, touchOutcome = "clean") {
+  function setOwner(player, touchOutcome = "clean", retainedVelocity = null) {
     if (ball.pendingPass && player.team === ball.pendingPass.team) {
       if (player.team === HOME) game.stats.completed += 1;
       ball.pendingPass = null;
     } else if (ball.pendingPass && player.team !== ball.pendingPass.team) ball.pendingPass = null;
-    ball.possession=beginReceiving(ball.possession,possessionId(player));ball.owner = player; ball.lastTouch = player; ball.vx = ball.vy = 0;ball.height=0;ball.vz=0;ball.curve=0;ball.possession=controlPossession(ball.possession,possessionId(player),touchOutcome);player.controlBoost=.28;
+    ball.possession=beginReceiving(ball.possession,possessionId(player));ball.owner = player; ball.lastTouch = player; ball.vx=retainedVelocity?.vx||0;ball.vy=retainedVelocity?.vy||0;ball.height=0;ball.vz=0;ball.curve=0;ball.possession=controlPossession(ball.possession,possessionId(player),touchOutcome);player.controlBoost=.28;
     triggerAnimation(player, "receive", .2);
     if (player.team === HOME && player.role !== "GK") game.selected = player;
     if(player===game.selected&&input.bufferedAction&&performance.now()<=input.bufferedAction.expires){const buffered=input.bufferedAction;input.bufferedAction=null;executeAttackAction(buffered.code,buffered.charge,buffered.modifiers);}
@@ -444,7 +444,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
         if (pickup) {
           const ballSpeed=Math.hypot(ball.vx,ball.vy);const precision=pickup===game.selected&&input.keys.has(FO4_CONTROLS.shield);const score=firstTouchScore({ballSpeed,incomingX:ball.vx,incomingY:ball.vy,facingX:pickup.dirX,facingY:pickup.dirY,ballHeight:ball.height,playerSpeed:Math.hypot(pickup.vx,pickup.vy),rating:pickup.rating,precision,sprinting:pickup.sprinting,config:ballControlConfig.firstTouch,captureConfig:ballControlConfig.capture});const outcome=classifyFirstTouch(score,ballControlConfig.firstTouch);const touch=resolveFirstTouch({outcome,ballX:ball.x,ballY:ball.y,ballVx:ball.vx,ballVy:ball.vy,receiver:pickup});
           ball.x=touch.x;ball.y=touch.y;ball.vx=touch.vx;ball.vy=touch.vy;ball.lock=Math.max(ball.lock,touch.lock);
-          if(touch.controls)setOwner(pickup,outcome);else{ball.owner=null;ball.lastTouch=pickup;ball.possession=releasePossession(beginReceiving(ball.possession,possessionId(pickup)),outcome,possessionId(pickup));pickup.cooldown=Math.max(pickup.cooldown,touch.lock);triggerAnimation(pickup,"receive",outcome==="heavy"?.26:.18);}
+          if(touch.controls)setOwner(pickup,outcome,outcome==="cushioned"?{vx:touch.vx,vy:touch.vy}:null);else{ball.owner=null;ball.lastTouch=pickup;ball.possession=releasePossession(beginReceiving(ball.possession,possessionId(pickup)),outcome,possessionId(pickup));pickup.cooldown=Math.max(pickup.cooldown,touch.lock);triggerAnimation(pickup,"receive",outcome==="heavy"?.26:.18);}
         }
       }
     }
@@ -475,7 +475,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 
   function captureReplayFrame() {
     return {
-      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle, vx: ball.vx, vy: ball.vy, trail: ball.trail.map((point)=>({x:point.x,y:point.y,height:point.height})) },
+      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle, vx: ball.vx, vy: ball.vy, ownerId: possessionId(ball.owner), possession: { ...ball.possession }, trail: ball.trail.map((point)=>({x:point.x,y:point.y,height:point.height})) },
       players: players.map((player) => ({ x: player.x, y: player.y, vx: player.vx, vy: player.vy, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: player.anim, animTime: player.animTime, animDuration: player.animDuration, animPower: player.animPower }))
     };
   }
