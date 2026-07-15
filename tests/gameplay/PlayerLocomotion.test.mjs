@@ -8,10 +8,12 @@ import {
   normalizeMovementInput,
   stepFacing,
   stepStamina,
+  stepTowardTarget,
   stepVelocity,
 } from "../../src/game/gameplay/PlayerLocomotion.js";
 
 const controlled = locomotionConfig.controlled;
+const ai = locomotionConfig.ai;
 
 test("diagonal movement input is normalized", () => {
   const input = normalizeMovementInput(1, 1);
@@ -59,4 +61,24 @@ test("sprint drains stamina faster than normal movement and idle recovers", () =
   const recovery = stepStamina({ stamina: 50, moving: false, sprinting: false, precision: false, magnitude: 0, dt: 1, config: controlled });
   assert.ok(sprint < normal);
   assert.ok(recovery > 50);
+});
+
+test("AI target locomotion preserves fixed-step arrival behavior", () => {
+  let state = { x: 0, y: 0, vx: 0, vy: 0, dirX: 1, dirY: 0 };
+  for (let i = 0; i < 60; i += 1) {
+    const next = stepTowardTarget({ ...state, targetX: 120, targetY: 0, speed: 168, dt: 1 / 60, config: ai });
+    state = { ...state, vx: next.vx, vy: next.vy, dirX: next.dirX, dirY: next.dirY };
+    state.x += state.vx / 60;
+    state.y += state.vy / 60;
+  }
+  assert.ok(state.x > 90);
+  assert.ok(state.x < 150);
+  assert.ok(state.dirX > 0.99);
+});
+
+test("AI target locomotion damps velocity inside arrival radius", () => {
+  const far = stepTowardTarget({ x: 0, y: 0, vx: 80, vy: 0, dirX: 1, dirY: 0, targetX: 100, targetY: 0, speed: 168, dt: 1 / 60, config: ai });
+  const near = stepTowardTarget({ x: 96, y: 0, vx: 80, vy: 0, dirX: 1, dirY: 0, targetX: 100, targetY: 0, speed: 168, dt: 1 / 60, config: ai });
+  assert.ok(near.vx < far.vx);
+  assert.ok(Math.abs(Math.hypot(near.dirX, near.dirY) - 1) < 1e-9);
 });
