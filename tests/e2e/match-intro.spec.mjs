@@ -32,12 +32,21 @@ async function applyIntroFixture(page) {
   ));
 }
 
+async function waitForHeldIntro(page) {
+  await page.waitForFunction(() => {
+    const diagnostics = window.__TONY_MATCH_INTRO__?.diagnostics();
+    return diagnostics?.running === true
+      && diagnostics.held === true
+      && diagnostics.flow === "match-intro"
+      && diagnostics.visible === true;
+  });
+}
+
 test("match setup enters versus countdown kickoff and playing", async ({ page }) => {
   await openMatchSetup(page);
   await applyIntroFixture(page);
   await page.locator("#playButton").click();
-
-  await page.waitForFunction(() => window.__TONY_MATCH_INTRO__?.diagnostics().running === true);
+  await waitForHeldIntro(page);
 
   const intro = page.locator("#matchIntroOverlay");
   await expect(intro).toHaveClass(/show/);
@@ -47,6 +56,7 @@ test("match setup enters versus countdown kickoff and playing", async ({ page })
   await expect(page.locator("#introBall")).toHaveText("VOLT");
   await expect(page.locator("#introWeather")).toHaveText("TRỜI MƯA");
 
+  await page.evaluate(() => window.__TONY_MATCH_INTRO__.releaseTestHold());
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_MATCH_INTRO__?.diagnostics();
     const required = ["versus", "countdown:3", "countdown:2", "countdown:1", "kickoff", "complete"];
@@ -62,11 +72,15 @@ test("match setup enters versus countdown kickoff and playing", async ({ page })
 test("gameplay remains locked until the presentation completes", async ({ page }) => {
   await openMatchSetup(page);
   await page.locator("#playButton").click();
+  await waitForHeldIntro(page);
 
-  await page.waitForFunction(() => window.__TONY_MATCH_INTRO__?.diagnostics().running === true);
+  const introDiagnostics = await page.evaluate(() => ({
+    intro: window.__TONY_MATCH_INTRO__.diagnostics(),
+    gameState: window.__TONY_DEBUG__.diagnostics().state,
+  }));
+  expect(introDiagnostics.intro.state).toBe("versus");
+  expect(introDiagnostics.gameState).toBe("menu");
   await expect(page.locator("#matchIntroOverlay")).toHaveClass(/show/);
-  const stateDuringIntro = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state);
-  expect(stateDuringIntro).toBe("menu");
 
   await page.evaluate(() => window.__TONY_MATCH_INTRO__.skip());
   await page.waitForFunction(() => window.__TONY_MATCH_INTRO__?.diagnostics().flow === "match");
