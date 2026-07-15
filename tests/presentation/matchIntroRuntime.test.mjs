@@ -38,7 +38,8 @@ test("intro reflects active match setup choices", () => {
 
 test("visual tests use accelerated deterministic intro timing", () => {
   assert.match(introFlow, /params\.has\("visualTest"\)/);
-  assert.match(introFlow, /\{ versus: 120, countdown: 90, kickoff: 110 \}/);
+  assert.match(introFlow, /\{ versus: 520, countdown: 220, kickoff: 300 \}/);
+  assert.match(introFlow, /params\.has\("skipIntro"\)/);
   assert.match(introFlow, /window\.__TONY_MATCH_INTRO__/);
 });
 
