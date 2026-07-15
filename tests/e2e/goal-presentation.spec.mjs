@@ -25,10 +25,10 @@ test("goal presentation yields native highlight and replay windows", async ({ pa
   });
 
   const overlay = page.locator("#goalPresentationOverlay");
-  await page.waitForFunction(() => (
-    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "native-highlight"
-  ));
-  await expect(overlay).not.toHaveClass(/show/);
+  await page.waitForFunction(() => {
+    const diagnostics = window.__TONY_GOAL_PRESENTATION__.diagnostics();
+    return diagnostics.timelinePhase === "native-highlight" && diagnostics.visible === false;
+  });
 
   await page.waitForFunction(() => (
     window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
@@ -65,12 +65,12 @@ test("score observer automatically presents an away goal after the highlight lea
     document.getElementById("awayScore").textContent = "1";
   });
 
-  await page.waitForFunction(() => (
-    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "native-highlight"
-  ));
-  const overlay = page.locator("#goalPresentationOverlay");
-  await expect(overlay).not.toHaveClass(/show/);
+  await page.waitForFunction(() => {
+    const diagnostics = window.__TONY_GOAL_PRESENTATION__.diagnostics();
+    return diagnostics.timelinePhase === "native-highlight" && diagnostics.visible === false;
+  });
 
+  const overlay = page.locator("#goalPresentationOverlay");
   await page.waitForFunction(() => (
     window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
   ));
