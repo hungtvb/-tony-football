@@ -12,8 +12,9 @@
 2. `docs/01_ACTIVE_SPRINT.md`
 3. `docs/03_DEV_RULES.md`
 4. Active sprint file
-5. Relevant gameplay or UI specification
-6. Relevant ADRs
-7. Code
+5. Relevant section of `docs/11_SOURCE_MAP.md`
+6. Relevant gameplay or UI specification
+7. Relevant ADRs
+8. Code
 
 Do not read all documentation unless the task requires it.

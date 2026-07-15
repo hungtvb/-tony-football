@@ -3,7 +3,7 @@
 ```yaml
 Sprint: U3.3
 Title: Match Presentation
-Status: Implementation — Post-Match Hub and Result Summary
+Status: Closeout — implementation merged and production deployed; integrated browser audit pending
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/U3_3_MATCH_PRESENTATION.md
 Primary goals:
@@ -32,6 +32,7 @@ Do not modify:
   - FO4 control mapping
 Next slices:
   - U3 integrated browser audit and closeout
+  - activate R1 Engine and Presentation Boundary after U3 closeout
 ```
 
 Only one sprint may be active at a time.

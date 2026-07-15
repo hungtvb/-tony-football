@@ -8,6 +8,7 @@
 ## Phase 2 — Core Gameplay
 - **G2** Player Locomotion — Done
 - **G3** Ball Control and First Touch — Done
+- **R1** Engine and Presentation Boundary — Planned, approved architecture gate after U3 closeout
 - **G4** Passing — Planned
 - **G5** Shooting — Planned
 - **G6** Physical Contest — Planned

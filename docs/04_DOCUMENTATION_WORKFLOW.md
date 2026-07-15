@@ -18,6 +18,9 @@ Update the matching file under `docs/ui/`.
 ## Architecture changes
 Create an ADR under `docs/adr/` using the ADR template.
 
+## Source ownership or entry-point changes
+Update `docs/11_SOURCE_MAP.md` whenever a module moves, a new runtime entry point is added, dependency direction changes, or test ownership changes. Keep the map at subsystem and contract level; do not add line numbers or duplicate implementation details.
+
 ## Bug fix
 Usually update `docs/CHANGELOG.md`; update a spec when intended behavior changes.
 
