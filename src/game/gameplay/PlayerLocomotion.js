@@ -56,6 +56,34 @@ export function stepFacing({ dirX, dirY, targetX, targetY, dt, response }) {
   return Object.freeze({ dirX: blended.x, dirY: blended.y });
 }
 
+export function stepTowardTarget({ x, y, vx, vy, dirX, dirY, targetX, targetY, speed, dt, config }) {
+  const dx = targetX - x;
+  const dy = targetY - y;
+  const distance = Math.hypot(dx, dy);
+  const desired = normalize(dx, dy, dirX || 1, dirY || 0);
+  let velocity = stepVelocity({
+    vx,
+    vy,
+    desiredX: desired.x,
+    desiredY: desired.y,
+    targetSpeed: speed,
+    dt,
+    response: config.movementResponse,
+  });
+  if (distance < config.arrivalRadius) {
+    velocity = Object.freeze({
+      vx: velocity.vx * config.arrivalDamping,
+      vy: velocity.vy * config.arrivalDamping,
+    });
+  }
+  let facing = Object.freeze({ dirX, dirY });
+  if (Math.abs(velocity.vx) + Math.abs(velocity.vy) > config.facingVelocityThreshold) {
+    const direction = normalize(velocity.vx, velocity.vy, dirX || 1, dirY || 0);
+    facing = Object.freeze({ dirX: direction.x, dirY: direction.y });
+  }
+  return Object.freeze({ ...velocity, ...facing, distance });
+}
+
 export function stepStamina({ stamina, moving, sprinting, precision, magnitude, dt, config }) {
   let next = stamina;
   if (moving) {
