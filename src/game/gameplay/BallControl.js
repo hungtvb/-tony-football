@@ -65,6 +65,53 @@ export function classifyFirstTouch(score, config) {
   return "rejected";
 }
 
+export function resolveFirstTouch({
+  outcome,
+  ballX,
+  ballY,
+  ballVx,
+  ballVy,
+  receiver,
+}) {
+  const incoming = normalize(ballVx, ballVy, receiver.dirX || 1, receiver.dirY || 0);
+  const movement = normalize(receiver.vx, receiver.vy, receiver.dirX || 1, receiver.dirY || 0);
+  if (outcome === "clean") {
+    return Object.freeze({ controls: true, x: ballX, y: ballY, vx: 0, vy: 0, lock: 0 });
+  }
+  if (outcome === "cushioned") {
+    const speed = Math.hypot(ballVx, ballVy);
+    return Object.freeze({
+      controls: true,
+      x: ballX + movement.x * 4,
+      y: ballY + movement.y * 4,
+      vx: incoming.x * Math.min(65, speed * 0.16),
+      vy: incoming.y * Math.min(65, speed * 0.16),
+      lock: 0,
+    });
+  }
+  if (outcome === "heavy") {
+    const speed = clamp(Math.hypot(ballVx, ballVy) * 0.34 + Math.hypot(receiver.vx, receiver.vy) * 0.28, 105, 245);
+    const direction = normalize(incoming.x * 0.7 + movement.x * 0.3, incoming.y * 0.7 + movement.y * 0.3, receiver.dirX || 1, receiver.dirY || 0);
+    return Object.freeze({
+      controls: false,
+      x: ballX + direction.x * 10,
+      y: ballY + direction.y * 10,
+      vx: direction.x * speed,
+      vy: direction.y * speed,
+      lock: 0.22,
+    });
+  }
+  const rejectSpeed = clamp(Math.hypot(ballVx, ballVy) * 0.72, 160, 620);
+  return Object.freeze({
+    controls: false,
+    x: ballX,
+    y: ballY,
+    vx: incoming.x * rejectSpeed,
+    vy: incoming.y * rejectSpeed,
+    lock: 0.16,
+  });
+}
+
 export function dribbleAnchor({ owner, mode, stepPhase, config }) {
   const speed = Math.hypot(owner.vx, owner.vy);
   const touch = Math.sin(stepPhase);
