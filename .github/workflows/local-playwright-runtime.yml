@@ -1,0 +1,49 @@
+name: Local Playwright Runtime
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/local-playwright-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package-runtime:
+    name: Package local runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package source and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > .local-runtime-sha
+          tar \
+            --exclude=.git \
+            --exclude=playwright-report \
+            --exclude=test-results \
+            -czf /tmp/tony-local-playwright-runtime.tgz .
+
+      - name: Upload local runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-local-playwright-runtime
+          path: /tmp/tony-local-playwright-runtime.tgz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
