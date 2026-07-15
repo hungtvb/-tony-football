@@ -4,3 +4,4 @@ npm-debug.log*
 *.log
 playwright-report/
 test-results/
+dist/

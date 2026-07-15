@@ -5,8 +5,9 @@
   "type": "module",
   "description": "A polished 6v6 mini football game that runs in the browser.",
   "scripts": {
-    "start": "node server.mjs",
-    "test:syntax": "node --check game.js && node --check server.mjs",
+    "start": "node scripts/dev-server.mjs",
+    "build": "node scripts/build-static.mjs",
+    "test:syntax": "node --check game.js && node --check scripts/dev-server.mjs",
     "test:assets": "node scripts/validate-assets.mjs",
     "test:simulation": "node --test tests/simulation/*.test.mjs",
     "test:presentation": "node --test tests/presentation/*.test.mjs",
