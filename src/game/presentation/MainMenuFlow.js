@@ -1,4 +1,5 @@
 import "./MatchIntroFlow.js";
+import "./GoalPresentationFlow.js";
 
 const mainMenu = document.getElementById("mainMenuOverlay");
 const matchSetup = document.getElementById("startOverlay");
