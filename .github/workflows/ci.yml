@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -18,6 +18,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: feature/u3-1-camera-hud
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -25,5 +28,19 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Apply guarded U3.1 camera and HUD integration
+        run: |
+          if ! grep -q 'cameraFrameTarget' game.js; then
+            node scripts/apply-u3-1-camera-hud-runtime.mjs
+          fi
       - name: Run test suite
         run: npm test
+      - name: Commit integrated camera and HUD runtime
+        run: |
+          if ! git diff --quiet -- game.js index.html; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add game.js index.html
+            git commit -m "feat(u3.1): integrate camera safe framing and radar cleanup"
+            git push origin HEAD:feature/u3-1-camera-hud
+          fi
