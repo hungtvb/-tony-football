@@ -41,6 +41,15 @@ Do not:
 
 Report unresolved contradictions before implementation.
 
+## Operational skills
+
+Use repository skills for repeatable operational workflows:
+
+- **CI triage:** `.github/skills/ci-triage/SKILL.md`
+  - Triggered by requests such as `check CI`, `fix CI`, `CI failed`, a workflow run number, or merge-readiness verification.
+  - Own the loop from current PR head SHA through job/log/artifact diagnosis, repair, and verification of the latest green `CI gate`.
+  - Continue the diagnosis-and-repair loop without waiting for the user to report each subsequent failed run.
+
 ## Required workflow
 
 Before coding:
