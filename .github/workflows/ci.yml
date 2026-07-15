@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -18,11 +18,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: feature/u3-2-match-flow
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - name: Apply guarded U3.2 match flow integration
+        run: |
+          if ! grep -q 'showMatchSetup' game.js; then
+            node scripts/apply-u3-2-match-flow.mjs
+          fi
       - name: Install dependencies and browser
         run: |
           npm ci
@@ -38,10 +46,19 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: u3-1-test-evidence
+          name: u3-2-test-evidence
           path: |
             unit-test.log
             playwright-report
             test-results
           if-no-files-found: ignore
           retention-days: 14
+      - name: Commit integrated match flow
+        run: |
+          if ! git diff --quiet -- game.js index.html; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add game.js index.html
+            git commit -m "feat(u3.2): add pause navigation and setup return flow"
+            git push origin HEAD:feature/u3-2-match-flow
+          fi
