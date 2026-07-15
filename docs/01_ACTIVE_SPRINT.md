@@ -1,43 +1,34 @@
 # Active Sprint
 
 ```yaml
-Sprint: U2
-Title: Game Feel and Match Feedback
-Status: Implementation Complete — Manual Validation Pending
+Sprint: G2
+Title: Player Movement and Locomotion
+Status: In Progress
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/U2_GAME_FEEL.md
+Sprint document: docs/sprints/G2_PLAYER_MOVEMENT.md
 Primary specs:
-  - docs/ui/GAME_FEEL.md
-Delivered:
-  - frame-rate-independent camera smoothing
-  - bounded deterministic camera impulses
-  - Canvas and WebGL ball trails
-  - height-aware ball shadow
-  - contextual particles with device budgets
-  - cooldown-based action audio
-  - reduced-motion goal presentation
-  - replay-aware ball trail snapshots
-  - shared goal-sequence duration
-  - monotonic audio cooldown clock
-Validation complete:
-  - syntax validation
-  - asset and UI contract validation
-  - simulation tests
-  - presentation tests
-  - runtime regression tests
-Remaining:
-  - manual WebGL and Canvas fallback validation
-  - classic, dry, clear, and rain validation
-  - sound on/off validation
-  - reduced-motion and low-power validation
-  - narrow and desktop layout validation
+  - docs/gameplay/PLAYER_MOVEMENT.md
+Goals:
+  - responsive input without instant velocity snapping
+  - predictable acceleration and deceleration
+  - natural turns and reversals
+  - coherent sprint entry and exit
+  - stable facing direction and model orientation
+  - matching WebGL and Canvas fallback behavior
+  - deterministic movement at fixed 60 Hz
+Required validation:
+  - movement unit tests
+  - 30/60/120 FPS equivalence through the fixed simulation loop
+  - keyboard direction and diagonal-input tests
+  - sprint and stamina transition tests
+  - pause/resume and kickoff reset regression tests
+  - WebGL and Canvas fallback manual validation
 Do not modify:
   - simulation timing
-  - player locomotion values
-  - ball physics values
-  - passing, shooting, or tackle balance
-  - AI decisions
   - FO4 control mapping
+  - ball physics or ownership rules
+  - passing, shooting, tackle, or goalkeeper balance
+  - AI decisions or team tactics
   - multiplayer or game modes
 ```
 
