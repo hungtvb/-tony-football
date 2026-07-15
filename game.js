@@ -44,7 +44,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;
   const ledViews = []; const goalNetViews = [];const stadiumLightViews=[];
-  const lowPowerDevice = matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+  const visualTestMode = new URLSearchParams(location.search).get("visualTest") === "1";
+  const lowPowerDevice = visualTestMode || matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
   const wetPitchColor = new THREE.Color(0xb7d8c8); const dryPitchColor = new THREE.Color(0xffffff);
@@ -599,7 +600,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if(!lowPowerDevice){composer3D=new EffectComposer(renderer3D);composer3D.setPixelRatio(Math.min(window.devicePixelRatio||1,2));composer3D.setSize(W,H);composer3D.addPass(new RenderPass(scene3D,camera3D));const ssao=new SSAOPass(scene3D,camera3D,W,H,24);ssao.kernelRadius=10;ssao.minDistance=.002;ssao.maxDistance=.12;composer3D.addPass(ssao);const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.16,.48,.88);composer3D.addPass(bloom);composer3D.addPass(new SMAAPass(W*(window.devicePixelRatio||1),H*(window.devicePixelRatio||1)));composer3D.addPass(new OutputPass());}
     screenFx = document.createElement("div"); screenFx.className = "screen-fx"; screenFx.innerHTML = "<span>GOAL!</span>";
     canvas.parentElement.appendChild(screenFx);
-    loadPlayerAsset();
+    if (!visualTestMode) loadPlayerAsset();
+    else setAssetStatus("ready","VISUAL TEST · WEBGL","Lightweight deterministic browser validation");
     return true;
   }
 
@@ -1270,5 +1272,50 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   window.addEventListener("blur", () => { input.keys.clear();input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;input.bufferedAction=null;input.qTapStart=0;input.qConsumed=false;if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
+  function applyDebugScenario(name = "normal-play") {
+    if (game.state !== "playing") startMatch();
+    game.replay.active = false; game.replay.frames.length = 0; ui.replayBadge.classList.remove("show");
+    ball.owner = null; ball.vx = 0; ball.vy = 0; ball.height = 0; ball.vz = 0; ball.lock = 0;
+    const selected = game.selected || players.find((player) => player.team === HOME && player.role !== "GK");
+    if (selected) { selected.stamina = 100; game.selected = selected; }
+    if (name === "lower-left-camera") { ball.x = FIELD.left + 45; ball.y = FIELD.bottom - 42; ball.vx = -260; ball.vy = 170; }
+    else if (name === "lower-right-camera") { ball.x = FIELD.right - 45; ball.y = FIELD.bottom - 42; ball.vx = 260; ball.vy = 170; }
+    else if (name === "radar-crowded") {
+      players.forEach((player, index) => { player.x = W / 2 + (index % 4 - 1.5) * 42; player.y = H / 2 + (Math.floor(index / 4) - 1) * 38; });
+      ball.x = W / 2; ball.y = H / 2; announce("RADAR VISIBILITY CHECK");
+    } else if (name === "low-stamina") {
+      if (selected) selected.stamina = 18; ball.x = selected?.x ?? W / 2; ball.y = selected?.y ?? H / 2;
+    } else if (name === "replay") {
+      game.replay.frames = Array.from({ length: 24 }, (_, index) => ({
+        ball: { x: 430 + index * 10, y: 350, height: 0, angle: 0, vx: 150, vy: 0, trail: [] },
+        players: players.map((player) => ({ x: player.x, y: player.y, vx: 0, vy: 0, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: "idle", animTime: 0, animDuration: 1, animPower: 0 })),
+      }));
+      game.replay.active = true; game.replay.elapsed = 0; ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.add("show");
+    }
+    updateCamera(1 / 60); updateUI();
+    if (name !== "normal-play") {
+      game.state = "paused";
+      ui.pause.classList.remove("show");
+      input.keys.clear();
+    }
+  }
+
+  window.__TONY_DEBUG__ = {
+    ready: false,
+    applyScenario: applyDebugScenario,
+    diagnostics: () => ({
+      camera: { ...game.camera },
+      ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
+      state: game.state,
+      replay: game.replay.active,
+      renderer: use3D ? "webgl" : "canvas",
+      visualTestMode,
+      selectedStamina: game.selected?.stamina ?? null,
+    }),
+  };
+
   init3D(); createTeams(); updateUI(); simulationLoop.start();
+  const debugScenario = new URLSearchParams(location.search).get("debugScenario");
+  if (debugScenario) applyDebugScenario(debugScenario);
+  window.__TONY_DEBUG__.ready = true;
 })();
