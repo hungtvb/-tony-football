@@ -10,20 +10,27 @@ Primary specs:
   - docs/ui/CAMERA_HUD.md
 Delivered:
   - G3 ball control and first touch merged into main
-Planned:
-  - camera framing that preserves lower-left and lower-right field visibility
-  - dead-zone and look-ahead behavior without abrupt camera motion
-  - safe-area contract for ball and selected player
-  - radar cleanup with no text inside the playable radar area
-  - clearer selected-player, ball, teammate, and opponent markers
-  - scoreboard, timer, stamina, and power hierarchy cleanup
-  - contextual HUD visibility and restrained micro-motion
-Validation required:
-  - desktop and narrow-layout camera framing
-  - left/right wing visibility near the lower screen edge
-  - WebGL and Canvas fallback parity
-  - radar readability during attack, defense, and transitions
-  - reduced-motion compatibility
+  - centralized camera and radar configuration
+  - pure camera zoom, look-ahead, dead-zone, and safe-area policy
+  - WebGL broadcast camera integrated with shared frame target
+  - speed now zooms out rather than zooming in
+  - radar plot uses pitch bounds, clearer ball marker, and selected-player ring
+  - radar plot contains no text
+  - commentary toast moved away from radar on desktop and narrow layouts
+  - standard read-only CI restored and guarded migration removed
+Validation complete:
+  - camera policy unit tests
+  - runtime camera integration contracts
+  - radar no-text and marker hierarchy contracts
+  - HUD stylesheet ordering and toast-overlap contracts
+  - clean-branch full repository npm test
+Remaining:
+  - refine scoreboard and match clock hierarchy
+  - add selected-player identity transition
+  - add low-stamina state and restrained warning motion
+  - reduce contextual control hints after initial onboarding
+  - manual lower-corner visibility validation in WebGL
+  - manual desktop, narrow-layout, replay, Canvas fallback, and reduced-motion validation
 Do not modify:
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
