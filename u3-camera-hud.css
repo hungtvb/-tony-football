@@ -1,0 +1,57 @@
+/* U3.1 Camera & HUD overrides — loaded after U1 styles. */
+
+.hud-radar {
+  padding: 6px;
+  border-color: rgba(170, 229, 199, .28);
+  background: rgba(2, 12, 9, .8);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .34), inset 0 1px rgba(255, 255, 255, .04);
+}
+
+.hud-radar #radarCanvas {
+  display: block;
+  aspect-ratio: 13 / 7;
+  border-radius: 3px;
+}
+
+.match-toast {
+  bottom: clamp(124px, 11vw, 174px);
+  max-width: min(500px, 64%);
+  background: rgba(2, 8, 9, .84);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+}
+
+.hud-player-card,
+.hud-controls,
+.hud-radar {
+  transition: opacity .2s ease, transform .2s ease, border-color .2s ease;
+}
+
+@media (max-width: 760px) {
+  .match-toast {
+    top: 8px;
+    bottom: auto;
+    max-width: 58%;
+  }
+
+  .hud-radar {
+    border-color: rgba(170, 229, 199, .34);
+  }
+}
+
+@media (max-width: 560px) {
+  .match-toast {
+    left: 8px;
+    top: 8px;
+    max-width: calc(100% - 176px);
+    transform: none;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-player-card,
+  .hud-controls,
+  .hud-radar {
+    transition: none;
+  }
+}
