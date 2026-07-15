@@ -11,6 +11,11 @@ const sourcePossession = document.getElementById("possessionStat");
 const sourceHomeShots = document.getElementById("homeShots");
 const sourceAwayShots = document.getElementById("awayShots");
 const sourcePassAccuracy = document.getElementById("passStat");
+const competingOverlays = [
+  document.getElementById("mainMenuOverlay"),
+  document.getElementById("startOverlay"),
+  document.getElementById("pauseOverlay"),
+];
 
 let currentSummary = null;
 let resultSetupButton = null;
@@ -38,6 +43,13 @@ function readSummary() {
     homeShots: sourceHomeShots?.textContent,
     awayShots: sourceAwayShots?.textContent,
     passAccuracy: percentFrom(sourcePassAccuracy),
+  });
+}
+
+function hideCompetingOverlays() {
+  competingOverlays.forEach((overlay) => {
+    overlay?.classList.remove("show");
+    overlay?.setAttribute("aria-hidden", "true");
   });
 }
 
@@ -138,6 +150,7 @@ function renderSummary(summary) {
 
 function presentResult(summary = readSummary(), { focus = true } = {}) {
   enhanceResultCard();
+  hideCompetingOverlays();
   renderSummary(summary);
   resultOverlay.classList.add("show");
   resultOverlay.setAttribute("aria-hidden", "false");
@@ -161,5 +174,6 @@ window.__TONY_POST_MATCH__ = {
     flow: document.body.dataset.flow ?? null,
     outcome: currentSummary?.outcome ?? null,
     summary: currentSummary,
+    competingVisible: competingOverlays.filter((overlay) => overlay?.classList.contains("show")).map((overlay) => overlay.id),
   }),
 };
