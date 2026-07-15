@@ -7,7 +7,7 @@
 
 ## Phase 2 — Core Gameplay
 - **G2** Player Locomotion — Done
-- **G3** Ball Control and First Touch — In Progress
+- **G3** Ball Control and First Touch — Done
 - **G4** Passing — Planned
 - **G5** Shooting — Planned
 - **G6** Physical Contest — Planned
@@ -22,11 +22,14 @@
 - **A7** Fair Difficulty
 
 ## Phase 4 — Expanded UI/UX
-- **U3** Settings Implementation
-- **U4** Advanced Radar Modes
-- **U5** Controls and First-Match Onboarding
-- **U6** Match Statistics and Result Experience
-- **U7** Responsive and Accessibility Polish
+- **U3.1** Camera and HUD — In Progress
+- **U3.2** Match Flow and Pause Navigation — Planned
+- **U3.3** Match Customization — Planned
+- **U3.4** UI Foundation and Design Tokens — Planned
+- **U4** Advanced Radar Modes — Planned
+- **U5** Controls and First-Match Onboarding — Planned
+- **U6** Match Statistics and Result Experience — Planned
+- **U7** Responsive and Accessibility Polish — Planned
 
 ## Phase 5 — Quality
 - **Q1** Debug Tools
