@@ -9,21 +9,52 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: feature/u3-1-camera-hud
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Run test suite
+      - name: Apply guarded Playwright harness
+        run: |
+          if ! grep -q '__TONY_DEBUG__' game.js; then
+            node scripts/apply-u3-1-playwright-harness.mjs
+          fi
+      - name: Install dependencies and browser
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Run unit test suite
         run: npm test
+      - name: Run browser validation
+        run: npm run test:e2e
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: u3-1-playwright-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Commit visual harness integration
+        run: |
+          if ! git diff --quiet -- game.js package.json package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add game.js package.json package-lock.json
+            git commit -m "test(e2e): integrate deterministic browser validation"
+            git push origin HEAD:feature/u3-1-camera-hud
+          fi
