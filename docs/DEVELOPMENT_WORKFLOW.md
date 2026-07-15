@@ -60,6 +60,8 @@ CI is split into independent jobs:
 
 When a job fails, inspect that job and its matching artifact directly. Do not wait for manual status reporting.
 
+Use `.github/skills/ci-triage/SKILL.md` for the complete reusable diagnosis, repair, and verification loop.
+
 ### 6. Repair failures on the same branch
 
 - Read the exact failing assertion or browser trace.
