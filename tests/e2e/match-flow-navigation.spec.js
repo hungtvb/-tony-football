@@ -5,6 +5,13 @@ async function openGame(page) {
   await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
 }
 
+async function startQuickMatch(page) {
+  await page.locator("#quickMatchButton").click();
+  await page.locator("#playButton").click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
+}
+
 test("main menu opens match setup as a distinct screen", async ({ page }) => {
   await openGame(page);
 
@@ -28,22 +35,21 @@ test("main menu opens match setup as a distinct screen", async ({ page }) => {
   await expect(page.locator("body")).toHaveAttribute("data-flow", "main-menu");
 });
 
-test("pause setup and main menu buttons lead to different destinations", async ({ page }) => {
+test("pause can return directly to match setup", async ({ page }) => {
   await openGame(page);
-
-  await page.locator("#quickMatchButton").click();
-  await page.locator("#playButton").click();
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
+  await startQuickMatch(page);
 
   await page.locator("#setupButton").click();
+
   await expect(page.locator("#startOverlay")).toHaveClass(/show/);
   await expect(page.locator("#mainMenuOverlay")).not.toHaveClass(/show/);
   await expect(page.locator("body")).toHaveAttribute("data-flow", "match-setup");
+});
 
-  await page.locator("#playButton").click();
-  await page.locator("#pauseButton").click();
-  await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
+test("pause can return to the distinct main menu", async ({ page }) => {
+  await openGame(page);
+  await startQuickMatch(page);
+
   await page.locator("#mainMenuButton").click();
 
   await expect(page.locator("#mainMenuOverlay")).toHaveClass(/show/);
