@@ -6,7 +6,8 @@ import {
 const params = new URLSearchParams(window.location.search);
 const debugScenario = params.get("debugScenario");
 const introDisabled = params.has("skipIntro");
-const fastMode = params.has("visualTest") || params.has("introTest");
+const introTestMode = params.has("introTest");
+const fastMode = params.has("visualTest") || introTestMode;
 const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const timings = fastMode
   ? { versus: 520, countdown: 220, kickoff: 300 }
@@ -22,6 +23,7 @@ let overlay = null;
 let running = false;
 let allowNativeStart = false;
 let skipRequested = false;
+let testHold = introTestMode;
 let runToken = 0;
 
 const difficultyLabels = Object.freeze({ rookie: "ROOKIE", pro: "PRO", legend: "LEGEND" });
@@ -88,6 +90,7 @@ function ensureOverlay() {
   pitchPanel?.append(overlay);
   overlay.querySelector("#skipMatchIntroButton")?.addEventListener("click", () => {
     skipRequested = true;
+    testHold = false;
   });
   return overlay;
 }
@@ -145,6 +148,10 @@ function setSetupVisible(visible) {
 }
 
 async function waitStage(duration, token) {
+  while (testHold && token === runToken && !skipRequested) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
   const deadline = performance.now() + duration;
   while (performance.now() < deadline) {
     if (token !== runToken || skipRequested) return;
@@ -180,6 +187,7 @@ async function beginMatchIntro() {
 
   running = true;
   skipRequested = false;
+  testHold = introTestMode;
   const token = ++runToken;
   if (presentation.state !== MATCH_PRESENTATION_STATES.IDLE) presentation.reset({ reason: "restart-intro" });
 
@@ -210,6 +218,7 @@ async function beginMatchIntro() {
   } catch (error) {
     console.error("Match intro failed", error);
     running = false;
+    testHold = false;
     setIntroVisible(false);
     setSetupVisible(true);
     document.body.dataset.flow = "match-setup";
@@ -235,14 +244,20 @@ document.addEventListener(
 window.__TONY_MATCH_INTRO__ = {
   ready: true,
   disabled: Boolean(debugScenario || introDisabled),
+  testMode: introTestMode,
   timings: { ...timings },
   history,
   start: beginMatchIntro,
+  releaseTestHold: () => {
+    testHold = false;
+  },
   skip: () => {
     skipRequested = true;
+    testHold = false;
   },
   diagnostics: () => ({
     running,
+    held: testHold,
     state: presentation.state,
     history: [...history],
     flow: document.body.dataset.flow,
