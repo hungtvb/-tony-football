@@ -6,8 +6,18 @@
   "description": "A polished 6v6 mini football game that runs in the browser.",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --check game.js && node --check server.mjs && node scripts/validate-assets.mjs && node --test tests/simulation/*.test.mjs tests/presentation/*.test.mjs tests/gameplay/*.test.mjs",
+    "test:syntax": "node --check game.js && node --check server.mjs",
+    "test:assets": "node scripts/validate-assets.mjs",
+    "test:simulation": "node --test tests/simulation/*.test.mjs",
+    "test:presentation": "node --test tests/presentation/*.test.mjs",
+    "test:gameplay": "node --test tests/gameplay/*.test.mjs",
+    "test:unit": "npm run test:syntax && npm run test:assets && npm run test:simulation && npm run test:presentation && npm run test:gameplay",
     "test:e2e": "playwright test",
+    "test:e2e:desktop": "playwright test --project=desktop-chromium",
+    "test:e2e:narrow": "playwright test --project=narrow-landscape",
+    "test:e2e:intro": "playwright test tests/e2e/match-intro.spec.mjs",
+    "test:preflight": "npm run test:unit && npm run test:e2e",
+    "test": "npm run test:unit",
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
