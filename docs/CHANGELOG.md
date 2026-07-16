@@ -18,6 +18,7 @@
 - Pure snapshot render-state interpolation shared by WebGL and Canvas entity transforms.
 - Snapshot-driven camera framing and immutable 15 FPS replay playback controllers.
 - Browser presentation feedback adapter for event-driven kick, tackle, goal, and match lifecycle audio/particle effects.
+- Live browser MatchEngine composition with deterministic input/lifecycle routing, immutable engine snapshots and ordered events, plus an explicit compatibility fallback.
 
 ### Changed
 - Linear now owns mutable roadmap, backlog, priority, dependency, ownership, delivery status, acceptance, and cross-role handoffs; repository planning documents are stable pointers and technical records only.
@@ -32,6 +33,7 @@
 - HUD match facts and radar markers now consume immutable fixed-tick snapshots in both WebGL and Canvas fallback paths.
 - WebGL and Canvas player position, facing, locomotion pose, ball position, height, and rotation now consume one interpolated snapshot render state with reset/teleport guards.
 - Camera framing and replay playback now consume immutable match snapshots; gameplay actions publish feedback events instead of calling audio or particle implementations directly.
+- Browser HUD, camera, radar, WebGL, and Canvas snapshot consumers now default to live MatchEngine frames; compatibility gameplay remains a temporary shadow and the `?runtime=compatibility` fallback.
 
 ### Fixed
 - Generated workspace, browser-cache, and staging targets are canonicalized before mutation; traversal, symlink boundaries, approved roots, and overlapping or nested destinations are rejected.
