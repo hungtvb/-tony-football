@@ -121,6 +121,69 @@ test("control commands drive movement and authoritative kick actions", () => {
   assert.equal(engine.drainActionIntents().length, 0);
 });
 
+test("selected-owner idle grace starts on possession instead of global match idle", () => {
+  const engine = new MatchEngine({ kickoffDelay: 0, randomSeed: "fresh-owner-grace" });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.APPLICATION });
+  for (let tick = 0; tick < 120; tick += 1) engine.step(1 / 60);
+
+  const selectedId = engine.snapshot.match.selectedPlayerId;
+  engine.setPossession(selectedId, { reason: "fresh-owner-test" });
+  engine.drainEvents();
+  const graceEvents = [];
+  for (let tick = 0; tick < 89; tick += 1) {
+    engine.step(1 / 60);
+    graceEvents.push(...engine.drainEvents());
+  }
+  const duringGrace = engine.snapshot.players.find((player) => player.id === selectedId);
+
+  assert.equal(engine.snapshot.ball.ownerId, selectedId);
+  assert.equal(duringGrace.vx, 0);
+  assert.equal(duringGrace.vy, 0);
+  assert.equal(graceEvents.some((event) => (
+    event.type === GameEventType.BALL_KICKED && event.payload.playerId === selectedId
+  )), false);
+});
+
+test("active charged attack intent cannot be pre-empted by selected-owner assist", () => {
+  const engine = new MatchEngine({ kickoffDelay: 0, randomSeed: "charged-owner-intent" });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.APPLICATION });
+  engine.step(1 / 60);
+  const selectedId = engine.snapshot.match.selectedPlayerId;
+  engine.setPossession(selectedId, { reason: "charged-owner-test" });
+  engine.enqueue(GameCommandType.SET_ATTACK_INTENT, { active: true }, {
+    source: GameCommandSource.HUMAN
+  });
+  engine.drainEvents();
+  const chargingEvents = [];
+  for (let tick = 0; tick < 120; tick += 1) {
+    engine.step(1 / 60);
+    chargingEvents.push(...engine.drainEvents());
+  }
+  const whileCharging = engine.snapshot.players.find((player) => player.id === selectedId);
+  assert.equal(engine.snapshot.ball.ownerId, selectedId);
+  assert.equal(whileCharging.vx, 0);
+  assert.equal(whileCharging.vy, 0);
+  assert.equal(chargingEvents.some((event) => (
+    event.type === GameEventType.BALL_KICKED && event.payload.playerId === selectedId
+  )), false);
+
+  engine.enqueue(GameCommandType.SET_ATTACK_INTENT, { active: false }, {
+    source: GameCommandSource.HUMAN
+  });
+  const resumedEvents = [];
+  let assistResumed = false;
+  for (let tick = 0; tick < 120; tick += 1) {
+    engine.step(1 / 60);
+    resumedEvents.push(...engine.drainEvents());
+    const selected = engine.snapshot.players.find((player) => player.id === selectedId);
+    if (selected.vx !== 0 || selected.vy !== 0) assistResumed = true;
+  }
+  if (resumedEvents.some((event) => (
+    event.type === GameEventType.BALL_KICKED && event.payload.playerId === selectedId
+  ))) assistResumed = true;
+  assert.equal(assistResumed, true);
+});
+
 test("tackle and teammate-run commands emit explicit gameplay events", () => {
   const engine = new MatchEngine({ kickoffDelay: 0, randomSeed: "player-actions" });
   engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
@@ -296,5 +359,6 @@ test("headless AI match remains finite and referentially valid during a ten-seco
   assert.ok(Number.isFinite(snapshot.ball.x));
   assert.ok(Number.isFinite(snapshot.ball.y));
   assert.ok(snapshot.ball.ownerId === null || playerIds.has(snapshot.ball.ownerId));
-  assert.ok(snapshot.match.elapsed > 9.9);
+  assert.ok(snapshot.match.elapsed > 0 && snapshot.match.elapsed < 10.01);
+  assert.ok(snapshot.match.time > 9.99 && snapshot.match.time < 20);
 });

@@ -38,13 +38,14 @@ function createHarness({ mode = "attack", state = "playing" } = {}) {
   const applicationRequests = [];
   let now = 100;
   let cameraCycles = 0;
+  let controlMode = mode;
   const adapter = new BrowserInputAdapter({
     target,
     clock: () => now,
     onCommand: (command) => commands.push(command),
     onApplicationRequest: (request) => applicationRequests.push(request),
     onCameraCycle: () => { cameraCycles += 1; },
-    getControlMode: () => mode,
+    getControlMode: () => controlMode,
     getMatchState: () => state
   });
   adapter.attach();
@@ -54,6 +55,7 @@ function createHarness({ mode = "attack", state = "playing" } = {}) {
     commands,
     applicationRequests,
     setNow(value) { now = value; },
+    setMode(value) { controlMode = value; },
     cameraCycles: () => cameraCycles
   };
 }
@@ -93,10 +95,29 @@ test("charged attack releases one FO4 kick command with captured modifiers", () 
   harness.target.dispatch("keyup", { code: FO4_CONTROLS.teammateRun });
 
   const shot = harness.commands.find((command) => command.type === GameCommandType.SHOOT);
+  assert.deepEqual(harness.commands.map((command) => command.type), [
+    GameCommandType.SET_ATTACK_INTENT,
+    GameCommandType.SET_ATTACK_INTENT,
+    GameCommandType.SHOOT
+  ]);
+  assert.deepEqual(harness.commands.slice(0, 2).map((command) => command.payload.active), [true, false]);
   assert.equal(shot.payload.power, 0.5);
   assert.deepEqual(shot.payload.direction, { x: 1, y: 0 });
   assert.deepEqual(shot.payload.modifiers, { chip: true, finesse: false });
   assert.equal(harness.commands.some((command) => command.type === GameCommandType.TRIGGER_TEAMMATE_RUN), false);
+});
+
+test("control-mode change cancels a held charge and clears attack intent", () => {
+  const harness = createHarness({ mode: "attack" });
+  harness.target.dispatch("keydown", { code: FO4_CONTROLS.shoot });
+  harness.setMode("defense");
+  harness.target.dispatch("keyup", { code: FO4_CONTROLS.shoot });
+
+  assert.deepEqual(harness.commands.map((command) => [command.type, command.payload]), [
+    [GameCommandType.SET_ATTACK_INTENT, { active: true }],
+    [GameCommandType.SET_ATTACK_INTENT, { active: false }]
+  ]);
+  assert.equal(harness.adapter.activeCharge, null);
 });
 
 test("defense maps S A Space W and Q without changing the FO4 keys", () => {

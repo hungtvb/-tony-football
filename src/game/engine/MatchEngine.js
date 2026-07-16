@@ -1,4 +1,4 @@
-import { GameCommandBuffer, GameCommandType } from "./GameCommands.js";
+import { GameCommandBuffer, GameCommandSource, GameCommandType } from "./GameCommands.js";
 import { GameEventQueue, GameEventType } from "./GameEvents.js";
 import { createMatchSnapshot, createSnapshotFrame } from "./MatchSnapshot.js";
 import { createSeededRandom } from "../core/Random.js";
@@ -26,6 +26,7 @@ const kickActionTypes = new Set([
   GameCommandType.LOFTED_PASS,
   GameCommandType.SHOOT
 ]);
+const SELECTED_OWNER_IDLE_DELAY_SECONDS = 1.5;
 
 function assertDelta(deltaSeconds) {
   if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
@@ -50,6 +51,9 @@ export class MatchEngine {
   #previousSnapshot;
   #currentSnapshot;
   #snapshotDiscontinuity = false;
+  #humanIdleSeconds = 0;
+  #selectedOwnerId = null;
+  #activeHumanAttackIntent = false;
 
   constructor({
     formations = DEFAULT_FORMATIONS,
@@ -219,6 +223,7 @@ export class MatchEngine {
   }
 
   #applyCommand(command) {
+    if (command.source === GameCommandSource.HUMAN) this.#humanIdleSeconds = 0;
     switch (command.type) {
       case GameCommandType.START_MATCH:
         this.#resetRuntime("playing");
@@ -246,6 +251,9 @@ export class MatchEngine {
         break;
       case GameCommandType.SET_SPRINT:
         this.#state.controls.sprinting = command.payload.active;
+        break;
+      case GameCommandType.SET_ATTACK_INTENT:
+        this.#activeHumanAttackIntent = command.payload.active;
         break;
       case GameCommandType.SET_SHIELD:
         this.#state.controls.shielding = command.payload.active;
@@ -352,12 +360,32 @@ export class MatchEngine {
 
   #advanceSimulation(deltaSeconds) {
     this.#state.match.elapsed += deltaSeconds;
+    const controls = this.#state.controls;
+    const controlsAreIdle = controls.moveX === 0
+      && controls.moveY === 0
+      && !controls.sprinting
+      && !controls.shielding;
+    const selectedOwnerId = this.#state.ball.ownerId === this.#state.selectedPlayerId
+      ? this.#state.selectedPlayerId
+      : null;
+    if (selectedOwnerId !== this.#selectedOwnerId) {
+      this.#selectedOwnerId = selectedOwnerId;
+      this.#humanIdleSeconds = 0;
+    }
+    if (selectedOwnerId && controlsAreIdle && !this.#activeHumanAttackIntent) {
+      this.#humanIdleSeconds += deltaSeconds;
+    } else {
+      this.#humanIdleSeconds = 0;
+    }
     const aiCommands = advanceAIDecisions(this.#state, deltaSeconds, {
       field: this.#config.field,
       width: this.#config.width,
       height: this.#config.height,
       random: this.#random,
-      tick: this.#tick
+      tick: this.#tick,
+      allowSelectedOwnerAction: controlsAreIdle
+        && !this.#activeHumanAttackIntent
+        && this.#humanIdleSeconds >= SELECTED_OWNER_IDLE_DELAY_SECONDS
     });
     for (const command of aiCommands) this.#applyCommand(command);
     const previousOwnerId = this.#state.ball.ownerId;
@@ -422,6 +450,9 @@ export class MatchEngine {
     });
     this.#random = createSeededRandom(this.#config.randomSeed);
     this.#actionIntents.length = 0;
+    this.#humanIdleSeconds = 0;
+    this.#selectedOwnerId = null;
+    this.#activeHumanAttackIntent = false;
     this.#snapshotDiscontinuity = true;
   }
 

@@ -253,7 +253,8 @@ export function advanceAIDecisions(state, deltaSeconds, {
   width = 1200,
   height = 700,
   random,
-  tick = 0
+  tick = 0,
+  allowSelectedOwnerAction = false
 } = {}) {
   if (!random || typeof random.next !== "function") {
     throw new TypeError("advanceAIDecisions requires a deterministic random source");
@@ -263,7 +264,10 @@ export function advanceAIDecisions(state, deltaSeconds, {
 
   const commands = [];
   for (const player of state.players) {
-    if (player.id === state.selectedPlayerId) continue;
+    const selectedOwnerAssist = allowSelectedOwnerAction
+      && player.id === state.selectedPlayerId
+      && owner === player;
+    if (player.id === state.selectedPlayerId && !selectedOwnerAssist) continue;
     const context = {
       field,
       width,

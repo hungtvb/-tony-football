@@ -60,6 +60,29 @@ test("AI owner near goal creates a seeded shoot command", () => {
   assert.equal(commands[0].targetTick, 22);
 });
 
+test("selected owner remains human-controlled until idle-owner assist is explicitly enabled", () => {
+  const state = createMatchState({ runtimeState: "playing", kickoffDelay: 0 });
+  const owner = findPlayer(state, state.selectedPlayerId);
+  owner.x = 900;
+  owner.y = 350;
+  giveBall(state, owner);
+
+  const humanOwned = advanceAIDecisions(state, 1 / 60, {
+    random: sequenceRandom([0, 0.5]),
+    tick: 40
+  });
+  assert.equal(humanOwned.length, 0);
+
+  const assisted = advanceAIDecisions(state, 1 / 60, {
+    random: sequenceRandom([0, 0.5]),
+    tick: 41,
+    allowSelectedOwnerAction: true
+  });
+  assert.equal(assisted.length, 1);
+  assert.equal(assisted[0].type, GameCommandType.SHOOT);
+  assert.equal(assisted[0].payload.playerId, owner.id);
+});
+
 test("pressured AI owner chooses a pass through the command boundary", () => {
   const state = createMatchState({ runtimeState: "playing", kickoffDelay: 0 });
   const owner = findPlayer(state, "away-3");
