@@ -10,6 +10,37 @@ async function openGoalTest(page) {
   ));
 }
 
+async function installEngineRuntimeHarness(page) {
+  await page.route("**/src/game/application/BrowserMatchRuntime.js", async (route) => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const withRuntimeHandle = source.replace(
+      "    this.#publishEvent = publishEvent;",
+      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;",
+    );
+    const patched = withRuntimeHandle.replace(
+      "  step(deltaSeconds) {",
+      `  recordGoalForE2E(team, options = {}) {
+    return this.#engine.recordGoal(team, options);
+  }
+
+  advanceForE2E(steps, deltaSeconds = 1 / 60) {
+    if (!Number.isInteger(steps) || steps < 0) {
+      throw new RangeError("E2E runtime steps must be a non-negative integer");
+    }
+    for (let index = 0; index < steps; index += 1) this.step(deltaSeconds);
+    return this.snapshot;
+  }
+
+  step(deltaSeconds) {`,
+    );
+    if (patched === source || !patched.includes("recordGoalForE2E")) {
+      throw new Error("Could not install the isolated BrowserMatchRuntime E2E harness");
+    }
+    await route.fulfill({ response, body: patched });
+  });
+}
+
 test("goal presentation yields native highlight and replay windows", async ({ page }) => {
   await openGoalTest(page);
 
@@ -116,4 +147,116 @@ test("separate replay events extend the goal flow without score DOM inference", 
 
   await page.evaluate(() => window.__TONY_DEBUG__.emitGameEvent("replay:ended"));
   await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__.diagnostics().running === false);
+});
+
+test("default engine goal drives browser score, replay, commentary, and coherent kickoff", async ({ page }) => {
+  await installEngineRuntimeHarness(page);
+  await openGoalTest(page);
+
+  await page.locator("#quickMatchButton").click();
+  await page.locator("#playButton").click();
+  await expect.poll(
+    () => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state),
+  ).toBe("playing");
+
+  const beforeGoal = await page.locator("#commentary").textContent();
+  await page.evaluate(() => {
+    const badge = document.querySelector("#replayBadge");
+    const commentary = document.querySelector("#commentary");
+    const homeScore = document.querySelector("#homeScore");
+    const awayScore = document.querySelector("#awayScore");
+    const evidence = {
+      badge: [{ className: badge.className, text: badge.textContent }],
+      commentary: [commentary.textContent],
+      scores: [[homeScore.textContent, awayScore.textContent]],
+      engine: [],
+      events: [],
+    };
+    const capture = () => {
+      evidence.badge.push({ className: badge.className, text: badge.textContent });
+      evidence.commentary.push(commentary.textContent);
+      evidence.scores.push([homeScore.textContent, awayScore.textContent]);
+    };
+    new MutationObserver(capture).observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    window.__TONY_DEFAULT_GOAL_EVIDENCE__ = evidence;
+    window.addEventListener("tony:game-event", ({ detail }) => {
+      evidence.events.push({
+        type: detail.type,
+        badge: { className: badge.className, text: badge.textContent },
+      });
+    });
+    const captureEngine = () => {
+      const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+      if (snapshot) evidence.engine.push(snapshot);
+      requestAnimationFrame(captureEngine);
+    };
+    requestAnimationFrame(captureEngine);
+  });
+  const triggered = await page.evaluate(() => {
+    const diagnostics = window.__TONY_DEBUG__.diagnostics();
+    if (diagnostics.runtimeMode !== "engine") return false;
+    return window.__TONY_E2E_BROWSER_RUNTIME__?.recordGoalForE2E(0) ?? false;
+  });
+  expect(triggered).toBe(true);
+
+  await expect(page.locator("#homeScore")).toHaveText("1");
+  await expect(page.locator("#awayScore")).toHaveText("0");
+
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
+  ));
+  await expect(page.locator("#goalPresentationHomeScore")).toHaveText("1");
+  await expect(page.locator("#goalPresentationAwayScore")).toHaveText("0");
+  await expect(page.locator("#goalPresentationReplayFlag")).toHaveText("REPLAY AVAILABLE");
+
+  await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.releaseTestHold());
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "native-replay"
+  ));
+  await expect(page.locator("#goalPresentationOverlay")).not.toHaveClass(/show/);
+
+  for (let chunk = 0; chunk < 4; chunk += 1) {
+    await page.evaluate(() => window.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(60));
+    await page.waitForTimeout(0);
+  }
+
+  await page.waitForFunction(() => {
+    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+    return snapshot
+      && snapshot.score[0] === 1
+      && snapshot.replayActive === false
+      && snapshot.goalSequence === null;
+  }, null, { timeout: 12_000 });
+
+  await expect(page.locator("#replayBadge")).not.toHaveClass(/show/);
+  await expect(page.locator("#homeScore")).toHaveText("1");
+  await expect(page.locator("#awayScore")).toHaveText("0");
+
+  const evidence = await page.evaluate(() => ({
+    ...window.__TONY_DEFAULT_GOAL_EVIDENCE__,
+    timeline: window.__TONY_GOAL_PRESENTATION__.diagnostics().timelineHistory,
+  }));
+  expect(evidence.commentary).toContain("Đang xem lại bàn thắng.");
+  expect(evidence.commentary).toContain("Chuẩn bị giao bóng lại.");
+  expect(evidence.commentary).not.toEqual([beforeGoal]);
+  expect(evidence.events.some(({ type, badge }) => (
+    type === "replay:started"
+    && badge.className.includes("show")
+    && badge.text.includes("INSTANT REPLAY")
+  ))).toBe(true);
+  expect(evidence.scores.some(([home, away]) => home === "1" && away === "0")).toBe(true);
+  expect(evidence.engine.some(({ replayActive }) => replayActive === true)).toBe(true);
+  expect(evidence.engine.some(({ goalSequence }) => goalSequence?.team === 0)).toBe(true);
+  expect(evidence.engine.some(({ goalSequence, kickoffTimer, ballOwnerId }) => (
+    goalSequence === null && kickoffTimer > 0 && ballOwnerId === null
+  ))).toBe(true);
+  expect(evidence.timeline.some(({ phase, visible }) => (
+    phase === "native-replay" && visible === false
+  ))).toBe(true);
 });

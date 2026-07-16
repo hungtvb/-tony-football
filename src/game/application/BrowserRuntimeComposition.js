@@ -1,6 +1,6 @@
 import { GameCommandType } from "../engine/GameCommands.js";
-import { GameEventType } from "../engine/GameEvents.js";
 import { publishGameEvent } from "../presentation/BrowserGameEventBridge.js";
+import { projectBrowserMatchPresentationEvent } from "../presentation/BrowserMatchPresentationProjection.js";
 import { BrowserMatchRuntime } from "./BrowserMatchRuntime.js";
 
 export const BrowserRuntimeMode = Object.freeze({
@@ -75,55 +75,33 @@ function assertEventTarget(target) {
   }
 }
 
-function toggleVisible(element, visible) {
-  element?.classList?.toggle("show", visible);
+function snapshotDiagnostics(snapshot) {
+  if (!snapshot) return null;
+  return {
+    tick: snapshot.tick,
+    score: [...snapshot.match.score],
+    replayActive: Boolean(snapshot.match.replay?.active),
+    goalSequence: snapshot.match.goalSequence ? { ...snapshot.match.goalSequence } : null,
+    kickoffTimer: snapshot.match.kickoffTimer,
+    ballOwnerId: snapshot.ball.ownerId,
+  };
 }
 
-function projectLifecycleEvent(target, event) {
-  const document = target?.document;
-  if (!document || typeof document.getElementById !== "function") return;
-
-  const start = document.getElementById("startOverlay");
-  const pause = document.getElementById("pauseOverlay");
-  const result = document.getElementById("resultOverlay");
-  const matchState = document.getElementById("matchState");
-
-  switch (event.type) {
-    case GameEventType.MATCH_STARTED:
-    case GameEventType.MATCH_RESTARTED:
-      toggleVisible(start, false);
-      toggleVisible(pause, false);
-      toggleVisible(result, false);
-      if (matchState) matchState.textContent = "LIVE";
-      break;
-    case GameEventType.MATCH_PAUSED:
-      toggleVisible(pause, true);
-      if (matchState) matchState.textContent = "TẠM DỪNG";
-      break;
-    case GameEventType.MATCH_RESUMED:
-      toggleVisible(pause, false);
-      if (matchState) matchState.textContent = "LIVE";
-      break;
-    case GameEventType.MATCH_ENDED:
-      toggleVisible(pause, false);
-      if (matchState) matchState.textContent = "FULL TIME";
-      break;
-    default:
-      break;
-  }
-}
-
-function installLiveDiagnostics(target, getState) {
+function installLiveDiagnostics(target, getRuntimeDiagnostics) {
   const install = () => {
     const debug = target?.__TONY_DEBUG__;
     if (!debug || typeof debug.diagnostics !== "function") return false;
     if (debug.diagnostics.liveRuntimeProjection === true) return true;
     const legacyDiagnostics = debug.diagnostics.bind(debug);
-    const diagnostics = () => ({
-      ...legacyDiagnostics(),
-      state: getState(),
-      runtimeMode: BrowserRuntimeMode.ENGINE,
-    });
+    const diagnostics = () => {
+      const runtime = getRuntimeDiagnostics();
+      return {
+        ...legacyDiagnostics(),
+        state: runtime.state,
+        runtimeMode: BrowserRuntimeMode.ENGINE,
+        engineSnapshot: snapshotDiagnostics(runtime.snapshot),
+      };
+    };
     diagnostics.liveRuntimeProjection = true;
     debug.diagnostics = diagnostics;
     return true;
@@ -193,7 +171,7 @@ export class BrowserRuntimeComposition {
     if (!this.authoritative) return false;
     assertEventTarget(target);
     this.#target = target;
-    installLiveDiagnostics(target, () => this.state);
+    installLiveDiagnostics(target, () => ({ state: this.state, snapshot: this.snapshot }));
     return true;
   }
 
@@ -263,7 +241,7 @@ export class BrowserRuntimeComposition {
       engineOptions: options,
       publishEvent: (event) => {
         if (!this.#target) return;
-        projectLifecycleEvent(this.#target, event);
+        projectBrowserMatchPresentationEvent(this.#target.document, event);
         publishGameEvent(this.#target, event);
       },
     });

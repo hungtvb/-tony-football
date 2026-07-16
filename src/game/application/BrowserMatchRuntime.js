@@ -1,4 +1,5 @@
 import { MatchEngine } from "../engine/MatchEngine.js";
+import { GameEventType } from "../engine/GameEvents.js";
 
 function assertEngine(engine) {
   if (
@@ -8,6 +9,8 @@ function assertEngine(engine) {
     || typeof engine.createRenderFrame !== "function"
     || typeof engine.drainEvents !== "function"
     || typeof engine.drainActionIntents !== "function"
+    || typeof engine.startReplay !== "function"
+    || typeof engine.recordGoal !== "function"
   ) {
     throw new TypeError("BrowserMatchRuntime requires a MatchEngine-compatible engine");
   }
@@ -82,7 +85,12 @@ export class BrowserMatchRuntime {
 
   step(deltaSeconds) {
     const snapshot = this.#engine.step(deltaSeconds);
-    const events = this.#engine.drainEvents();
+    const steppedEvents = this.#engine.drainEvents();
+    if (steppedEvents.some((event) => event.type === GameEventType.SCORE_CHANGED)) {
+      this.#engine.startReplay();
+    }
+    const replayEvents = this.#engine.drainEvents();
+    const events = Object.freeze([...steppedEvents, ...replayEvents]);
     const actionIntents = this.#engine.drainActionIntents();
 
     for (const event of events) this.#publishEvent(event);
