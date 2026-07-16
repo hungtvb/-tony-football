@@ -32,6 +32,15 @@ Before modifying code:
 | `scripts/build-static.mjs` | Produces the static `dist` bundle | Vercel publishes `dist` |
 | `vercel.json` | Vercel static build contract | Framework preset disabled intentionally |
 
+## Local workspace operational entry points
+
+| Entry point | Responsibility | Safety contract |
+| --- | --- | --- |
+| `scripts/bootstrap-local-playwright.sh` | Verifies a current-`main` runtime artifact, restores dependencies and browsers, and initializes local Git `main` | Refuses stale SHA and non-generated replacement paths |
+| `scripts/start-local-sprint.sh` | Creates one clean local sprint branch from the verified local `main` snapshot | Refuses dirty worktrees, invalid names, stale markers, and existing branches |
+| `scripts/sync-local-main.sh` | Imports a newer verified GitHub `main` snapshot into local `main` and rebases the active sprint branch | Requires committed work and exact SHA validation before replacement |
+| `scripts/run-local-preflight.sh` | Runs restricted-container unit, flow, and representative WebGL validation | Local feedback only; PR CI remains the merge gate |
+
 ## Runtime data flow
 
 ### Current
