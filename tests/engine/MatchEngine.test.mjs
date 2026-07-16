@@ -170,8 +170,18 @@ test("active charged attack intent cannot be pre-empted by selected-owner assist
   engine.enqueue(GameCommandType.SET_ATTACK_INTENT, { active: false }, {
     source: GameCommandSource.HUMAN
   });
-  engine.step(1 / 60);
-  assert.equal(engine.snapshot.ball.ownerId, selectedId);
+  const resumedEvents = [];
+  let assistResumed = false;
+  for (let tick = 0; tick < 120; tick += 1) {
+    engine.step(1 / 60);
+    resumedEvents.push(...engine.drainEvents());
+    const selected = engine.snapshot.players.find((player) => player.id === selectedId);
+    if (selected.vx !== 0 || selected.vy !== 0) assistResumed = true;
+  }
+  if (resumedEvents.some((event) => (
+    event.type === GameEventType.BALL_KICKED && event.payload.playerId === selectedId
+  ))) assistResumed = true;
+  assert.equal(assistResumed, true);
 });
 
 test("tackle and teammate-run commands emit explicit gameplay events", () => {

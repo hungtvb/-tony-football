@@ -116,17 +116,15 @@ export class BrowserInputAdapter {
   }
 
   reset({ requestPause = false } = {}) {
-    const wasCharging = this.#charge !== null;
     const wasSprinting = this.#pressed.has(FO4_CONTROLS.sprint);
     const wasShielding = this.#pressed.has(FO4_CONTROLS.shield);
     const wasGoalkeeperRushing = this.#pressed.has(FO4_CONTROLS.throughBall) && this.#getControlMode() === "defense";
     const wasTeamPressing = this.#pressed.has(FO4_CONTROLS.teammateRun) && this.#getControlMode() === "defense";
     this.#pressed.clear();
-    this.#charge = null;
+    this.#cancelAttackAction();
     this.#qTapStarted = false;
     this.#qConsumed = false;
     this.#emit(GameCommandType.MOVE, { x: 0, y: 0 });
-    if (wasCharging) this.#emit(GameCommandType.SET_ATTACK_INTENT, { active: false });
     if (wasSprinting) this.#emit(GameCommandType.SET_SPRINT, { active: false });
     if (wasShielding) this.#emit(GameCommandType.SET_SHIELD, { active: false });
     if (wasGoalkeeperRushing) this.#emit(GameCommandType.SET_GOALKEEPER_RUSH, { active: false });
@@ -164,10 +162,8 @@ export class BrowserInputAdapter {
   }
 
   #finishAttackAction(code) {
-    if (!this.#charge || this.#charge.code !== code) return;
-    const charge = this.#charge;
-    this.#charge = null;
-    this.#emit(GameCommandType.SET_ATTACK_INTENT, { active: false });
+    const charge = this.#cancelAttackAction(code);
+    if (!charge) return;
     const power = Math.max(0.08, clamp((this.#clock() - charge.startedAt) / CHARGE_DURATION_MS, 0, 1));
     const payload = {
       power,
@@ -187,6 +183,14 @@ export class BrowserInputAdapter {
       payload.modifiers = { chip: charge.q, finesse: !charge.q && charge.z };
     }
     if (type) this.#emit(type, payload);
+  }
+
+  #cancelAttackAction(code = null) {
+    if (!this.#charge || (code !== null && this.#charge.code !== code)) return null;
+    const charge = this.#charge;
+    this.#charge = null;
+    this.#emit(GameCommandType.SET_ATTACK_INTENT, { active: false });
+    return charge;
   }
 
   #handleKeyDown = (event) => {
@@ -234,7 +238,7 @@ export class BrowserInputAdapter {
 
     if (FO4_ATTACK_ACTION_CODES.includes(event.code)) {
       if (mode === "attack") this.#finishAttackAction(event.code);
-      else this.#charge = null;
+      else this.#cancelAttackAction(event.code);
     }
     if (event.code === FO4_CONTROLS.teammateRun) {
       if (mode === "attack" && this.#qTapStarted && !this.#qConsumed) {
