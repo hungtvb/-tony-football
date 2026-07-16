@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice B player actions
+Status: In Progress — Slice B headless gameplay complete
 
 ## Objective
 
@@ -77,8 +77,11 @@ flowchart LR
 - Slice B now also executes short passes, one-twos, through balls, chipped through balls, lofted passes, power/finesse/chip shots, slide tackles, and teammate runs inside the fixed update.
 - Kick targeting, lead, speed, curve, vertical velocity, release locks, action animation facts, statistics, and tackle odds preserve the compatibility formulas; random outcomes use the engine's seeded source.
 - Successful actions publish explicit ball-kicked, tackle-resolved, teammate-run, and possession events for future presentation adapters.
+- Slice B goalkeeper and team AI now run headlessly with deterministic chase, support shape, pressing, attack movement, pressured passing, shooting, goalkeeper positioning, shot projection, dives, rush control, and 520-speed distribution.
+- AI decisions use fixed match time and the seeded engine random source; ball actions cross the same immutable command boundary as human actions.
+- Defensive W goalkeeper-rush and Q team-press hold state are engine commands ready for the Slice C FO4 keyboard adapter.
 - Movement and ball systems reuse the existing locomotion, ball-control, possession, and tuning modules; their fixed-step constants remain unchanged.
-- Goalkeeper decisions and team AI remain in `game.js` until migrated with focused parity tests.
+- Slice B headless gameplay migration is complete; `game.js` remains the live compatibility owner until Slice C and Slice D adapters are connected and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 
 ## Out of scope

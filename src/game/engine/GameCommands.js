@@ -16,6 +16,8 @@ export const GameCommandType = Object.freeze({
   SHOOT: "ball:shoot",
   TACKLE: "player:tackle",
   SET_SHIELD: "player:set-shield",
+  SET_GOALKEEPER_RUSH: "team:set-goalkeeper-rush",
+  SET_TEAM_PRESS: "team:set-press",
   TRIGGER_TEAMMATE_RUN: "team:trigger-run",
   START_MATCH: "match:start",
   PAUSE_MATCH: "match:pause",
@@ -60,7 +62,12 @@ function validatePayload(type, payload) {
     assertUnitNumber(payload.y, "move.y");
   }
 
-  if (type === GameCommandType.SET_SPRINT || type === GameCommandType.SET_SHIELD) {
+  if (
+    type === GameCommandType.SET_SPRINT
+    || type === GameCommandType.SET_SHIELD
+    || type === GameCommandType.SET_GOALKEEPER_RUSH
+    || type === GameCommandType.SET_TEAM_PRESS
+  ) {
     if (typeof payload.active !== "boolean") throw new TypeError(`${type}.active must be boolean`);
   }
 

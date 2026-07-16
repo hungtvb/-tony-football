@@ -140,6 +140,7 @@ export function createMatchState({
       matchSeconds,
       score: [0, 0],
       stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
+      elapsed: 0,
       kickoffTimer: runtimeState === "playing" ? kickoffDelay : 0,
       goalSequence: null
     },
@@ -155,7 +156,10 @@ export function createMatchState({
       moveX: 0,
       moveY: 0,
       sprinting: false,
-      shielding: false
+      shielding: false,
+      goalkeeperRush: false,
+      teamPress: false,
+      lastMode: runtimeState === "playing" ? "attack" : "defense"
     },
     replay: {
       active: false,
@@ -208,6 +212,9 @@ export function resetForKickoff(state, team, {
   state.controls.moveY = 0;
   state.controls.sprinting = false;
   state.controls.shielding = false;
+  state.controls.goalkeeperRush = false;
+  state.controls.teamPress = false;
+  state.controls.lastMode = team === HOME_TEAM ? "attack" : "defense";
 
   const taker = state.players.find((player) => (
     player.team === team && player.index === 4

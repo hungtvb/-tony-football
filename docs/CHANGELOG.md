@@ -10,6 +10,7 @@
 - Headless match-state factory and MatchEngine lifecycle foundation with stable 6v6 entities.
 - Headless fixed-step player movement and ball simulation systems with engine parity coverage.
 - Headless kick, tackle, and teammate-run systems with seeded outcomes and explicit gameplay events.
+- Deterministic headless goalkeeper and team AI decisions routed through engine commands.
 
 ### Changed
 - Active sprint moved from G1 to U1.

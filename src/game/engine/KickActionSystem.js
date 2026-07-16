@@ -25,7 +25,7 @@ function commandDirection(command, player) {
   return normalize(player.dirX, player.dirY, player.team === HOME_TEAM ? 1 : -1, 0);
 }
 
-function passingLaneRisk(state, from, to) {
+export function passingLaneRisk(state, from, to) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const lengthSquared = dx * dx + dy * dy || 1;

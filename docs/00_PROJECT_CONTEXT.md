@@ -23,11 +23,11 @@ R1 architecture gate before returning to G4, U4, U5, or major AI expansion.
 R1 — Engine and Presentation Boundary.
 
 ## Priority order
-1. Complete parity-first migration of goalkeeper and team AI into `MatchEngine`
-2. Validate migrated gameplay systems against the compatibility runtime
-3. Add browser input and application adapters without changing FO4 mappings
-4. Make renderers and presentation consume snapshots and events
-5. Preserve deterministic gameplay and visual parity through compatibility bridges
+1. Add browser input and application adapters without changing FO4 mappings
+2. Validate browser commands against the headless gameplay baseline
+3. Make renderers and presentation consume snapshots and events
+4. Preserve WebGL and Canvas parity through compatibility bridges
+5. Reduce `game.js` to explicit composition and bootstrap
 
 ## Explicitly out of scope
 - Ball physics tuning

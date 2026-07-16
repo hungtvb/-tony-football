@@ -40,6 +40,7 @@ test("game commands reject unknown types and invalid payloads", () => {
   assert.throws(() => createGameCommand("player:teleport"), /Unknown game command/);
   assert.throws(() => createGameCommand(GameCommandType.MOVE, { x: 2, y: 0 }), /move.x/);
   assert.throws(() => createGameCommand(GameCommandType.SET_SPRINT, { active: 1 }), /boolean/);
+  assert.throws(() => createGameCommand(GameCommandType.SET_TEAM_PRESS, { active: 1 }), /boolean/);
   assert.throws(() => createGameCommand(GameCommandType.SHORT_PASS, { power: 1.2 }), /between 0 and 1/);
   assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, playerId: "" }), /non-empty string/);
   assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, modifiers: { finesse: 1 } }), /boolean/);

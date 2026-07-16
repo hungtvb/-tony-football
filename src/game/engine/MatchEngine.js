@@ -2,6 +2,7 @@ import { GameCommandBuffer, GameCommandType } from "./GameCommands.js";
 import { GameEventQueue, GameEventType } from "./GameEvents.js";
 import { createMatchSnapshot, createSnapshotFrame } from "./MatchSnapshot.js";
 import { createSeededRandom } from "../core/Random.js";
+import { advanceAIDecisions } from "./AIDecisionSystem.js";
 import { advanceBallSimulation } from "./BallSimulationSystem.js";
 import { executeKickAction } from "./KickActionSystem.js";
 import { advancePlayerMovement, createFieldBounds } from "./PlayerMovementSystem.js";
@@ -244,6 +245,12 @@ export class MatchEngine {
       case GameCommandType.SET_SHIELD:
         this.#state.controls.shielding = command.payload.active;
         break;
+      case GameCommandType.SET_GOALKEEPER_RUSH:
+        this.#state.controls.goalkeeperRush = command.payload.active;
+        break;
+      case GameCommandType.SET_TEAM_PRESS:
+        this.#state.controls.teamPress = command.payload.active;
+        break;
       case GameCommandType.SWITCH_PLAYER:
         if (this.#state.match.state === "playing") this.#switchControlledPlayer();
         break;
@@ -332,6 +339,15 @@ export class MatchEngine {
   }
 
   #advanceSimulation(deltaSeconds) {
+    this.#state.match.elapsed += deltaSeconds;
+    const aiCommands = advanceAIDecisions(this.#state, deltaSeconds, {
+      field: this.#config.field,
+      width: this.#config.width,
+      height: this.#config.height,
+      random: this.#random,
+      tick: this.#tick
+    });
+    for (const command of aiCommands) this.#applyCommand(command);
     const previousOwnerId = this.#state.ball.ownerId;
     advancePlayerMovement(this.#state, deltaSeconds, { field: this.#config.field });
     const { goalTeam } = advanceBallSimulation(this.#state, deltaSeconds, {

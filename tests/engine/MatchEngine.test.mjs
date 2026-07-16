@@ -81,7 +81,10 @@ test("control commands drive movement and authoritative kick actions", () => {
     moveX: 1,
     moveY: 0,
     sprinting: true,
-    shielding: false
+    shielding: false,
+    goalkeeperRush: false,
+    teamPress: false,
+    lastMode: "attack"
   });
   engine.setPossession(player.id, { reason: "test-control" });
   engine.drainEvents();
@@ -109,6 +112,17 @@ test("tackle and teammate-run commands emit explicit gameplay events", () => {
     engine.drainEvents().map((event) => event.type),
     [GameEventType.TEAMMATE_RUN_TRIGGERED]
   );
+});
+
+test("defensive AI hold controls remain engine-owned command state", () => {
+  const engine = new MatchEngine({ kickoffDelay: 0 });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
+  engine.enqueue(GameCommandType.SET_GOALKEEPER_RUSH, { active: true });
+  engine.enqueue(GameCommandType.SET_TEAM_PRESS, { active: true });
+  engine.step(1 / 60);
+
+  assert.equal(engine.snapshot.match.controls.goalkeeperRush, true);
+  assert.equal(engine.snapshot.match.controls.teamPress, true);
 });
 
 test("equal kick commands and seeds produce deterministic ball outcomes", () => {
@@ -205,4 +219,24 @@ test("fixed render schedules produce equal headless lifecycle snapshots", () => 
   assert.equal(at30.tick, 120);
   assert.deepEqual(at30, at60);
   assert.deepEqual(at60, at120);
+});
+
+test("headless AI match remains finite and referentially valid during a ten-second soak", () => {
+  const engine = new MatchEngine({ matchSeconds: 20, kickoffDelay: 0, randomSeed: "ai-soak" });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
+  for (let tick = 0; tick < 600; tick += 1) engine.step(1 / 60);
+  const snapshot = engine.snapshot;
+  const playerIds = new Set(snapshot.players.map((player) => player.id));
+
+  assert.equal(snapshot.tick, 600);
+  assert.ok(snapshot.players.every((player) => (
+    Number.isFinite(player.x)
+    && Number.isFinite(player.y)
+    && Number.isFinite(player.vx)
+    && Number.isFinite(player.vy)
+  )));
+  assert.ok(Number.isFinite(snapshot.ball.x));
+  assert.ok(Number.isFinite(snapshot.ball.y));
+  assert.ok(snapshot.ball.ownerId === null || playerIds.has(snapshot.ball.ownerId));
+  assert.ok(snapshot.match.elapsed > 9.9);
 });
