@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice D2b interpolated entity transforms complete
+Status: In Progress — Slice D2c snapshot camera, replay, and feedback adapters complete
 
 ## Objective
 
@@ -98,8 +98,13 @@ flowchart LR
 - Slice D2b adds a pure render-state adapter for player position, velocity, facing, locomotion phase, action timing, ball position, height, velocity, and rotation.
 - Direction and yaw interpolate across the shortest angular path; same-tick resets and large kickoff teleports snap directly to current transforms instead of sliding across the pitch.
 - WebGL model/fallback rigs and Canvas fallback players now use the same interpolated poses and snapshot entity IDs. The 3D rig also faces the interpolated ball rather than mutable compatibility coordinates.
-- Legacy replay frames remain the explicit render override in this parity slice; camera, replay ownership, particles, and audio remain the next migration boundary.
+- Replay remains the explicit render override, but playback frames are now immutable `MatchSnapshot` references rather than legacy player/ball copies.
 - Slice D2b local validation passed 199 game/R1 tests (including 89 presentation contracts), the static build, 24 match-flow scenarios, and 12 WebGL/Canvas camera-HUD scenarios across desktop and narrow landscape.
+- Slice D2c adds a snapshot camera controller that owns presentation-only framing state and reads match/ball facts exclusively from fixed-tick snapshots.
+- Replay sampling now owns a bounded 15 FPS snapshot buffer, preserves the 66-frame history and 3.05-second playback window, and exposes read-only playback facts to the compatibility snapshot adapter.
+- Kick, tackle, goal, start/restart, and full-time feedback now crosses the immutable browser game-event bridge; a presentation adapter maps those events to audio and contextual particle callbacks.
+- Particle simulation remains presentation state in `game.js`, but gameplay actions no longer invoke particle or audio implementations directly.
+- Slice D2c focused validation adds snapshot camera, replay, feedback projection, and runtime-boundary contracts; full browser parity remains required before Slice E cleanup.
 - `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 

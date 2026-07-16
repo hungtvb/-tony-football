@@ -18,6 +18,7 @@
 - Apply a horizontal and vertical dead zone before moving the frame target.
 - Clamp the target to a safe range that preserves useful field edges.
 - Smooth position and zoom independently with frame-rate-safe exponential easing.
+- `SnapshotCameraController` owns logical framing state and reads match lifecycle, ball position, velocity, and zoom inputs from immutable fixed-tick snapshots.
 
 ### WebGL
 - Broadcast, tactical, and close presets consume the shared logical frame target.
@@ -62,7 +63,7 @@
 
 ## Validation contract
 - Camera unit tests cover zoom direction, look-ahead cap, dead zone, and safe-area bounds.
-- Runtime contracts confirm WebGL consumes the shared frame target.
+- Runtime contracts confirm the camera controller consumes snapshots and WebGL consumes its read-only frame state.
 - Radar contracts confirm no text rendering and configured marker hierarchy.
 - CSS contracts confirm commentary cannot overlap the radar at desktop and narrow breakpoints.
 - Manual validation covers lower-corner visibility, desktop, narrow layout, replay, Canvas fallback, and reduced motion.

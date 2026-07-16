@@ -16,7 +16,9 @@ import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 import { cameraHudConfig } from "./src/game/config/cameraHudConfig.js";
-import { cameraFrameTarget, cameraZoomForSpeed } from "./src/game/presentation/CameraFraming.js";
+import { createSnapshotCameraController } from "./src/game/presentation/SnapshotCameraController.js";
+import { createSnapshotReplayController } from "./src/game/presentation/SnapshotReplayController.js";
+import { createBrowserPresentationFeedbackAdapter } from "./src/game/presentation/BrowserPresentationFeedbackAdapter.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
 import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
 import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore, resolveFirstTouch } from "./src/game/gameplay/BallControl.js";
@@ -30,7 +32,7 @@ import { ApplicationActionType } from "./src/game/application/ApplicationActions
 import { ApplicationRuntime } from "./src/game/application/ApplicationRuntime.js";
 import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplicationAdapter.js";
 import { publishGameEvent } from "./src/game/presentation/BrowserGameEventBridge.js";
-import { CompatibilitySnapshotAdapter } from "./src/game/presentation/CompatibilitySnapshotAdapter.js";
+import { CompatibilitySnapshotAdapter, compatibilityPlayerId } from "./src/game/presentation/CompatibilitySnapshotAdapter.js";
 import { createHudSnapshotProjection } from "./src/game/presentation/HudSnapshotProjection.js";
 import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRenderer.js";
 import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRenderState.js";
@@ -116,12 +118,20 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   }
 
   const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, height: 0, vz: 0, curve: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0, possession: createPossessionLifecycle() };
+  const cameraController = createSnapshotCameraController({
+    worldWidth: W,
+    worldHeight: H,
+    viewportWidth: W,
+    viewportHeight: H,
+    config: cameraHudConfig.camera
+  });
+  const replayController = createSnapshotReplayController();
   const game = {
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
-    camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
-    replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
+    cameraMode: "broadcast", cameraNotice: 0,
+    replay: replayController,
     goalSequence: null, goalScorer: null, hud: { selectedKey: "", playerChangeTimer: null }, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -139,6 +149,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   let compatibilityEventSequence = 0;
   const compatibilitySnapshots = new CompatibilitySnapshotAdapter();
   let lastSnapshotRenderState = null;
+  let recordReplaySnapshot = false;
 
   function publishCompatibilityEvent(type, payload = {}) {
     const event = createGameEvent(type, payload, {
@@ -190,7 +201,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     createTeams();
     game.time = MATCH_SECONDS; game.score = [0, 0]; game.stats = { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 };
     game.particles.length = 0; game.flash = 0; game.goalSequence = null; game.goalScorer = null;
-    game.replay.buffer.length = 0; game.replay.frames.length = 0; game.replay.active = false; game.replay.elapsed = 0; game.replay.accumulator = 0;
+    game.replay.reset();
     ui.replayBadge.classList.remove("show"); kickoff(HOME); updateUI(captureCompatibilitySnapshot());
   }
 
@@ -209,7 +220,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
 
   function startMatch() {
     resetMatch(); game.state = "playing"; ui.start.classList.remove("show"); ui.pause.classList.remove("show"); ui.result.classList.remove("show");
-    ui.matchState.textContent = "LIVE"; whistle();
+    ui.matchState.textContent = "LIVE";
   }
 
   function togglePause(force) {
@@ -226,7 +237,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   function showMatchSetup({ reset = true } = {}) {
     clearActiveInput();
     if (reset) resetMatch();
-    game.state = "menu"; game.replay.active = false; game.goalSequence = null; game.goalScorer = null;
+    game.state = "menu"; game.replay.stop(); game.goalSequence = null; game.goalScorer = null;
     ui.pause.classList.remove("show"); ui.result.classList.remove("show"); ui.start.classList.add("show");
     ui.replayBadge.classList.remove("show"); ui.matchState.textContent = "SẴN SÀNG";
     announce("Chọn thiết lập rồi bắt đầu trận mới.");
@@ -239,7 +250,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   }
 
   function endMatch() {
-    game.state = "ended"; ui.matchState.textContent = "FULL TIME"; whistle(true);
+    game.state = "ended"; ui.matchState.textContent = "FULL TIME";
     publishCompatibilityEvent(GameEventType.MATCH_ENDED, {
       score: game.score.slice(),
       stats: {
@@ -302,14 +313,25 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     player.anim = name; player.animTime = duration; player.animDuration = duration; player.animPower = power;
   }
 
-  function releaseBall(player, dx, dy, speed, type) {
+  function releaseBall(player, dx, dy, speed, type, feedback = {}) {
     const n = normalize(dx, dy); ball.possession=releasePossession(ball.possession,type,possessionId(player));ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : type === "loft" ? .3 : .2;
     ball.x = player.x + n.x * (player.radius + 10); ball.y = player.y + n.y * (player.radius + 10);
     ball.vx = n.x * speed + player.vx * .25; ball.vy = n.y * speed + player.vy * .25;
     ball.height=0;ball.vz=type==="loft"?10.8:type==="shot"?1.8:0;ball.curve=type==="shot"?clamp(n.y*1.45,-1.05,1.05):0;ball.spin = (player.team === HOME ? 1 : -1) * speed * .012;
-    player.cooldown = .18; kickSound(type === "shot" ? .9 : .55);
+    player.cooldown = .18;
     triggerAnimation(player, type === "shot" ? "shoot" : "pass", type === "shot" ? .34 : type === "loft" ? .3 : .24, clamp((speed - 400) / 650, 0, 1));
-    for (let i = 0; i < (type === "shot" ? 9 : 4); i += 1) spawnParticle(ball.x, ball.y, type === "shot" ? "#f5d067" : "#f4f7f5", 1.2);
+    publishCompatibilityEvent(GameEventType.BALL_KICKED, {
+      playerId: compatibilityPlayerId(player),
+      kind: type,
+      power: speed,
+      audioPower: type === "shot" ? .9 : .55,
+      x: ball.x,
+      y: ball.y,
+      particleCount: type === "shot" ? 9 : 4,
+      particleColor: type === "shot" ? "#f5d067" : "#f4f7f5",
+      particleEnergy: 1.2,
+      ...feedback
+    });
   }
 
   function passBall(player, charge=.35, oneTwo=false) {
@@ -355,9 +377,9 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     const openY = keeper.y < H / 2 ? FIELD.goalBottom - 34 : FIELD.goalTop + 34;
     const userAim=player===game.selected&&player.team===HOME&&input.magnitude>.12;const directedY=userAim?H/2+input.aimY*145:player.y+player.dirY*120;
     const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
-    const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot");
+    const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot", { contextEnergy: .55 + power * 1.2, contextX: player.x + player.dirX * 18, contextY: player.y + player.dirY * 18 });
     if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}
-    game.stats.shots[player.team] += 1; spawnContextParticles(player.x+player.dirX*18,player.y+player.dirY*18,.55+power*1.2); const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
+    game.stats.shots[player.team] += 1; const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
 
   function tackle(player) {
@@ -365,11 +387,20 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     const opponent = ball.owner && ball.owner.team !== player.team ? ball.owner : closestPlayer(player.team === HOME ? AWAY : HOME, player);
     if (!opponent || distance(player, opponent) > 48) return;
     player.cooldown = .7; triggerAnimation(player, "tackle", .38); const chance = .48 + (player.rating - opponent.rating) * .012;
-    spawnContextParticles(player.x+player.dirX*14,player.y+player.dirY*14,.8);
-    if (ball.owner === opponent && Math.random() < chance) {
+    const success = ball.owner === opponent && Math.random() < chance;
+    if (success) {
       ball.possession=releasePossession(ball.possession,"tackle",possessionId(opponent));ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
-      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`); kickSound(.3);
+      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`);
     }
+    publishCompatibilityEvent(GameEventType.TACKLE_RESOLVED, {
+      playerId: compatibilityPlayerId(player),
+      opponentId: compatibilityPlayerId(opponent),
+      success,
+      x: player.x + player.dirX * 14,
+      y: player.y + player.dirY * 14,
+      contextEnergy: .8,
+      audioPower: .3
+    });
   }
 
   function slideTackle(player) {
@@ -526,49 +557,35 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   function goal(team) {
     if (game.goalSequence) return;
     const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
-    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.possession=releasePossession(ball.possession,"goal",possessionId(ball.owner));ball.owner = null; game.goalScorer = scorer; goalSound();
-    game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
+    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.possession=releasePossession(ball.possession,"goal",possessionId(ball.owner));ball.owner = null; game.goalScorer = scorer;
+    game.replay.start(captureCompatibilitySnapshot());
     const goalDuration=reducedMotion?3.15:3.65; game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: goalDuration, duration: goalDuration };
     for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", goalDuration, player === scorer ? 1 : .65);
-    for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
     announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(captureCompatibilitySnapshot(), team);
     ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.toggle("show", game.replay.active);
     publishCompatibilityEvent(GameEventType.SCORE_CHANGED, {
       team,
-      scorerId: possessionId(scorer),
+      scorerId: compatibilityPlayerId(scorer),
       score: game.score.slice(),
-      replayAvailable: game.replay.active
+      replayAvailable: game.replay.active,
+      x: team === HOME ? FIELD.right : FIELD.left,
+      y: H / 2,
+      particleCount: 80,
+      particleColor: team === HOME ? "#e1bb58" : "#47c9d4",
+      particleEnergy: 3.5
     });
     if (game.replay.active) publishCompatibilityEvent(GameEventType.REPLAY_STARTED);
   }
 
-  function captureReplayFrame() {
-    return {
-      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle, vx: ball.vx, vy: ball.vy, ownerId: possessionId(ball.owner), possession: { ...ball.possession }, trail: ball.trail.map((point)=>({x:point.x,y:point.y,height:point.height})) },
-      players: players.map((player) => ({ x: player.x, y: player.y, vx: player.vx, vy: player.vy, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: player.anim, animTime: player.animTime, animDuration: player.animDuration, animPower: player.animPower }))
-    };
-  }
-
-  function recordReplay(dt) {
-    game.replay.accumulator += dt;
-    if (game.replay.accumulator < 1 / 15) return;
-    game.replay.accumulator %= 1 / 15; game.replay.buffer.push(captureReplayFrame());
-    if (game.replay.buffer.length > 66) game.replay.buffer.shift();
-  }
-
   function updateReplay(dt) {
-    if (!game.replay.active) return;
-    game.replay.elapsed += dt;
-    if (game.replay.elapsed >= game.replay.duration) {
-      game.replay.active = false; ui.replayBadge.classList.remove("show");
+    if (game.replay.update(dt)) {
+      ui.replayBadge.classList.remove("show");
       publishCompatibilityEvent(GameEventType.REPLAY_ENDED);
     }
   }
 
   function currentReplayFrame() {
-    if (!game.replay.active || !game.replay.frames.length) return null;
-    const progress = clamp(game.replay.elapsed / game.replay.duration, 0, .999);
-    return game.replay.frames[Math.floor(progress * game.replay.frames.length)];
+    return game.replay.currentSnapshot();
   }
 
   function spawnParticle(x, y, color, energy = 1) {
@@ -587,25 +604,8 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     game.particles = game.particles.filter((particle) => particle.life > 0);
   }
 
-  function updateCamera(dt) {
-    const camera = game.camera;
-    const config = cameraHudConfig.camera;
-    const active = game.state === "playing" || game.state === "paused";
-    const ballSpeed = Math.hypot(ball.vx, ball.vy);
-    camera.targetZoom = active ? cameraZoomForSpeed(ballSpeed, config) : config.baseZoom;
-    const frame = active ? cameraFrameTarget({
-      cameraX: camera.x, cameraY: camera.y, subjectX: ball.x, subjectY: ball.y,
-      velocityX: ball.vx, velocityY: ball.vy, worldWidth: W, worldHeight: H,
-      viewportWidth: W, viewportHeight: H, zoom: camera.targetZoom, config,
-    }) : { x: W / 2, y: H / 2 };
-    const followEase = 1 - Math.exp(-dt * config.followRate);
-    camera.x = lerp(camera.x, frame.x, followEase);
-    camera.y = lerp(camera.y, frame.y, followEase);
-    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * config.zoomRate));
-  }
-
   function update(dt) {
-    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
     for (const player of players) {
@@ -614,7 +614,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     }
     if (game.goalSequence) {
       game.goalSequence.timer -= dt;
-      if (game.goalSequence.timer <= 0) { const nextTeam = game.goalSequence.nextTeam; game.goalSequence = null; game.replay.active = false; ui.replayBadge.classList.remove("show"); kickoff(nextTeam); }
+      if (game.goalSequence.timer <= 0) { const nextTeam = game.goalSequence.nextTeam; game.goalSequence = null; game.replay.stop(); ui.replayBadge.classList.remove("show"); kickoff(nextTeam); }
       return;
     }
     if (game.kickOffTimer > 0) { game.kickOffTimer -= dt; return; }
@@ -629,7 +629,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
       player.stepPhase += dt * (.035 * Math.hypot(player.vx, player.vy) + 2.2);
       player.x += player.vx * dt; player.y += player.vy * dt; keepPlayerInBounds(player);
     }
-    resolvePlayerCollisions(); updateBall(dt); if (!game.goalSequence) recordReplay(dt);
+    resolvePlayerCollisions(); updateBall(dt); if (!game.goalSequence) recordReplaySnapshot = true;
     if (!ball.owner || ball.owner.team !== HOME) {
       const nearest = closestPlayer(HOME, ball, false); if (game.selected && distance(game.selected, ball) > distance(nearest, ball) + 145) game.selected = nearest;
     }
@@ -1015,8 +1015,8 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||renderState.players[index],{ball:renderBall,playerId:snapshot.players[index].id,selectedPlayerId:snapshot.match.selectedPlayerId,ballOwnerId:snapshot.ball.ownerId,ballOwnerTeam:ballOwner?.team??null}));
     ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||snapshot.ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
     const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){chargeView.visible=true;chargeView.position.set(worldX(selectedPose.x),7.5,worldZ(selectedPose.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
-    const framedX=replayFrame?renderBall.x:game.camera.x;const framedY=replayFrame?renderBall.y:game.camera.y;
-    const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,game.camera.zoom);
+    const cameraState=cameraController.state;const framedX=replayFrame?renderBall.x:cameraState.x;const framedY=replayFrame?renderBall.y:cameraState.y;
+    const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,cameraState.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
     else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,(lowPowerDevice?66:60)*zoomScale,30*zoomScale+targetZ*.04);cameraLook.set(targetX,0,targetZ);}
@@ -1277,11 +1277,27 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   function whistle(long = false) { if(!audioFeedback.canPlay("whistle",audioNow()))return;tone(1450,long?.5:.25,"sine",.03);tone(1750,long?.42:.18,"sine",.02,.08); }
   function goalSound() { if(!audioFeedback.canPlay("goal",audioNow()))return;[392,523,659,784].forEach((note,index)=>tone(note,.42,"square",.025,index*.09)); }
 
+  createBrowserPresentationFeedbackAdapter({
+    target: window,
+    onKick: kickSound,
+    onWhistle: whistle,
+    onGoal: goalSound,
+    onParticles: ({ x, y, particleCount = 0, particleColor = "#f4f7f5", particleEnergy = 1 }) => {
+      for (let index = 0; index < particleCount; index += 1) spawnParticle(x, y, particleColor, particleEnergy);
+    },
+    onContextParticles: ({ x, y, contextX = x, contextY = y, contextEnergy = 1 }) => {
+      spawnContextParticles(contextX, contextY, contextEnergy);
+    }
+  });
+
   function simulationStep(dt) {
+    recordReplaySnapshot = false;
+    if (compatibilitySnapshots.snapshot) cameraController.update(compatibilitySnapshots.snapshot, dt);
     compatibilityTick += 1;
     update(dt);
     if (game.messageTimer > 0) game.messageTimer -= dt;
-    captureCompatibilitySnapshot();
+    const snapshot = captureCompatibilitySnapshot();
+    if (recordReplaySnapshot) game.replay.record(snapshot, dt);
   }
 
   function renderFrame(alpha, now) {
@@ -1374,7 +1390,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
 
   function applyDebugScenario(name = "normal-play") {
     if (game.state !== "playing") startMatch();
-    game.replay.active = false; game.replay.frames.length = 0; ui.replayBadge.classList.remove("show");
+    game.replay.reset(); ui.replayBadge.classList.remove("show");
     ball.owner = null; ball.vx = 0; ball.vy = 0; ball.height = 0; ball.vz = 0; ball.lock = 0;
     const selected = game.selected || players.find((player) => player.team === HOME && player.role !== "GK");
     if (selected) { selected.stamina = 100; game.selected = selected; }
@@ -1386,13 +1402,14 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     } else if (name === "low-stamina") {
       if (selected) selected.stamina = 18; ball.x = selected?.x ?? W / 2; ball.y = selected?.y ?? H / 2;
     } else if (name === "replay") {
-      game.replay.frames = Array.from({ length: 24 }, (_, index) => ({
-        ball: { x: 430 + index * 10, y: 350, height: 0, angle: 0, vx: 150, vy: 0, trail: [] },
-        players: players.map((player) => ({ x: player.x, y: player.y, vx: 0, vy: 0, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: "idle", animTime: 0, animDuration: 1, animPower: 0 })),
-      }));
-      game.replay.active = true; game.replay.elapsed = 0; ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.add("show");
+      const baseSnapshot = captureCompatibilitySnapshot();
+      game.replay.loadFrames(Array.from({ length: 24 }, (_, index) => Object.freeze({
+        ...baseSnapshot,
+        ball: Object.freeze({ ...baseSnapshot.ball, x: 430 + index * 10, y: 350, height: 0, angle: 0, vx: 150, vy: 0, trail: Object.freeze([]) })
+      })));
+      ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.add("show");
     }
-    updateCamera(1 / 60); updateUI(captureCompatibilitySnapshot());
+    const scenarioSnapshot = captureCompatibilitySnapshot(); cameraController.update(scenarioSnapshot, 1 / 60); updateUI(scenarioSnapshot);
     if (name !== "normal-play") {
       game.state = "paused";
       ui.pause.classList.remove("show");
@@ -1405,7 +1422,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     applyScenario: applyDebugScenario,
     emitGameEvent: (type, payload = {}) => publishCompatibilityEvent(type, payload),
     diagnostics: () => ({
-      camera: { ...game.camera },
+      camera: { ...cameraController.state },
       ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
       state: game.state,
       replay: game.replay.active,

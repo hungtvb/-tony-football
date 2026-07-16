@@ -3,7 +3,7 @@
 ```yaml
 Sprint: R1
 Title: Engine and Presentation Boundary
-Status: In Progress — Slice D2b interpolated entity transforms complete
+Status: In Progress — Slice D2c snapshot camera, replay, and feedback adapters complete
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
@@ -31,7 +31,6 @@ Do not modify:
   - FO4 control mapping
   - WebGL, Canvas fallback, models, camera, or presentation behavior
 Next slices:
-  - Slice D2c Snapshot/event-driven camera, replay, and audio facts
   - Slice E Explicit bootstrap and compatibility cleanup
 ```
 

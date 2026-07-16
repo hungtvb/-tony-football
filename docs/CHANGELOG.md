@@ -16,6 +16,8 @@
 - Browser game-event bridge for immutable score, replay, lifecycle, and match-ended presentation facts.
 - Compatibility snapshot adapter plus pure HUD and radar snapshot consumers.
 - Pure snapshot render-state interpolation shared by WebGL and Canvas entity transforms.
+- Snapshot-driven camera framing and immutable 15 FPS replay playback controllers.
+- Browser presentation feedback adapter for event-driven kick, tackle, goal, and match lifecycle audio/particle effects.
 
 ### Changed
 - Restricted-container bootstrap now initializes a verified local Git `main` baseline.
@@ -30,6 +32,7 @@
 - Goal and post-match presentation now consume explicit events instead of inferring gameplay facts from rendered DOM mutations.
 - HUD match facts and radar markers now consume immutable fixed-tick snapshots in both WebGL and Canvas fallback paths.
 - WebGL and Canvas player position, facing, locomotion pose, ball position, height, and rotation now consume one interpolated snapshot render state with reset/teleport guards.
+- Camera framing and replay playback now consume immutable match snapshots; gameplay actions publish feedback events instead of calling audio or particle implementations directly.
 
 ### Fixed
 - Runtime and browser artifacts no longer try to restore the GitHub runner UID/GID or archived permissions when extracted in restricted containers.
