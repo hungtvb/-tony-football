@@ -99,6 +99,13 @@ prepare_destination() {
   mkdir -p "$destination"
 }
 
+extract_portable_tgz() {
+  local archive=$1
+  local destination=$2
+  tar --extract --gzip --file "$archive" --directory "$destination" \
+    --no-same-owner --no-same-permissions
+}
+
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 
@@ -121,8 +128,8 @@ browser_tgz=$(find "$temporary/browsers" -type f -name '*.tgz' -print -quit)
 prepare_destination "$workspace"
 prepare_destination "$browser_root"
 
-tar -xzf "$runtime_tgz" -C "$workspace"
-tar -xzf "$browser_tgz" -C "$browser_root"
+extract_portable_tgz "$runtime_tgz" "$workspace"
+extract_portable_tgz "$browser_tgz" "$browser_root"
 
 browser_path="$browser_root/ms-playwright"
 [[ -d "$browser_path" ]] || { echo "Expected Playwright cache missing: $browser_path" >&2; exit 1; }
