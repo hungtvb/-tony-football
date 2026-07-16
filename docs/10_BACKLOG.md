@@ -1,36 +1,19 @@
-# Backlog
+# Product Backlog Pointer
 
-Items here are not active. Approval and scheduling state are stated explicitly per item.
+The Tony Football backlog is maintained only in the [Tony Football Linear project](https://linear.app/tony-football/project/tony-football-product-delivery-b20205c7650f).
 
-## Architecture and technical debt
+Linear owns all mutable backlog information:
 
-### R1 — Engine and Presentation Boundary
+- unapproved ideas and approved future work;
+- priority, estimate, sequencing, and ownership;
+- parent/child structure, dependency, and blocker relationships;
+- active, queued, completed, duplicate, or canceled state;
+- cross-role handoffs and acceptance evidence.
 
-**Status:** Approved and scheduled — not active
-**Priority:** Architecture gate after U3 closeout and before major U4, U5, G4, or AI expansion
-**Sprint document:** `docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md`
+Do not add backlog items or scheduling notes to this repository file. Create or update the relevant Linear issue instead.
 
-The earlier U3 architecture-closeout proposal is now formalized as R1. Its source of truth is the sprint document and `docs/05_ARCHITECTURE.md`; keep this backlog entry only as a scheduling reference.
+Repository documents may retain stable technical proposals, architecture constraints, specifications, ADRs, and validation contracts. Those records do not imply backlog priority or approval.
 
-Activation requires the U3 integrated browser audit to be complete. R1 must preserve FO4 controls, fixed-step timing, gameplay balance, WebGL, Canvas fallback, current assets, and all existing match flows.
+## Delivery linkage
 
-## Future gameplay
-- Local multiplayer
-- Online rooms
-- Additional game modes
-- Penalty shootout
-- Training
-- Tournament
-- Career mode
-
-## Presentation
-- Commentary
-- Team customization
-- More stadiums
-- Expanded crowd behavior
-
-## Platform
-- Accounts
-- Match history
-- Ranking
-- Backend services
+When a backlog item enters delivery, keep one shared `TON-x` identity across its Linear issue, GitHub issue, branch, pull request, review evidence, and final handoff.

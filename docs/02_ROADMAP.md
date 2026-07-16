@@ -1,41 +1,24 @@
-# Development Roadmap
+# Product Roadmap Pointer
 
-## Phase 1 — Foundation and Match Experience
-- **G1** Fixed Simulation Foundation — Done
-- **U1** Match Experience and HUD Hierarchy — Done
-- **U2** Game Feel and Presentation Feedback — Done
+The Tony Football roadmap is maintained only in the [Tony Football Linear project](https://linear.app/tony-football/project/tony-football-product-delivery-b20205c7650f).
 
-## Phase 2 — Core Gameplay
-- **G2** Player Locomotion — Done
-- **G3** Ball Control and First Touch — Done
-- **R1** Engine and Presentation Boundary — In Progress
-- **G4** Passing — Planned
-- **G5** Shooting — Planned
-- **G6** Physical Contest — Planned
+Linear owns all mutable roadmap information, including:
 
-## Phase 3 — AI
-- **A1** Player AI Foundation
-- **A2** Attacking AI
-- **A3** Defensive AI
-- **A4** Team Shape
-- **A5** Transitions
-- **A6** Goalkeeper AI
-- **A7** Fair Difficulty
+- planned capabilities and technical programs;
+- priority and sequencing;
+- active, queued, completed, or canceled state;
+- dependencies, blockers, and ownership;
+- delivery milestones and replanning decisions.
 
-## Phase 4 — Expanded UI/UX
-- **U3.1** Camera and HUD — Done
-- **U3.2** Match Flow and Pause Navigation — Done
-- **U3.3** Match Presentation — Done
-- **U3.4** UI Foundation and Design Tokens — Planned
-- **U4** Advanced Radar Modes — Planned
-- **U5** Controls and First-Match Onboarding — Planned
-- **U6** Advanced Statistics and Result Depth — Planned
-- **U7** Responsive and Accessibility Polish — Planned
+Repository specifications, architecture documents, ADRs, and historical sprint files describe technical intent and accepted contracts. Their presence does not mean that work is approved, prioritized, scheduled, or active.
 
-## Phase 5 — Quality
-- **Q1** Debug Tools
-- **Q2** Deterministic Scenario Tests
-- **Q3** Balance and Performance
+## Identity convention
 
-## Execution rule
-Do not begin a later sprint until the active sprint is merged and verified unless the user explicitly changes priority.
+Every delivery item uses the same `TON-x` identity across systems:
+
+- Linear issue: planning, priority, ownership, dependency, status, and handoff source;
+- GitHub issue: implementation scope and technical discussion;
+- branch: contains `ton-x` in the branch name;
+- pull request: starts with `[TON-x]` and targets the current approved base branch.
+
+Changes to roadmap priority or scope must be made in Linear rather than by editing this file.

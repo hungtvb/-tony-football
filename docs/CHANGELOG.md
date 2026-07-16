@@ -20,12 +20,11 @@
 - Browser presentation feedback adapter for event-driven kick, tackle, goal, and match lifecycle audio/particle effects.
 
 ### Changed
+- Linear now owns mutable roadmap, backlog, priority, dependency, ownership, delivery status, acceptance, and cross-role handoffs; repository planning documents are stable pointers and technical records only.
+- AI workspace startup now begins from the assigned Linear `TON-x` handoff, correlates exact GitHub implementation evidence, and records durable updates after material events.
 - Restricted-container bootstrap now initializes a verified local Git `main` baseline.
-- New-session workflow now requires a GitHub and matching local sprint branch created from the latest `main`.
-- Local workspaces can import a newer verified `main` snapshot and rebase committed sprint work without `git pull`.
-- Active sprint moved from G1 to U1.
-- Roadmap now includes U2 Game Feel after U1.
-- U3.1, U3.2, and U3.3 are closed; R1 Engine and Presentation Boundary is active.
+- New-session workflow now requires a GitHub and matching local delivery branch created from the latest `main`.
+- Local workspaces can import a newer verified `main` snapshot and rebase committed delivery work without `git pull`.
 - Playwright browser validation now uses deterministic local Three.js fixtures,
   single-worker WebGL execution, and state-history assertions instead of transient timing windows.
 - Match intro and post-match navigation now request semantic application actions instead of synthetic button clicks.
