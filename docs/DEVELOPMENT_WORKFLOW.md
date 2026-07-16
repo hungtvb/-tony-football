@@ -40,6 +40,51 @@ npm run test:preflight
 
 The preflight includes syntax, asset validation, simulation, presentation, gameplay, desktop browser, and narrow-landscape browser tests.
 
+### 3a. Bootstrap a restricted ChatGPT container
+
+Some ChatGPT sessions can execute local processes but cannot resolve public package/CDN hosts. In those sessions, use issue `#44` as the runtime control surface.
+
+1. Comment exactly `/build-local-runtime` on issue `#44`.
+2. Wait for the workflow reply containing the source SHA, workflow run ID, and two artifact names.
+3. Download the runtime and browser artifacts through the GitHub connector.
+4. Immediately before bootstrap, fetch the current `main` SHA through the GitHub connector.
+5. Unzip the runtime artifact and run its bundled bootstrap script with that exact SHA:
+
+```bash
+CURRENT_MAIN_SHA=<current-40-character-main-sha>
+bash bootstrap-local-playwright.sh \
+  /mnt/data/tony-local-runtime.zip \
+  /mnt/data/tony-playwright-browsers.zip \
+  --expected-main-sha "$CURRENT_MAIN_SHA" \
+  --force
+```
+
+The bootstrap refuses the artifact before replacing existing generated output when its `.local-runtime-sha` differs from the supplied current `main` SHA. The generated workspace contains that exact `main` source, `node_modules`, Chromium, Firefox, and `.local-playwright-env`.
+
+Use the repository scripts in this order:
+
+```bash
+cd /mnt/data/tony-football-local
+bash scripts/run-local-preflight.sh unit
+bash scripts/run-local-preflight.sh flow
+bash scripts/run-local-preflight.sh webgl-desktop
+bash scripts/run-local-preflight.sh webgl-narrow
+```
+
+`flow` runs every non-camera desktop and narrow Playwright test with offline Three.js imports. The WebGL commands run one representative renderer scenario in Firefox software WebGL. Run desktop and narrow WebGL as separate top-level commands because restricted chat containers may not reliably launch Firefox twice inside one parent process.
+
+The local runtime is an early feedback mechanism, not the final merge signal. The regular PR CI still owns the complete Chromium desktop/narrow suites, including all camera/HUD scenarios, and the exact-head `CI gate` remains mandatory.
+
+Runtime safety rules:
+
+- Only repository owner/member/collaborator comments are accepted.
+- The workflow checks out only `main`; arbitrary refs are not accepted.
+- The workflow verifies that `main` did not move before artifact upload and again immediately before publishing the ready comment.
+- The bootstrap requires the current 40-character `main` SHA and refuses stale artifacts before deleting generated workspace contents.
+- Artifacts expire after three days.
+- The bootstrap script only replaces generated paths under `/mnt/data` or `.local-runtime`, and requires `--force` for non-empty output.
+- No gameplay, deployment, or production HTML is modified to support offline testing.
+
 ### 4. Open or update a Draft PR
 
 The PR description must include:
