@@ -16,6 +16,7 @@
   single-worker WebGL execution, and state-history assertions instead of transient timing windows.
 
 ### Fixed
+- Runtime and browser artifacts no longer try to restore the GitHub runner UID/GID or archived permissions when extracted in restricted containers.
 - Prevented the post-match observer from reacting to its own overlay mutations and locking the browser main thread.
 - Removed the narrow-landscape goal-presentation race around the short native-highlight stage.
 
