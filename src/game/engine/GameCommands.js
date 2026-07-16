@@ -9,6 +9,7 @@ import {
 export const GameCommandType = Object.freeze({
   MOVE: "player:move",
   SET_SPRINT: "player:set-sprint",
+  SET_ATTACK_INTENT: "player:set-attack-intent",
   SWITCH_PLAYER: "player:switch",
   SWITCH_PLAYER_DIRECTION: "player:switch-direction",
   SHORT_PASS: "ball:short-pass",
@@ -73,6 +74,7 @@ function validatePayload(type, payload) {
 
   if (
     type === GameCommandType.SET_SPRINT
+    || type === GameCommandType.SET_ATTACK_INTENT
     || type === GameCommandType.SET_SHIELD
     || type === GameCommandType.SET_GOALKEEPER_RUSH
     || type === GameCommandType.SET_TEAM_PRESS

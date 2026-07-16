@@ -93,6 +93,12 @@ test("charged attack releases one FO4 kick command with captured modifiers", () 
   harness.target.dispatch("keyup", { code: FO4_CONTROLS.teammateRun });
 
   const shot = harness.commands.find((command) => command.type === GameCommandType.SHOOT);
+  assert.deepEqual(harness.commands.map((command) => command.type), [
+    GameCommandType.SET_ATTACK_INTENT,
+    GameCommandType.SET_ATTACK_INTENT,
+    GameCommandType.SHOOT
+  ]);
+  assert.deepEqual(harness.commands.slice(0, 2).map((command) => command.payload.active), [true, false]);
   assert.equal(shot.payload.power, 0.5);
   assert.deepEqual(shot.payload.direction, { x: 1, y: 0 });
   assert.deepEqual(shot.payload.modifiers, { chip: true, finesse: false });

@@ -52,6 +52,8 @@ export class MatchEngine {
   #currentSnapshot;
   #snapshotDiscontinuity = false;
   #humanIdleSeconds = 0;
+  #selectedOwnerId = null;
+  #activeHumanAttackIntent = false;
 
   constructor({
     formations = DEFAULT_FORMATIONS,
@@ -250,6 +252,9 @@ export class MatchEngine {
       case GameCommandType.SET_SPRINT:
         this.#state.controls.sprinting = command.payload.active;
         break;
+      case GameCommandType.SET_ATTACK_INTENT:
+        this.#activeHumanAttackIntent = command.payload.active;
+        break;
       case GameCommandType.SET_SHIELD:
         this.#state.controls.shielding = command.payload.active;
         break;
@@ -355,12 +360,23 @@ export class MatchEngine {
 
   #advanceSimulation(deltaSeconds) {
     this.#state.match.elapsed += deltaSeconds;
-    this.#humanIdleSeconds += deltaSeconds;
     const controls = this.#state.controls;
     const controlsAreIdle = controls.moveX === 0
       && controls.moveY === 0
       && !controls.sprinting
       && !controls.shielding;
+    const selectedOwnerId = this.#state.ball.ownerId === this.#state.selectedPlayerId
+      ? this.#state.selectedPlayerId
+      : null;
+    if (selectedOwnerId !== this.#selectedOwnerId) {
+      this.#selectedOwnerId = selectedOwnerId;
+      this.#humanIdleSeconds = 0;
+    }
+    if (selectedOwnerId && controlsAreIdle && !this.#activeHumanAttackIntent) {
+      this.#humanIdleSeconds += deltaSeconds;
+    } else {
+      this.#humanIdleSeconds = 0;
+    }
     const aiCommands = advanceAIDecisions(this.#state, deltaSeconds, {
       field: this.#config.field,
       width: this.#config.width,
@@ -368,6 +384,7 @@ export class MatchEngine {
       random: this.#random,
       tick: this.#tick,
       allowSelectedOwnerAction: controlsAreIdle
+        && !this.#activeHumanAttackIntent
         && this.#humanIdleSeconds >= SELECTED_OWNER_IDLE_DELAY_SECONDS
     });
     for (const command of aiCommands) this.#applyCommand(command);
@@ -434,6 +451,8 @@ export class MatchEngine {
     this.#random = createSeededRandom(this.#config.randomSeed);
     this.#actionIntents.length = 0;
     this.#humanIdleSeconds = 0;
+    this.#selectedOwnerId = null;
+    this.#activeHumanAttackIntent = false;
     this.#snapshotDiscontinuity = true;
   }
 
