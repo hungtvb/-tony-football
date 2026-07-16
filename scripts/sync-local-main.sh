@@ -59,23 +59,129 @@ done
   exit 2
 }
 
-for archive in "$runtime_zip" "$browser_zip"; do
-  [[ -f "$archive" ]] || { echo "Artifact not found: $archive" >&2; exit 1; }
-done
-
-for command in unzip tar git node npm; do
+for command in realpath unzip tar git node npm; do
   command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 
-extract_portable_tgz() {
-  local archive=$1
-  local destination=$2
-  tar --extract --gzip --file "$archive" --directory "$destination" \
-    --no-same-owner --no-same-permissions
+mnt_generated_root=$(realpath -m -- /mnt/data)
+staging_root_input=${TMPDIR:-/tmp}/tony-football-staging
+
+assert_absolute_without_traversal() {
+  local candidate=$1
+  local label=$2
+
+  [[ "$candidate" == /* ]] || {
+    echo "$label path must be absolute: $candidate" >&2
+    return 1
+  }
+  case "/$candidate/" in
+    */../*)
+      echo "$label path contains a traversal segment and is not allowed: $candidate" >&2
+      return 1
+      ;;
+  esac
 }
 
-workspace=$(pwd -P)
-[[ -d "$workspace/.git" ]] || {
+assert_no_symlink_boundaries() {
+  local candidate=$1
+  local label=$2
+  local current=/
+  local component
+  local -a components=()
+
+  IFS='/' read -r -a components <<< "${candidate#/}"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != "." ]] || continue
+    if [[ "$current" == / ]]; then
+      current="/$component"
+    else
+      current="$current/$component"
+    fi
+    if [[ -L "$current" ]]; then
+      echo "$label path crosses a symlink boundary: $current" >&2
+      return 1
+    fi
+  done
+}
+
+canonicalize_generated_target() {
+  local candidate=$1
+  local label=$2
+  local canonical
+  local local_runtime_root=
+
+  assert_absolute_without_traversal "$candidate" "$label"
+  assert_no_symlink_boundaries "$candidate" "$label"
+  canonical=$(realpath -m -- "$candidate")
+
+  if [[ "$canonical" == "$mnt_generated_root" ]]; then
+    echo "$label path cannot be an approved generated root itself: $canonical" >&2
+    return 1
+  fi
+  if [[ "$canonical" == "$mnt_generated_root"/* ]]; then
+    printf '%s\n' "$canonical"
+    return 0
+  fi
+  if [[ "$canonical" =~ ^(.*/\.local-runtime)(/.+)$ ]]; then
+    local_runtime_root=${BASH_REMATCH[1]}
+    [[ "$canonical" != "$local_runtime_root" ]] || {
+      echo "$label path cannot be an approved generated root itself: $canonical" >&2
+      return 1
+    }
+    assert_no_symlink_boundaries "$local_runtime_root" "$label generated root"
+    printf '%s\n' "$canonical"
+    return 0
+  fi
+
+  echo "Refusing $label path outside approved generated roots: $candidate -> $canonical" >&2
+  return 1
+}
+
+canonicalize_staging_path() {
+  local candidate=$1
+  local label=$2
+  local canonical
+
+  assert_absolute_without_traversal "$candidate" "$label"
+  assert_no_symlink_boundaries "$candidate" "$label"
+  canonical=$(realpath -m -- "$candidate")
+  [[ "$canonical" != "$staging_root" && "$canonical" == "$staging_root"/* ]] || {
+    echo "$label path must be a strict descendant of the staging root: $canonical" >&2
+    return 1
+  }
+  printf '%s\n' "$canonical"
+}
+
+assert_disjoint_paths() {
+  local first=$1
+  local first_label=$2
+  local second=$3
+  local second_label=$4
+
+  if [[ "$first" == "$second" || "$first" == "$second"/* || "$second" == "$first"/* ]]; then
+    echo "$first_label and $second_label paths must be distinct and non-overlapping: $first <> $second" >&2
+    return 1
+  fi
+}
+
+prepare_staging_root() {
+  assert_absolute_without_traversal "$staging_root_input" "Staging root"
+  assert_no_symlink_boundaries "$staging_root_input" "Staging root"
+  mkdir -p -- "$staging_root_input"
+  assert_no_symlink_boundaries "$staging_root_input" "Staging root"
+  staging_root=$(realpath -m -- "$staging_root_input")
+}
+
+workspace_logical=$(pwd -L)
+workspace_input=$(pwd -P)
+assert_absolute_without_traversal "$workspace_logical" "Workspace"
+assert_no_symlink_boundaries "$workspace_logical" "Workspace"
+workspace=$(canonicalize_generated_target "$workspace_input" "Workspace")
+browser_root=$(canonicalize_generated_target "$browser_root" "Browser")
+assert_disjoint_paths "$workspace" "Workspace" "$browser_root" "Browser"
+prepare_staging_root
+
+[[ -d "$workspace/.git" && ! -L "$workspace/.git" ]] || {
   echo "Run this command from the bootstrapped Tony Football workspace root." >&2
   exit 1
 }
@@ -83,15 +189,6 @@ if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$work
   git config --global --add safe.directory "$workspace"
 fi
 cd "$workspace"
-
-case "$workspace" in
-  /mnt/data/*|*/.local-runtime/*) ;;
-  *) echo "Refusing to replace a workspace outside generated local paths: $workspace" >&2; exit 1 ;;
-esac
-case "$browser_root" in
-  /mnt/data/*|*/.local-runtime/*) ;;
-  *) echo "Refusing browser output outside generated local paths: $browser_root" >&2; exit 1 ;;
-esac
 
 [[ -f .local-runtime-sha ]] || { echo "Missing .local-runtime-sha" >&2; exit 1; }
 git rev-parse --verify main >/dev/null 2>&1 || { echo "Local main branch is missing." >&2; exit 1; }
@@ -106,13 +203,35 @@ current_branch=$(git branch --show-current)
 [[ -n "$current_branch" ]] || { echo "Detached HEAD is not supported for local main sync." >&2; exit 1; }
 
 current_source_sha=$(tr -d '\r\n' < .local-runtime-sha | tr '[:upper:]' '[:lower:]')
+[[ "$current_source_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid .local-runtime-sha" >&2; exit 1; }
 if [[ "$current_source_sha" == "$expected_main_sha" ]]; then
   printf 'Local main snapshot is already current: %s\n' "$expected_main_sha"
   exit 0
 fi
 
-temporary=$(mktemp -d)
-trap 'rm -rf "$temporary"' EXIT
+for archive in "$runtime_zip" "$browser_zip"; do
+  [[ -f "$archive" ]] || { echo "Artifact not found: $archive" >&2; exit 1; }
+done
+
+extract_portable_tgz() {
+  local archive=$1
+  local destination=$2
+  tar --extract --gzip --file "$archive" --directory "$destination" \
+    --no-same-owner --no-same-permissions
+}
+
+temporary=$(mktemp -d "$staging_root/sync.XXXXXX")
+temporary=$(canonicalize_staging_path "$temporary" "Sync staging")
+assert_disjoint_paths "$temporary" "Sync staging" "$workspace" "Workspace"
+assert_disjoint_paths "$temporary" "Sync staging" "$browser_root" "Browser"
+cleanup() {
+  if [[ -n "$temporary" && ( -e "$temporary" || -L "$temporary" ) ]]; then
+    case "$temporary" in
+      "$staging_root"/*) rm -rf -- "$temporary" ;;
+    esac
+  fi
+}
+trap cleanup EXIT
 
 unzip -q "$runtime_zip" -d "$temporary/runtime"
 runtime_tgz=$(find "$temporary/runtime" -type f -name '*.tgz' -print -quit)
@@ -130,16 +249,30 @@ unzip -q "$browser_zip" -d "$temporary/browsers"
 browser_tgz=$(find "$temporary/browsers" -type f -name '*.tgz' -print -quit)
 [[ -n "$browser_tgz" ]] || { echo "Browser artifact does not contain a .tgz bundle" >&2; exit 1; }
 
-mkdir -p "$temporary/next-workspace"
+mkdir -p "$temporary/next-workspace" "$temporary/next-browser-root"
 extract_portable_tgz "$runtime_tgz" "$temporary/next-workspace"
-next_sha=$(tr -d '\r\n' < "$temporary/next-workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
+extract_portable_tgz "$browser_tgz" "$temporary/next-browser-root"
+
+next_workspace=$(canonicalize_staging_path "$temporary/next-workspace" "Workspace staging")
+next_browser_root=$(canonicalize_staging_path "$temporary/next-browser-root" "Browser staging")
+assert_disjoint_paths "$next_workspace" "Workspace staging" "$next_browser_root" "Browser staging"
+
+next_sha=$(tr -d '\r\n' < "$next_workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
 [[ "$next_sha" == "$expected_main_sha" ]] || { echo "Extracted runtime SHA changed unexpectedly" >&2; exit 1; }
+[[ -f "$next_workspace/package.json" ]] || { echo "Staged runtime workspace is missing package.json" >&2; exit 1; }
+[[ -f "$next_workspace/node_modules/@playwright/test/package.json" ]] || { echo "Staged runtime is missing @playwright/test" >&2; exit 1; }
+[[ -d "$next_browser_root/ms-playwright" ]] || { echo "Expected Playwright cache missing from staged browser artifact" >&2; exit 1; }
+
+# Revalidate every destructive target immediately before mutation.
+[[ "$(canonicalize_generated_target "$workspace" "Workspace")" == "$workspace" ]] || exit 1
+[[ "$(canonicalize_generated_target "$browser_root" "Browser")" == "$browser_root" ]] || exit 1
+assert_disjoint_paths "$workspace" "Workspace" "$browser_root" "Browser"
 
 printf 'Importing GitHub main %s into local main...\n' "$expected_main_sha"
 git switch --quiet main
 find "$workspace" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
 (
-  cd "$temporary/next-workspace"
+  cd "$next_workspace"
   tar -cf - .
 ) | (
   cd "$workspace"
@@ -151,9 +284,15 @@ for generated in .local-playwright-env .local-home/; do
   grep -Fxq "$generated" "$workspace/.git/info/exclude" 2>/dev/null || printf '%s\n' "$generated" >> "$workspace/.git/info/exclude"
 done
 
-rm -rf "$browser_root"
-mkdir -p "$browser_root"
-extract_portable_tgz "$browser_tgz" "$browser_root"
+rm -rf -- "$browser_root"
+mkdir -p -- "$browser_root"
+(
+  cd "$next_browser_root"
+  tar -cf - .
+) | (
+  cd "$browser_root"
+  tar --extract --file - --no-same-owner --no-same-permissions
+)
 browser_path="$browser_root/ms-playwright"
 [[ -d "$browser_path" ]] || { echo "Expected Playwright cache missing: $browser_path" >&2; exit 1; }
 

@@ -71,18 +71,137 @@ done
   exit 2
 }
 
-safe_generated_path() {
-  case "$1" in
-    /mnt/data/*|"$PWD"/.local-runtime/*) return 0 ;;
-    *) echo "Refusing generated output outside /mnt/data or $PWD/.local-runtime: $1" >&2; return 1 ;;
+for command in realpath unzip tar git node npm; do
+  command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
+done
+
+invocation_root=$(pwd -P)
+mnt_generated_root=$(realpath -m -- /mnt/data)
+local_generated_root=$(realpath -m -- "$invocation_root/.local-runtime")
+staging_root_input=${TMPDIR:-/tmp}/tony-football-staging
+
+assert_absolute_without_traversal() {
+  local candidate=$1
+  local label=$2
+
+  [[ "$candidate" == /* ]] || {
+    echo "$label path must be absolute: $candidate" >&2
+    return 1
+  }
+  case "/$candidate/" in
+    */../*)
+      echo "$label path contains a traversal segment and is not allowed: $candidate" >&2
+      return 1
+      ;;
   esac
 }
+
+assert_no_symlink_boundaries() {
+  local candidate=$1
+  local label=$2
+  local current=/
+  local component
+  local -a components=()
+
+  IFS='/' read -r -a components <<< "${candidate#/}"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != "." ]] || continue
+    if [[ "$current" == / ]]; then
+      current="/$component"
+    else
+      current="$current/$component"
+    fi
+    if [[ -L "$current" ]]; then
+      echo "$label path crosses a symlink boundary: $current" >&2
+      return 1
+    fi
+  done
+}
+
+canonicalize_generated_target() {
+  local candidate=$1
+  local label=$2
+  local canonical
+
+  assert_absolute_without_traversal "$candidate" "$label"
+  assert_no_symlink_boundaries "$candidate" "$label"
+  canonical=$(realpath -m -- "$candidate")
+
+  if [[ "$canonical" == "$local_generated_root" || "$canonical" == "$mnt_generated_root" ]]; then
+    echo "$label path cannot be an approved generated root itself: $canonical" >&2
+    return 1
+  fi
+  case "$canonical" in
+    "$local_generated_root"/*|"$mnt_generated_root"/*)
+      printf '%s\n' "$canonical"
+      ;;
+    *)
+      echo "Refusing $label path outside approved generated roots: $candidate -> $canonical" >&2
+      return 1
+      ;;
+  esac
+}
+
+canonicalize_staging_path() {
+  local candidate=$1
+  local label=$2
+  local canonical
+
+  assert_absolute_without_traversal "$candidate" "$label"
+  assert_no_symlink_boundaries "$candidate" "$label"
+  canonical=$(realpath -m -- "$candidate")
+  [[ "$canonical" != "$staging_root" && "$canonical" == "$staging_root"/* ]] || {
+    echo "$label path must be a strict descendant of the staging root: $canonical" >&2
+    return 1
+  }
+  printf '%s\n' "$canonical"
+}
+
+assert_disjoint_paths() {
+  local first=$1
+  local first_label=$2
+  local second=$3
+  local second_label=$4
+
+  if [[ "$first" == "$second" || "$first" == "$second"/* || "$second" == "$first"/* ]]; then
+    echo "$first_label and $second_label paths must be distinct and non-overlapping: $first <> $second" >&2
+    return 1
+  fi
+}
+
+prepare_staging_root() {
+  assert_absolute_without_traversal "$staging_root_input" "Staging root"
+  assert_no_symlink_boundaries "$staging_root_input" "Staging root"
+  mkdir -p -- "$staging_root_input"
+  assert_no_symlink_boundaries "$staging_root_input" "Staging root"
+  staging_root=$(realpath -m -- "$staging_root_input")
+}
+
+workspace=$(canonicalize_generated_target "$workspace" "Workspace")
+browser_root=$(canonicalize_generated_target "$browser_root" "Browser")
+assert_disjoint_paths "$workspace" "Workspace" "$browser_root" "Browser"
+prepare_staging_root
+
+temporary=
+cleanup() {
+  if [[ -n "$temporary" && ( -e "$temporary" || -L "$temporary" ) ]]; then
+    case "$temporary" in
+      "$staging_root"/*) rm -rf -- "$temporary" ;;
+    esac
+  fi
+}
+trap cleanup EXIT
 
 assert_new_destination() {
   local destination=$1
   local label=$2
+  local current
 
-  safe_generated_path "$destination"
+  current=$(canonicalize_generated_target "$destination" "$label")
+  [[ "$current" == "$destination" ]] || {
+    echo "$label destination changed during validation: $destination -> $current" >&2
+    exit 1
+  }
 
   if [[ -e "$destination/.git" || -L "$destination/.git" ]]; then
     echo "Refusing to bootstrap over an existing Git workspace: $destination" >&2
@@ -109,12 +228,22 @@ assert_new_destination() {
 publish_new_destination() {
   local staged=$1
   local destination=$2
+  local label=$3
+  local validated_staged
+  local validated_destination
+
+  validated_staged=$(canonicalize_staging_path "$staged" "$label staging")
+  validated_destination=$(canonicalize_generated_target "$destination" "$label")
+  [[ "$validated_staged" == "$staged" && "$validated_destination" == "$destination" ]] || {
+    echo "$label publication path changed during validation." >&2
+    exit 1
+  }
 
   if [[ -d "$destination" ]]; then
-    rmdir "$destination"
+    rmdir -- "$destination"
   fi
-  mkdir -p "$(dirname "$destination")"
-  mv "$staged" "$destination"
+  mkdir -p -- "$(dirname -- "$destination")"
+  mv -- "$staged" "$destination"
 }
 
 # Guard active workspaces before inspecting artifacts so stale, corrupt, incomplete,
@@ -126,10 +255,6 @@ for archive in "$runtime_zip" "$browser_zip"; do
   [[ -f "$archive" ]] || { echo "Artifact not found: $archive" >&2; exit 1; }
 done
 
-for command in unzip tar git node npm; do
-  command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
-done
-
 extract_portable_tgz() {
   local archive=$1
   local destination=$2
@@ -137,8 +262,10 @@ extract_portable_tgz() {
     --no-same-owner --no-same-permissions
 }
 
-temporary=$(mktemp -d)
-trap 'rm -rf "$temporary"' EXIT
+temporary=$(mktemp -d "$staging_root/bootstrap.XXXXXX")
+temporary=$(canonicalize_staging_path "$temporary" "Bootstrap staging")
+assert_disjoint_paths "$temporary" "Bootstrap staging" "$workspace" "Workspace"
+assert_disjoint_paths "$temporary" "Bootstrap staging" "$browser_root" "Browser"
 
 unzip -q "$runtime_zip" -d "$temporary/runtime"
 runtime_tgz=$(find "$temporary/runtime" -type f -name '*.tgz' -print -quit)
@@ -160,43 +287,48 @@ mkdir -p "$temporary/next-workspace" "$temporary/next-browser-root"
 extract_portable_tgz "$runtime_tgz" "$temporary/next-workspace"
 extract_portable_tgz "$browser_tgz" "$temporary/next-browser-root"
 
-staged_browser_path="$temporary/next-browser-root/ms-playwright"
+next_workspace=$(canonicalize_staging_path "$temporary/next-workspace" "Workspace staging")
+next_browser_root=$(canonicalize_staging_path "$temporary/next-browser-root" "Browser staging")
+assert_disjoint_paths "$next_workspace" "Workspace staging" "$next_browser_root" "Browser staging"
+
+staged_browser_path="$next_browser_root/ms-playwright"
 [[ -d "$staged_browser_path" ]] || { echo "Expected Playwright cache missing from staged browser artifact" >&2; exit 1; }
-[[ -f "$temporary/next-workspace/package.json" ]] || { echo "Staged runtime workspace is missing package.json" >&2; exit 1; }
-staged_sha=$(tr -d '\r\n' < "$temporary/next-workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
+[[ -f "$next_workspace/package.json" ]] || { echo "Staged runtime workspace is missing package.json" >&2; exit 1; }
+staged_sha=$(tr -d '\r\n' < "$next_workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
 [[ "$staged_sha" == "$expected_main_sha" ]] || { echo "Extracted runtime SHA changed unexpectedly" >&2; exit 1; }
-[[ -f "$temporary/next-workspace/node_modules/@playwright/test/package.json" ]] || {
+[[ -f "$next_workspace/node_modules/@playwright/test/package.json" ]] || {
   echo "Staged runtime is missing @playwright/test" >&2
   exit 1
 }
 
 browser_path="$browser_root/ms-playwright"
-cat > "$temporary/next-workspace/.local-playwright-env" <<ENV
+cat > "$next_workspace/.local-playwright-env" <<ENV
 export PLAYWRIGHT_BROWSERS_PATH="$browser_path"
 export TONY_LOCAL_WORKSPACE="$workspace"
 export TONY_LOCAL_HOME="$workspace/.local-home"
 export TONY_LOCAL_SOURCE_SHA="$staged_sha"
 ENV
-mkdir -p "$temporary/next-workspace/.local-home"
+mkdir -p "$next_workspace/.local-home"
 
-git -C "$temporary/next-workspace" init --quiet
-git -C "$temporary/next-workspace" symbolic-ref HEAD refs/heads/main
-mkdir -p "$temporary/next-workspace/.git/info"
+git -C "$next_workspace" init --quiet
+git -C "$next_workspace" symbolic-ref HEAD refs/heads/main
+mkdir -p "$next_workspace/.git/info"
 for generated in .local-playwright-env .local-home/; do
-  grep -Fxq "$generated" "$temporary/next-workspace/.git/info/exclude" 2>/dev/null || \
-    printf '%s\n' "$generated" >> "$temporary/next-workspace/.git/info/exclude"
+  grep -Fxq "$generated" "$next_workspace/.git/info/exclude" 2>/dev/null || \
+    printf '%s\n' "$generated" >> "$next_workspace/.git/info/exclude"
 done
-git -C "$temporary/next-workspace" config user.name "Tony Football Workspace"
-git -C "$temporary/next-workspace" config user.email "tony-football-workspace@local.invalid"
-git -C "$temporary/next-workspace" add -A
-git -C "$temporary/next-workspace" commit --quiet -m "chore(workspace): snapshot main ${staged_sha:0:12}"
-playwright_version=$(node -p "require('$temporary/next-workspace/node_modules/@playwright/test/package.json').version")
+git -C "$next_workspace" config user.name "Tony Football Workspace"
+git -C "$next_workspace" config user.email "tony-football-workspace@local.invalid"
+git -C "$next_workspace" add -A
+git -C "$next_workspace" commit --quiet -m "chore(workspace): snapshot main ${staged_sha:0:12}"
+playwright_version=$(node -p "require('$next_workspace/node_modules/@playwright/test/package.json').version")
 
 # Re-check immediately before publication. No existing non-empty destination is ever removed.
 assert_new_destination "$workspace" "Workspace"
 assert_new_destination "$browser_root" "Browser"
-publish_new_destination "$temporary/next-browser-root" "$browser_root"
-publish_new_destination "$temporary/next-workspace" "$workspace"
+assert_disjoint_paths "$workspace" "Workspace" "$browser_root" "Browser"
+publish_new_destination "$next_browser_root" "$browser_root" "Browser"
+publish_new_destination "$next_workspace" "$workspace" "Workspace"
 
 if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$workspace"; then
   git config --global --add safe.directory "$workspace"
