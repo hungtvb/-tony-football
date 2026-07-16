@@ -87,6 +87,14 @@ export class BrowserMatchRuntime {
     return this.#engine.recordGoal(team, options);
   }
 
+  advanceForTesting(steps, deltaSeconds = 1 / 60) {
+    if (!Number.isInteger(steps) || steps < 0) {
+      throw new RangeError("test runtime steps must be a non-negative integer");
+    }
+    for (let index = 0; index < steps; index += 1) this.step(deltaSeconds);
+    return this.snapshot;
+  }
+
   step(deltaSeconds) {
     const snapshot = this.#engine.step(deltaSeconds);
     const steppedEvents = this.#engine.drainEvents();

@@ -182,6 +182,11 @@ test("default engine goal drives browser score, replay, commentary, and coherent
   ));
   await expect(page.locator("#goalPresentationOverlay")).not.toHaveClass(/show/);
 
+  for (let chunk = 0; chunk < 4; chunk += 1) {
+    await page.evaluate(() => window.__TONY_DEBUG__.advanceEngineTicks(60));
+    await page.waitForTimeout(0);
+  }
+
   await page.waitForFunction(() => {
     const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
     return snapshot
