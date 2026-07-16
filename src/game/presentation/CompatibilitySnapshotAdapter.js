@@ -139,6 +139,26 @@ function projectLiveSnapshotToCompatibilitySource(source, snapshot) {
   }
 }
 
+function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapshot) {
+  const replay = source?.replay;
+  if (!replay) return;
+
+  const elapsed = snapshot.match.elapsed ?? 0;
+  const previousElapsed = previousSnapshot?.match?.elapsed ?? 0;
+  const freshMatch = snapshot.match.state === "playing" && (
+    previousSnapshot?.match?.state !== "playing" || elapsed < previousElapsed
+  );
+  if (freshMatch && typeof replay.reset === "function") replay.reset();
+
+  const active = Boolean(snapshot.match.replay?.active);
+  const wasActive = Boolean(previousSnapshot?.match?.replay?.active);
+  if (active && !wasActive && typeof replay.start === "function") {
+    replay.start(snapshot);
+  } else if (!active && wasActive && typeof replay.stop === "function") {
+    replay.stop();
+  }
+}
+
 export class CompatibilitySnapshotAdapter {
   #previous = null;
   #current = null;
@@ -163,9 +183,12 @@ export class CompatibilitySnapshotAdapter {
 
   capture(source) {
     if (this.#mode === BrowserRuntimeMode.ENGINE) {
+      const previousSnapshot = this.#current;
       this.#runtimeComposition.configure(source);
       const snapshot = this.#runtimeComposition.advanceToSourceTick(source.tick);
       projectLiveSnapshotToCompatibilitySource(source, snapshot);
+      projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapshot);
+      this.#previous = previousSnapshot ?? snapshot;
       this.#current = snapshot;
       return snapshot;
     }
