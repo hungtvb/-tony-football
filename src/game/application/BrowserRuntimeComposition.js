@@ -21,10 +21,14 @@ function hasBrowserLocation() {
 
 export function resolveBrowserRuntimeMode(search = hasBrowserLocation() ? globalThis.location.search : null) {
   if (search === null) return BrowserRuntimeMode.COMPATIBILITY;
-  const requested = new URLSearchParams(search).get("runtime");
-  return requested === BrowserRuntimeMode.COMPATIBILITY
-    ? BrowserRuntimeMode.COMPATIBILITY
-    : BrowserRuntimeMode.ENGINE;
+  const params = new URLSearchParams(search);
+  const requested = params.get("runtime");
+  if (requested === BrowserRuntimeMode.COMPATIBILITY) return BrowserRuntimeMode.COMPATIBILITY;
+  if (requested === BrowserRuntimeMode.ENGINE) return BrowserRuntimeMode.ENGINE;
+  // Debug scenarios intentionally mutate legacy fixtures. Keep them on the explicit
+  // compatibility path while normal browser sessions default to the live engine.
+  if (params.has("debugScenario")) return BrowserRuntimeMode.COMPATIBILITY;
+  return BrowserRuntimeMode.ENGINE;
 }
 
 function playerSpec(player) {
@@ -109,6 +113,29 @@ function projectLifecycleEvent(target, event) {
   }
 }
 
+function installLiveDiagnostics(target, getState) {
+  const install = () => {
+    const debug = target?.__TONY_DEBUG__;
+    if (!debug || typeof debug.diagnostics !== "function") return false;
+    if (debug.diagnostics.liveRuntimeProjection === true) return true;
+    const legacyDiagnostics = debug.diagnostics.bind(debug);
+    const diagnostics = () => ({
+      ...legacyDiagnostics(),
+      state: getState(),
+      runtimeMode: BrowserRuntimeMode.ENGINE,
+    });
+    diagnostics.liveRuntimeProjection = true;
+    debug.diagnostics = diagnostics;
+    return true;
+  };
+
+  if (install()) return;
+  const enqueue = typeof target?.queueMicrotask === "function"
+    ? target.queueMicrotask.bind(target)
+    : globalThis.queueMicrotask;
+  enqueue?.(install);
+}
+
 export class BrowserRuntimeComposition {
   #mode;
   #stepSeconds;
@@ -166,6 +193,7 @@ export class BrowserRuntimeComposition {
     if (!this.authoritative) return false;
     assertEventTarget(target);
     this.#target = target;
+    installLiveDiagnostics(target, () => this.state);
     return true;
   }
 
