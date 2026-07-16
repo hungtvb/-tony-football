@@ -181,6 +181,12 @@ export class BrowserRuntimeComposition {
     return true;
   }
 
+  detachTarget(target = this.#target) {
+    if (!this.authoritative || target !== this.#target) return false;
+    this.#target = null;
+    return true;
+  }
+
   configure(source) {
     if (!this.authoritative) return null;
     assertSourceTick(source?.tick);
@@ -236,6 +242,15 @@ export class BrowserRuntimeComposition {
   reset() {
     if (!this.authoritative || !this.#engineOptions) return false;
     this.#replaceRuntime(this.#engineOptions, this.#sourceTick ?? 0);
+    return true;
+  }
+
+  teardown() {
+    this.#target = null;
+    this.#runtime = null;
+    this.#engineOptions = null;
+    this.#optionsKey = null;
+    this.#sourceTick = null;
     return true;
   }
 

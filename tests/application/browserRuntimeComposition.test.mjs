@@ -156,3 +156,16 @@ test("compatibility mode preserves the legacy dispatch callback", () => {
   assert.equal(compatibilityCommands.length, 1);
   assert.equal(compatibilityCommands[0].type, GameCommandType.START_MATCH);
 });
+
+test("browser runtime teardown releases target and configured engine ownership", () => {
+  const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
+  const target = new EventTarget();
+  composition.attachTarget(target);
+  composition.configure(createSource(0));
+
+  assert.ok(composition.snapshot);
+  assert.equal(composition.teardown(), true);
+  assert.equal(composition.snapshot, null);
+  assert.equal(composition.state, "menu");
+  assert.equal(composition.detachTarget(target), false);
+});

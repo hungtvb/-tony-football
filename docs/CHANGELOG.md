@@ -19,6 +19,7 @@
 - Snapshot-driven camera framing and immutable 15 FPS replay playback controllers.
 - Browser presentation feedback adapter for event-driven kick, tackle, goal, and match lifecycle audio/particle effects.
 - Live browser MatchEngine composition with deterministic input/lifecycle routing, immutable engine snapshots and ordered events, plus an explicit compatibility fallback.
+- Named browser bootstrap composition with explicit runtime target, input/application listener, simulation-loop, snapshot-adapter and presentation-feedback lifecycle ownership.
 
 ### Changed
 - Linear now owns mutable roadmap, backlog, priority, dependency, ownership, delivery status, acceptance, and cross-role handoffs; repository planning documents are stable pointers and technical records only.

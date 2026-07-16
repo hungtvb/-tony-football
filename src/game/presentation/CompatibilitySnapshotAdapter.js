@@ -181,6 +181,11 @@ export class CompatibilitySnapshotAdapter {
     return this.#current;
   }
 
+  reset() {
+    this.#previous = null;
+    this.#current = null;
+  }
+
   capture(source) {
     if (this.#mode === BrowserRuntimeMode.ENGINE) {
       const previousSnapshot = this.#current;

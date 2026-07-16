@@ -111,3 +111,15 @@ test("compatibility adapter retains previous/current fixed-tick snapshots for re
   assert.equal(frame.current.players[0].x, 700);
   assert.throws(() => adapter.capture(createSource(7)), /cannot move backwards/);
 });
+
+test("compatibility adapter reset releases interpolation history for a fresh lifecycle", () => {
+  const adapter = new CompatibilitySnapshotAdapter();
+  adapter.capture(createSource(8));
+
+  adapter.reset();
+
+  assert.equal(adapter.snapshot, null);
+  assert.throws(() => adapter.createRenderFrame(0.5), /capture a snapshot/);
+  const fresh = adapter.capture(createSource(0));
+  assert.equal(fresh.tick, 0);
+});
