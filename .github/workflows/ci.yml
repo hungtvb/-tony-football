@@ -18,38 +18,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply-review-fix:
-    name: Apply local review fix
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - name: Apply locally validated patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          parts=(.local-runtime/pr43-review.patch.part-*)
-          test -f "${parts[0]}"
-          cat "${parts[@]}" > /tmp/pr43-review.patch
-          git apply --check /tmp/pr43-review.patch
-          git apply /tmp/pr43-review.patch
-          rm -f "${parts[@]}"
-          rmdir .local-runtime 2>/dev/null || true
-          git show "${{ github.event.pull_request.base.sha }}:.github/workflows/ci.yml" > .github/workflows/ci.yml
-          git config user.name "Tony Dev"
-          git config user.email "tony-dev@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "fix(presentation): align engine feedback contracts"
-          git push origin HEAD:${{ github.head_ref }}
-
   unit:
     name: Unit and contracts
     runs-on: ubuntu-latest
@@ -77,27 +45,6 @@ jobs:
           path: unit-test.log
           if-no-files-found: ignore
           retention-days: 14
-      - name: Upload local workspace source
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-workspace-${{ github.sha }}
-          path: |
-            game.js
-            index.html
-            package.json
-            package-lock.json
-            playwright.config.mjs
-            vercel.json
-            u3-camera-hud.css
-            u3-goal-presentation.css
-            u3-match-flow.css
-            u3-match-intro.css
-            scripts
-            src
-            tests
-          if-no-files-found: error
-          retention-days: 1
 
   playwright-desktop:
     name: Playwright desktop

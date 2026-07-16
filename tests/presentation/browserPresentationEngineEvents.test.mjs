@@ -96,3 +96,56 @@ test("browser feedback derives safe presentation payloads from MatchEngine event
   assert.ok(calls.some(([type, power]) => type === "kick" && power > 0));
   assert.ok(calls.some(([type, payload]) => type === "goal" && payload.scorerId === "home-1"));
 });
+
+test("engine events without a usable snapshot never emit particle coordinates", () => {
+  const target = new FakeEventTarget();
+  const calls = [];
+  createBrowserPresentationFeedbackAdapter({
+    target,
+    onKick: (power) => calls.push(["kick", power]),
+    onGoal: (payload) => calls.push(["goal", payload]),
+    onParticles: (payload) => calls.push(["particles", payload]),
+    onContextParticles: (payload) => calls.push(["context", payload])
+  });
+
+  const engine = createStartedEngine("feedback-no-snapshot");
+  engine.setPossession("home-1", { reason: "feedback-test" });
+  engine.drainEvents();
+  engine.enqueue(GameCommandType.SHOOT, {
+    power: 0.75,
+    direction: { x: 1, y: 0 }
+  }, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+  publishEvents(target, engine.drainEvents());
+
+  engine.recordGoal(0, { scorerId: "home-1" });
+  publishEvents(target, engine.drainEvents());
+
+  assert.ok(calls.some(([type]) => type === "kick"));
+  assert.ok(calls.some(([type]) => type === "goal"));
+  assert.equal(calls.some(([type]) => type === "particles" || type === "context"), false);
+});
+
+test("missing snapshot entities suppress contextual particles instead of emitting invalid points", () => {
+  const target = new FakeEventTarget();
+  const calls = [];
+  createBrowserPresentationFeedbackAdapter({
+    target,
+    getSnapshot: () => ({
+      players: [],
+      ball: { id: "match-ball", x: Number.NaN, y: Number.NaN }
+    }),
+    onKick: (power) => calls.push(["kick", power]),
+    onParticles: (payload) => calls.push(["particles", payload]),
+    onContextParticles: (payload) => calls.push(["context", payload])
+  });
+
+  const engine = createStartedEngine("feedback-missing-entity");
+  engine.setPossession("away-1", { reason: "feedback-test" });
+  engine.drainEvents();
+  engine.enqueue(GameCommandType.TACKLE, {}, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+  publishEvents(target, engine.drainEvents());
+
+  assert.equal(calls.some(([type]) => type === "particles" || type === "context"), false);
+});

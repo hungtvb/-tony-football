@@ -20,28 +20,6 @@ export const GameEventType = Object.freeze({
 });
 
 const eventTypes = new Set(Object.values(GameEventType));
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-
-function normalizeCompatibilityKickPayload(payload) {
-  if (!Number.isFinite(payload.power) || payload.power <= 1) return payload;
-
-  const speed = Number.isFinite(payload.speed) ? payload.speed : payload.power;
-  const power = clamp((speed - 400) / 650, 0, 1);
-
-  return {
-    ...payload,
-    power,
-    speed,
-    style: payload.style ?? payload.kind ?? null
-  };
-}
-
-export function normalizeGameEventPayload(type, payload) {
-  if (type === GameEventType.BALL_KICKED) {
-    return normalizeCompatibilityKickPayload(payload);
-  }
-  return payload;
-}
 
 export function createGameEvent(type, payload = {}, { tick = 0, sequence = 0 } = {}) {
   if (!eventTypes.has(type)) throw new TypeError(`Unknown game event type: ${type}`);
@@ -49,10 +27,9 @@ export function createGameEvent(type, payload = {}, { tick = 0, sequence = 0 } =
   assertNonNegativeInteger(tick, "event tick");
   assertNonNegativeInteger(sequence, "event sequence");
 
-  const normalizedPayload = normalizeGameEventPayload(type, payload);
   return Object.freeze({
     type,
-    payload: cloneAndFreezeContractValue(normalizedPayload, "event payload"),
+    payload: cloneAndFreezeContractValue(payload, "event payload"),
     tick,
     sequence
   });

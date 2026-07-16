@@ -31,9 +31,9 @@ test("browser feedback projects kick, tackle, score, and lifecycle events", () =
   });
 
   publish(target, GameEventType.MATCH_STARTED);
-  publish(target, GameEventType.BALL_KICKED, { audioPower: 0.9, particleCount: 9, contextEnergy: 1.4 });
-  publish(target, GameEventType.TACKLE_RESOLVED, { success: true, audioPower: 0.3, contextEnergy: 0.8 });
-  publish(target, GameEventType.SCORE_CHANGED, { team: 0, particleCount: 80 });
+  publish(target, GameEventType.BALL_KICKED, { audioPower: 0.9, particleCount: 9, contextEnergy: 1.4, x: 700, y: 350 });
+  publish(target, GameEventType.TACKLE_RESOLVED, { success: true, audioPower: 0.3, contextEnergy: 0.8, x: 500, y: 350 });
+  publish(target, GameEventType.SCORE_CHANGED, { team: 0, particleCount: 80, x: 1152, y: 350 });
   publish(target, GameEventType.MATCH_ENDED);
 
   assert.deepEqual(calls, [
@@ -58,6 +58,6 @@ test("failed tackles keep contextual feedback without playing a kick", () => {
     onContextParticles: () => calls.push("context")
   });
 
-  publish(target, GameEventType.TACKLE_RESOLVED, { success: false, contextEnergy: 0.8 });
+  publish(target, GameEventType.TACKLE_RESOLVED, { success: false, contextEnergy: 0.8, x: 500, y: 350 });
   assert.deepEqual(calls, ["context"]);
 });

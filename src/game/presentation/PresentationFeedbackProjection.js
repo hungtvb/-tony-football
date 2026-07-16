@@ -25,7 +25,7 @@ function payloadPoint(payload, xKey = "x", yKey = "y") {
 }
 
 function withPoint(payload, point) {
-  return point ? { ...payload, x: point.x, y: point.y } : { ...payload };
+  return point ? Object.freeze({ ...payload, x: point.x, y: point.y }) : null;
 }
 
 function kickProjection(payload, snapshot) {
@@ -55,8 +55,8 @@ function kickProjection(payload, snapshot) {
 
   return Object.freeze({
     audioPower: payload.audioPower ?? (shot ? 0.55 + power * 0.35 : 0.4 + power * 0.22),
-    particles: Object.freeze(particles),
-    contextParticles: contextParticles ? Object.freeze(contextParticles) : null
+    particles,
+    contextParticles
   });
 }
 
@@ -69,11 +69,11 @@ function tackleProjection(payload, snapshot) {
   return Object.freeze({
     won,
     audioPower: won ? (payload.audioPower ?? 0.3) : null,
-    contextParticles: Object.freeze(withPoint({
+    contextParticles: withPoint({
       ...payload,
       won,
       contextEnergy: payload.contextEnergy ?? 0.8
-    }, point))
+    }, point)
   });
 }
 
@@ -81,12 +81,12 @@ function scoreProjection(payload, snapshot) {
   const point = payloadPoint(payload) ?? ballPoint(snapshot);
   return Object.freeze({
     goal: payload,
-    particles: Object.freeze(withPoint({
+    particles: withPoint({
       ...payload,
       particleCount: payload.particleCount ?? 80,
       particleColor: payload.particleColor ?? (payload.team === 0 ? "#e1bb58" : "#47c9d4"),
       particleEnergy: payload.particleEnergy ?? 3.5
-    }, point))
+    }, point)
   });
 }
 
