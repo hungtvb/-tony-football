@@ -2,6 +2,8 @@ import {
   GOAL_PRESENTATION_STATES,
   createGoalPresentationState,
 } from "../state/GoalPresentationState.js";
+import { GameEventType } from "../engine/GameEvents.js";
+import { subscribeToGameEvents } from "./BrowserGameEventBridge.js";
 
 const params = new URLSearchParams(window.location.search);
 const visualTestMode = params.has("visualTest");
@@ -13,9 +15,6 @@ const timings = reducedMotion
     ? { leadIn: 140, goal: 260, score: 220, replayMax: 900 }
     : { leadIn: 460, goal: 500, score: 380, replayMax: 1800 };
 
-const homeScore = document.getElementById("homeScore");
-const awayScore = document.getElementById("awayScore");
-const replayBadge = document.getElementById("replayBadge");
 const pitchPanel = document.querySelector(".match-pitch");
 const history = [];
 const timelineHistory = [];
@@ -24,6 +23,9 @@ let running = false;
 let runToken = 0;
 let testHoldReleased = !goalTestMode;
 let timelinePhase = "idle";
+let latestScore = Object.freeze([0, 0]);
+let replayActive = false;
+let replaySeenForGoal = false;
 
 const TEAMS = Object.freeze({
   home: Object.freeze({ key: "home", name: "TONY FC", crest: "TF", accent: "gold" }),
@@ -94,19 +96,6 @@ const presentation = createGoalPresentationState({
   },
 });
 
-function readScores() {
-  return [Number(homeScore?.textContent ?? 0) || 0, Number(awayScore?.textContent ?? 0) || 0];
-}
-
-let observedScores = readScores();
-
-function replayIsActive() {
-  return Boolean(
-    replayBadge?.classList.contains("show")
-    && /REPLAY/i.test(replayBadge.textContent ?? ""),
-  );
-}
-
 function setVisible(visible) {
   ensureOverlay();
   overlay.classList.toggle("show", visible);
@@ -126,6 +115,12 @@ function applySnapshot({ team, score, replay }) {
     : "NEON UNITED GỠ LẠI THẾ TRẬN";
   overlay.querySelector("#goalPresentationHomeScore").textContent = String(score[0]);
   overlay.querySelector("#goalPresentationAwayScore").textContent = String(score[1]);
+  overlay.querySelector("#goalPresentationReplayFlag").textContent = replay ? "REPLAY AVAILABLE" : "GOAL CONFIRMED";
+  overlay.querySelector("#goalPresentationReplayLabel").textContent = replay ? "INSTANT REPLAY" : "RETURNING TO KICK OFF";
+}
+
+function applyReplayAvailability(replay) {
+  ensureOverlay();
   overlay.querySelector("#goalPresentationReplayFlag").textContent = replay ? "REPLAY AVAILABLE" : "GOAL CONFIRMED";
   overlay.querySelector("#goalPresentationReplayLabel").textContent = replay ? "INSTANT REPLAY" : "RETURNING TO KICK OFF";
 }
@@ -162,20 +157,22 @@ async function waitForTestRelease(token) {
   return token === runToken;
 }
 
-async function waitForNativeReplayEnd(token) {
+async function waitForReplayEnd(token) {
   const deadline = performance.now() + timings.replayMax;
   while (performance.now() < deadline) {
     if (token !== runToken) return false;
-    if (!replayIsActive()) return true;
+    if (!replayActive) return true;
     await new Promise((resolve) => setTimeout(resolve, 40));
   }
   return token === runToken;
 }
 
-async function startPresentation({ team = "home", score = readScores(), replay = replayIsActive() } = {}) {
+async function startPresentation({ team = "home", score = latestScore, replay = replayActive } = {}) {
   const token = ++runToken;
   running = true;
   testHoldReleased = !goalTestMode;
+  latestScore = Object.freeze([...score]);
+  replaySeenForGoal = Boolean(replay);
   if (presentation.state !== GOAL_PRESENTATION_STATES.HIDDEN) presentation.reset({ reason: "new-goal" });
 
   applySnapshot({ team, score, replay });
@@ -201,15 +198,16 @@ async function startPresentation({ team = "home", score = readScores(), replay =
 
     // Reveal the actual native replay instead of covering it with another full-screen card.
     setVisible(false);
-    if (replay) {
+    const shouldReplay = replaySeenForGoal;
+    if (shouldReplay) {
       setPhase("INSTANT REPLAY");
-      presentation.transition(GOAL_PRESENTATION_STATES.REPLAY, { team, score, replay });
+      presentation.transition(GOAL_PRESENTATION_STATES.REPLAY, { team, score, replay: shouldReplay });
       setTimelinePhase("native-replay");
-      if (!await waitForNativeReplayEnd(token)) return;
+      if (!await waitForReplayEnd(token)) return;
     }
 
-    presentation.transition(GOAL_PRESENTATION_STATES.COMPLETE, { team, score, replay });
-    presentation.transition(GOAL_PRESENTATION_STATES.HIDDEN, { team, score, replay });
+    presentation.transition(GOAL_PRESENTATION_STATES.COMPLETE, { team, score, replay: shouldReplay });
+    presentation.transition(GOAL_PRESENTATION_STATES.HIDDEN, { team, score, replay: shouldReplay });
   } finally {
     if (token === runToken) {
       setVisible(false);
@@ -220,31 +218,41 @@ async function startPresentation({ team = "home", score = readScores(), replay =
   }
 }
 
-function detectScoreChange() {
-  const nextScores = readScores();
-  const flow = document.body.dataset.flow;
-  if (flow === "match") {
-    if (nextScores[0] > observedScores[0]) {
-      void startPresentation({ team: "home", score: nextScores, replay: replayIsActive() });
-    } else if (nextScores[1] > observedScores[1]) {
-      void startPresentation({ team: "away", score: nextScores, replay: replayIsActive() });
-    }
-  }
-  observedScores = nextScores;
-}
-
 ensureStylesheet();
 ensureOverlay();
 
-const scoreObserver = new MutationObserver(detectScoreChange);
-if (homeScore) scoreObserver.observe(homeScore, { childList: true, characterData: true, subtree: true });
-if (awayScore) scoreObserver.observe(awayScore, { childList: true, characterData: true, subtree: true });
+subscribeToGameEvents(window, (event) => {
+  if (event.type === GameEventType.REPLAY_STARTED) {
+    replayActive = true;
+    replaySeenForGoal = true;
+    if (running) applyReplayAvailability(true);
+  }
+  else if (event.type === GameEventType.REPLAY_ENDED) replayActive = false;
+  else if (event.type === GameEventType.SCORE_CHANGED) {
+    latestScore = Object.freeze([...event.payload.score]);
+    replaySeenForGoal = Boolean(event.payload.replayAvailable);
+    if (document.body.dataset.flow === "match") {
+      void startPresentation({
+        team: event.payload.team === 0 ? "home" : "away",
+        score: latestScore,
+        replay: Boolean(event.payload.replayAvailable)
+      });
+    }
+  }
+});
 
 window.__TONY_GOAL_PRESENTATION__ = {
   ready: true,
   timings: { ...timings },
   history,
-  preview: (options = {}) => startPresentation(options),
+  preview: (options = {}) => {
+    if (options.score) latestScore = Object.freeze([...options.score]);
+    replayActive = Boolean(options.replay);
+    return startPresentation(options);
+  },
+  endPreviewReplay: () => {
+    replayActive = false;
+  },
   releaseTestHold: () => {
     testHoldReleased = true;
   },
@@ -256,7 +264,9 @@ window.__TONY_GOAL_PRESENTATION__ = {
     visible: overlay?.classList.contains("show") ?? false,
     timelinePhase,
     team: overlay?.dataset.team ?? null,
-    scores: readScores(),
+    scores: [...latestScore],
+    replayActive,
+    replaySeenForGoal,
     goalTestMode,
   }),
 };

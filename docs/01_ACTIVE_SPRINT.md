@@ -1,38 +1,37 @@
 # Active Sprint
 
 ```yaml
-Sprint: U3.3
-Title: Match Presentation
-Status: Closeout — implementation merged and production deployed; integrated browser audit pending
+Sprint: R1
+Title: Engine and Presentation Boundary
+Status: In Progress — Slice D2c snapshot camera, replay, and feedback adapters complete
 Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/U3_3_MATCH_PRESENTATION.md
+Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
-  - replace the single-action Full Time card with a complete post-match decision hub
-  - present win, draw, or loss copy from the native final score
-  - surface possession, shots, and Tony FC pass accuracy from existing match statistics
-  - provide Play Again, Match Setup, and Main Menu actions without duplicating reset logic
-  - preserve selected difficulty, pitch, ball, and weather when playing again
-  - support desktop, narrow-landscape, keyboard focus, and reduced motion
+  - define immutable gameplay commands and deterministic buffering
+  - define explicit ordered gameplay events
+  - define deeply read-only match snapshots with stable entity identifiers
+  - enforce that engine modules remain independent of DOM, Three.js, Canvas, audio, and render frames
+  - prepare parity-first extraction of authoritative state from game.js
 Architecture:
-  - PostMatchSummary is a pure model that normalizes final score and statistics
-  - PostMatchHub enhances the existing result DOM and observes the native result overlay
-  - hidden pause actions remain the single bridge into game.js setup and main-menu reset behavior
-  - game.js remains owner of match time, final score, statistics, endMatch, reset, and startMatch
+  - fixed 60 Hz SimulationLoop remains unchanged
+  - engine contracts contain only plain serializable JavaScript data
+  - presentation consumes snapshots and events but never owns authoritative gameplay
+  - game.js compatibility bridges remain until each extraction has equivalent tests
 Validation required:
-  - post-match summary unit tests for win, draw, loss, and invalid values
-  - desktop and narrow-landscape Playwright result flow
-  - Play Again retains current match setup and begins immediately
-  - Match Setup and Main Menu actions expose only one overlay surface
-  - existing intro, goal, camera, HUD, pause, replay, and static-deploy tests
+  - command validation, immutability, buffering, and ordering tests
+  - event immutability and deterministic ordering tests
+  - snapshot identity, ownership, immutability, and interpolation-frame tests
+  - engine import-boundary tests
+  - all existing simulation, gameplay, presentation, and asset tests
+  - desktop and narrow browser flows for score, replay, and match-ended events
+  - WebGL and Canvas fallback browser coverage for snapshot-driven HUD/radar and entity transforms
 Do not modify:
-  - match duration or end-match timing
-  - score or statistics ownership
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
   - FO4 control mapping
+  - WebGL, Canvas fallback, models, camera, or presentation behavior
 Next slices:
-  - U3 integrated browser audit and closeout
-  - activate R1 Engine and Presentation Boundary after U3 closeout
+  - Slice E Explicit bootstrap and compatibility cleanup
 ```
 
 Only one sprint may be active at a time.

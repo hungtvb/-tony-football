@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: Planned — approved for activation after the U3 integrated browser audit
+Status: In Progress — Slice D2c snapshot camera, replay, and feedback adapters complete
 
 ## Objective
 
@@ -12,9 +12,10 @@ R1 implements the accepted decisions in ADR-001 and ADR-002. It does not recreat
 
 - Fixed simulation timing already runs at 60 Hz through `SimulationLoop`.
 - Locomotion, ball control, and possession helpers already have headless tests.
-- `game.js` still owns authoritative players, ball, match state, browser input, AI updates, replay, Three.js, Canvas fallback, radar, audio, DOM updates, and debug wiring.
-- Goal and result presentation currently infer state from rendered DOM and delegate some actions through synthetic clicks.
-- Render interpolation alpha exists, but entity transforms are not yet driven from previous/current engine snapshots.
+- `game.js` still owns the compatibility players, ball, match state, AI updates, replay, Three.js/Canvas scene drawing, audio, DOM updates, and debug wiring.
+- Browser keyboard listeners and FO4 mapping now live in `src/game/input`; `game.js` temporarily applies their immutable commands until renderer migration is complete.
+- Goal, replay, and result presentation consume explicit immutable game events; lifecycle and navigation use semantic application actions instead of synthetic clicks.
+- The compatibility runtime captures immutable previous/current snapshots on fixed ticks. HUD/radar consume current snapshots, while WebGL and Canvas consume a shared interpolated player/ball render state.
 
 ## Target flow
 
@@ -68,6 +69,46 @@ flowchart LR
 - Initialize presentation modules explicitly; imports must not rely on hidden side effects.
 - Remove temporary DOM/state bridges after equivalent command, event, and snapshot tests pass.
 - Document final module ownership and retain both WebGL and Canvas smoke paths.
+
+## Implementation checkpoint
+
+- Slice A contracts and dependency guardrails are complete.
+- Slice B state/lifecycle foundation is complete.
+- Slice B now runs controlled locomotion, stamina, facing, motion state, player bounds/collisions, owned-ball dribbling, loose-ball physics, first touch, possession time, and goal-line detection headlessly inside `MatchEngine`.
+- Slice B now also executes short passes, one-twos, through balls, chipped through balls, lofted passes, power/finesse/chip shots, slide tackles, and teammate runs inside the fixed update.
+- Kick targeting, lead, speed, curve, vertical velocity, release locks, action animation facts, statistics, and tackle odds preserve the compatibility formulas; random outcomes use the engine's seeded source.
+- Successful actions publish explicit ball-kicked, tackle-resolved, teammate-run, and possession events for future presentation adapters.
+- Slice B goalkeeper and team AI now run headlessly with deterministic chase, support shape, pressing, attack movement, pressured passing, shooting, goalkeeper positioning, shot projection, dives, rush control, and 520-speed distribution.
+- AI decisions use fixed match time and the seeded engine random source; ball actions cross the same immutable command boundary as human actions.
+- Defensive W goalkeeper-rush and Q team-press hold state are engine commands ready for the Slice C FO4 keyboard adapter.
+- Movement and ball systems reuse the existing locomotion, ball-control, possession, and tuning modules; their fixed-step constants remain unchanged.
+- Slice C centralizes the FO4 mapping and keyboard lifecycle in `BrowserInputAdapter`; normalized movement, charge/release actions, defensive holds, standing/slide tackles, Shift-direction switching, blur cleanup, and camera requests preserve the desktop map.
+- Slice C centralizes start, pause, resume, restart, Match Setup, and Main Menu requests in `ApplicationRuntime` and `BrowserApplicationAdapter`.
+- Match intro and post-match presentation now emit explicit application actions; synthetic `.click()` navigation bridges are removed.
+- Slice C unit, static-build, desktop Playwright, narrow-landscape Playwright, and CI-gate validation passed in CI run #247.
+- Slice D1 adds `BrowserGameEventBridge` as the compatibility event projection from `game.js` to presentation modules.
+- Goal presentation now consumes score/replay events and post-match presentation consumes match-ended score/stat facts; both score/result `MutationObserver` integrations are removed.
+- Slice D1 unit validation passed 185 tests. Local Chromium validation passed 24 match-flow scenarios and 10 camera/HUD scenarios across desktop and narrow-landscape. The optional local Firefox software-WebGL mode was not run because this container has no `xvfb-run`; required Chromium desktop, narrow-landscape, and CI-gate jobs passed in CI run #251.
+- The persistent local Playwright bootstrap now extracts artifacts without restoring runner ownership, so artifacts work in restricted containers.
+- Slice D2a adds a compatibility snapshot adapter that projects legacy Player instances and ball ownership into the same immutable `MatchSnapshot` contract used by `MatchEngine`.
+- HUD clock, score, selected identity, stamina, possession, shots, and pass accuracy now come from a pure snapshot projection instead of mutable runtime objects.
+- Radar rendering now consumes snapshot players, selected-player ID, and ball facts through a presentation-only renderer shared by WebGL and Canvas fallback paths.
+- A deterministic `renderer=canvas` validation mode now proves Canvas fallback HUD/radar parity without requiring WebGL failure.
+- Slice D2a validation passed 190 unit tests, the static build, 24 local match-flow scenarios, and 12 local camera/HUD browser scenarios across WebGL/Canvas, desktop, and narrow landscape.
+- Slice D2b adds a pure render-state adapter for player position, velocity, facing, locomotion phase, action timing, ball position, height, velocity, and rotation.
+- Direction and yaw interpolate across the shortest angular path; same-tick resets and large kickoff teleports snap directly to current transforms instead of sliding across the pitch.
+- WebGL model/fallback rigs and Canvas fallback players now use the same interpolated poses and snapshot entity IDs. The 3D rig also faces the interpolated ball rather than mutable compatibility coordinates.
+- Replay remains the explicit render override, but playback frames are now immutable `MatchSnapshot` references rather than legacy player/ball copies.
+- Slice D2b local validation passed 199 game/R1 tests (including 89 presentation contracts), the static build, 24 match-flow scenarios, and 12 WebGL/Canvas camera-HUD scenarios across desktop and narrow landscape.
+- Slice D2c adds a snapshot camera controller that owns presentation-only framing state and reads match/ball facts exclusively from fixed-tick snapshots.
+- Replay sampling now owns a bounded 15 FPS snapshot buffer, preserves the 66-frame history and 3.05-second playback window, and exposes read-only playback facts to the compatibility snapshot adapter.
+- Kick, tackle, goal, start/restart, and full-time feedback now crosses the immutable browser game-event bridge; a presentation adapter maps those events to audio and contextual particle callbacks.
+- Particle simulation remains presentation state in `game.js`, but gameplay actions no longer invoke particle or audio implementations directly.
+- Slice D2c focused validation adds snapshot camera, replay, feedback projection, and runtime-boundary contracts; full browser parity remains required before Slice E cleanup.
+- Review hardening retains future commands until `targetTick`, snaps snapshot history across start/restart/kickoff discontinuities, keeps custom formations without a number 10 referentially valid, and aligns compatibility scorer events with stable snapshot player IDs.
+- Slice D2c local game/R1 validation passes 211 tests and the static build. Browser suites and the filesystem ownership portability test remain delegated to CI in this workspace because Chromium is absent and managed storage rejects `chown`.
+- `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
+- The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 
 ## Out of scope
 

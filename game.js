@@ -16,12 +16,27 @@ import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
 import { createContextualParticlePolicy } from "./src/game/presentation/ContextualParticlePolicy.js";
 import { cameraHudConfig } from "./src/game/config/cameraHudConfig.js";
-import { cameraFrameTarget, cameraZoomForSpeed } from "./src/game/presentation/CameraFraming.js";
+import { createSnapshotCameraController } from "./src/game/presentation/SnapshotCameraController.js";
+import { createSnapshotReplayController } from "./src/game/presentation/SnapshotReplayController.js";
+import { createBrowserPresentationFeedbackAdapter } from "./src/game/presentation/BrowserPresentationFeedbackAdapter.js";
+import { createDeferredCompatibilityKickPublisher } from "./src/game/presentation/CompatibilityKickEventPayload.js";
 import { locomotionConfig } from "./src/game/config/locomotionConfig.js";
 import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
 import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore, resolveFirstTouch } from "./src/game/gameplay/BallControl.js";
 import { beginReceiving, controlPossession, createPossessionLifecycle, releasePossession, settleLoose } from "./src/game/gameplay/PossessionLifecycle.js";
 import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity, webGLHeading } from "./src/game/gameplay/PlayerLocomotion.js";
+import { GameCommandType } from "./src/game/engine/GameCommands.js";
+import { GameEventType, createGameEvent } from "./src/game/engine/GameEvents.js";
+import { FO4_CONTROLS } from "./src/game/input/FO4Controls.js";
+import { BrowserInputAdapter } from "./src/game/input/BrowserInputAdapter.js";
+import { ApplicationActionType } from "./src/game/application/ApplicationActions.js";
+import { ApplicationRuntime } from "./src/game/application/ApplicationRuntime.js";
+import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplicationAdapter.js";
+import { publishGameEvent } from "./src/game/presentation/BrowserGameEventBridge.js";
+import { CompatibilitySnapshotAdapter, compatibilityPlayerId } from "./src/game/presentation/CompatibilitySnapshotAdapter.js";
+import { createHudSnapshotProjection } from "./src/game/presentation/HudSnapshotProjection.js";
+import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRenderer.js";
+import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRenderState.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -44,7 +59,9 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;
   const ledViews = []; const goalNetViews = [];const stadiumLightViews=[];
-  const visualTestMode = new URLSearchParams(location.search).get("visualTest") === "1";
+  const runtimeParams = new URLSearchParams(location.search);
+  const visualTestMode = runtimeParams.get("visualTest") === "1";
+  const rendererPreference = runtimeParams.get("renderer");
   const lowPowerDevice = visualTestMode || matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
@@ -102,12 +119,20 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   const ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, height: 0, vz: 0, curve: 0, radius: 9, owner: null, lastTouch: null, lock: 0, trail: [], pendingPass: null, angle: 0, spin: 0, possession: createPossessionLifecycle() };
+  const cameraController = createSnapshotCameraController({
+    worldWidth: W,
+    worldHeight: H,
+    viewportWidth: W,
+    viewportHeight: H,
+    config: cameraHudConfig.camera
+  });
+  const replayController = createSnapshotReplayController();
   const game = {
     state: "menu", difficulty: "pro", ai: 1, time: MATCH_SECONDS, score: [0, 0], selected: null,
     stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
     shake: 0, flash: 0, messageTimer: 0, kickOffTimer: 0, particles: [], lastTime: performance.now(), sound: true,
-    camera: { x: W / 2, y: H / 2, zoom: 1, targetZoom: 1 }, cameraMode: "broadcast", cameraNotice: 0,
-    replay: { buffer: [], frames: [], active: false, elapsed: 0, duration: 3.05, accumulator: 0 },
+    cameraMode: "broadcast", cameraNotice: 0,
+    replay: replayController,
     goalSequence: null, goalScorer: null, hud: { selectedKey: "", playerChangeTimer: null }, weather:loadPreference("tfWeather","clear",WEATHER_STYLES),pitchStyle:loadPreference("tfPitch","classic",PITCH_STYLES),ballStyle:loadPreference("tfBall","classic",BALL_STYLES)
   };
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -115,15 +140,48 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   const audioFeedback = createAudioFeedbackController();
   const contextualParticles = createContextualParticlePolicy({ lowPowerDevice, reducedMotion });
   let players = [];
-  const FO4_CONTROLS = Object.freeze({
-    sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
-    teammateRun:"KeyQ", finesse:"KeyZ", shield:"KeyC", tackle:"Space", camera:"KeyB"
-  });
+  let browserInput = null;
   const input = {
-    keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0,
-    actionCode: null, actionStart: 0, actionCharge: 0, actionModifiers: null,
-    bufferedAction: null, lastMode: "defense", qTapStart: 0, qConsumed: false
+    moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0,
+    actionStart: 0, actionCharge: 0, bufferedAction: null, lastMode: "defense"
   };
+  const isKeyPressed = (code) => browserInput?.isPressed(code) ?? false;
+  let compatibilityTick = 0;
+  let compatibilityEventSequence = 0;
+  const compatibilitySnapshots = new CompatibilitySnapshotAdapter();
+  let lastSnapshotRenderState = null;
+  let recordReplaySnapshot = false;
+
+  function publishCompatibilityEvent(type, payload = {}) {
+    const event = createGameEvent(type, payload, {
+      tick: compatibilityTick,
+      sequence: compatibilityEventSequence
+    });
+    compatibilityEventSequence += 1;
+    publishGameEvent(window, event);
+    return event;
+  }
+
+  function captureCompatibilitySnapshot() {
+    return compatibilitySnapshots.capture({
+      tick: compatibilityTick,
+      state: game.state,
+      matchSeconds: MATCH_SECONDS,
+      time: game.time,
+      difficulty: game.difficulty,
+      score: game.score,
+      stats: game.stats,
+      settings: {
+        pitchStyle: game.pitchStyle,
+        ballStyle: game.ballStyle,
+        weather: game.weather
+      },
+      replay: game.replay,
+      selectedPlayer: game.selected,
+      players,
+      ball
+    });
+  }
 
   function loadPreference(key,fallback,options){try{const value=localStorage.getItem(key);return options[value]?value:fallback;}catch{return fallback;}}
   function savePreference(key,value){try{localStorage.setItem(key,value);}catch{}}
@@ -140,11 +198,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function resetMatch() {
+    if (game.replay.active) publishCompatibilityEvent(GameEventType.REPLAY_ENDED);
     createTeams();
     game.time = MATCH_SECONDS; game.score = [0, 0]; game.stats = { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 };
     game.particles.length = 0; game.flash = 0; game.goalSequence = null; game.goalScorer = null;
-    game.replay.buffer.length = 0; game.replay.frames.length = 0; game.replay.active = false; game.replay.elapsed = 0; game.replay.accumulator = 0;
-    ui.replayBadge.classList.remove("show"); kickoff(HOME); updateUI();
+    game.replay.reset();
+    ui.replayBadge.classList.remove("show"); kickoff(HOME); updateUI(captureCompatibilitySnapshot());
   }
 
   function kickoff(team) {
@@ -162,7 +221,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 
   function startMatch() {
     resetMatch(); game.state = "playing"; ui.start.classList.remove("show"); ui.pause.classList.remove("show"); ui.result.classList.remove("show");
-    ui.matchState.textContent = "LIVE"; whistle();
+    ui.matchState.textContent = "LIVE";
   }
 
   function togglePause(force) {
@@ -172,14 +231,14 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function clearActiveInput() {
-    input.keys.clear(); input.actionCode = null; input.actionStart = 0; input.actionCharge = 0; input.actionModifiers = null;
-    input.bufferedAction = null; input.qTapStart = 0; input.qConsumed = false; input.moveX = 0; input.moveY = 0; input.magnitude = 0;
+    browserInput?.reset({ requestPause: false }); input.actionStart = 0; input.actionCharge = 0;
+    input.bufferedAction = null; input.moveX = 0; input.moveY = 0; input.magnitude = 0;
   }
 
   function showMatchSetup({ reset = true } = {}) {
     clearActiveInput();
     if (reset) resetMatch();
-    game.state = "menu"; game.replay.active = false; game.goalSequence = null; game.goalScorer = null;
+    game.state = "menu"; game.replay.stop(); game.goalSequence = null; game.goalScorer = null;
     ui.pause.classList.remove("show"); ui.result.classList.remove("show"); ui.start.classList.add("show");
     ui.replayBadge.classList.remove("show"); ui.matchState.textContent = "SẴN SÀNG";
     announce("Chọn thiết lập rồi bắt đầu trận mới.");
@@ -192,11 +251,16 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function endMatch() {
-    game.state = "ended"; ui.result.classList.add("show"); ui.matchState.textContent = "FULL TIME"; whistle(true);
-    $("finalHome").textContent = game.score[HOME]; $("finalAway").textContent = game.score[AWAY];
-    const diff = game.score[HOME] - game.score[AWAY];
-    $("resultTitle").textContent = diff > 0 ? "CHIẾN THẮNG!" : diff < 0 ? "CHƯA ĐỦ!" : "HÒA KỊCH TÍNH";
-    $("resultDetail").textContent = diff > 0 ? "Tony FC đã làm chủ sân đấu." : diff < 0 ? "Chỉ còn một chút nữa. Đá lại nào!" : "Hai đội bất phân thắng bại.";
+    game.state = "ended"; ui.matchState.textContent = "FULL TIME";
+    publishCompatibilityEvent(GameEventType.MATCH_ENDED, {
+      score: game.score.slice(),
+      stats: {
+        possession: game.stats.possession.slice(),
+        shots: game.stats.shots.slice(),
+        passes: game.stats.passes,
+        completed: game.stats.completed
+      }
+    });
   }
 
   function closestPlayer(team, target, includeKeeper = true) {
@@ -250,14 +314,39 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     player.anim = name; player.animTime = duration; player.animDuration = duration; player.animPower = power;
   }
 
-  function releaseBall(player, dx, dy, speed, type) {
+  function releaseBall(player, dx, dy, speed, type, feedback = {}) {
+    const {
+      commandType,
+      power,
+      style,
+      targetId = null,
+      aimY = null,
+      ...presentation
+    } = feedback;
     const n = normalize(dx, dy); ball.possession=releasePossession(ball.possession,type,possessionId(player));ball.owner = null; ball.lastTouch = player; ball.lock = type === "shot" ? .13 : type === "loft" ? .3 : .2;
     ball.x = player.x + n.x * (player.radius + 10); ball.y = player.y + n.y * (player.radius + 10);
     ball.vx = n.x * speed + player.vx * .25; ball.vy = n.y * speed + player.vy * .25;
     ball.height=0;ball.vz=type==="loft"?10.8:type==="shot"?1.8:0;ball.curve=type==="shot"?clamp(n.y*1.45,-1.05,1.05):0;ball.spin = (player.team === HOME ? 1 : -1) * speed * .012;
-    player.cooldown = .18; kickSound(type === "shot" ? .9 : .55);
+    player.cooldown = .18;
     triggerAnimation(player, type === "shot" ? "shoot" : "pass", type === "shot" ? .34 : type === "loft" ? .3 : .24, clamp((speed - 400) / 650, 0, 1));
-    for (let i = 0; i < (type === "shot" ? 9 : 4); i += 1) spawnParticle(ball.x, ball.y, type === "shot" ? "#f5d067" : "#f4f7f5", 1.2);
+    return createDeferredCompatibilityKickPublisher({
+      publish: (payload) => publishCompatibilityEvent(GameEventType.BALL_KICKED, payload),
+      getBallState: () => ball,
+      commandType,
+      playerId: compatibilityPlayerId(player),
+      targetId,
+      power,
+      speed,
+      style,
+      aimY,
+      presentation: {
+        audioPower: type === "shot" ? .9 : .55,
+        particleCount: type === "shot" ? 9 : 4,
+        particleColor: type === "shot" ? "#f5d067" : "#f4f7f5",
+        particleEnergy: 1.2,
+        ...presentation
+      }
+    });
   }
 
   function passBall(player, charge=.35, oneTwo=false) {
@@ -273,7 +362,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
       if (score > best) { target = candidate; best = score; }
     }
     const leadX = target.x + target.vx * .18; const leadY = target.y + target.vy * .18;
-    const d = distance(player, target); const power=lerp(.82,1.16,clamp(charge,.08,1));releaseBall(player, leadX - player.x, leadY - player.y, clamp((430 + d * .35)*power, 440, 760), "pass");
+    const d = distance(player, target); const power=lerp(.82,1.16,clamp(charge,.08,1));const publishKickEvent=releaseBall(player, leadX - player.x, leadY - player.y, clamp((430 + d * .35)*power, 440, 760), "pass", { commandType: GameCommandType.SHORT_PASS, power: clamp(charge, 0, 1), style: oneTwo ? "one-two" : "short", targetId: compatibilityPlayerId(target) });publishKickEvent();
     if(oneTwo){const runDirection=normalize((player.team===HOME?1:-1)*.9+input.aimX*.45,input.aimY*.55);player.vx=runDirection.x*225;player.vy=runDirection.y*225;player.controlBoost=.7;announce(`${player.name} bật tường và băng lên!`);}
     if (player.team === HOME) game.stats.passes += 1;
     ball.pendingPass = { team: player.team, timer: 1.8 }; announce(oneTwo?`${player.name} bật tường và băng lên!`:`${player.name} chuyền bóng!`);
@@ -284,7 +373,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
     const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
     for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const aligned=dx/d*facing.x+dy/d*facing.y;const progress=dx*attackDirection;const score=aligned*310+progress*.42-d*.12;if(score>best){best=score;target=candidate;}}
-    if(!target)return;const runX=target.vx*.58+attackDirection*58;const runY=target.vy*.58;const d=distance(player,target);const power=lerp(.84,1.18,clamp(charge,.08,1));releaseBall(player,target.x+runX-player.x,target.y+runY-player.y,clamp((540+d*.42)*power,540,900),chipped?"loft":"pass");if(chipped){ball.vz=8.6+charge*4.2;ball.height=.12;}
+    if(!target)return;const runX=target.vx*.58+attackDirection*58;const runY=target.vy*.58;const d=distance(player,target);const power=lerp(.84,1.18,clamp(charge,.08,1));const publishKickEvent=releaseBall(player,target.x+runX-player.x,target.y+runY-player.y,clamp((540+d*.42)*power,540,900),chipped?"loft":"pass", { commandType: GameCommandType.THROUGH_BALL, power: clamp(charge, 0, 1), style: chipped ? "chipped-through" : "through", targetId: compatibilityPlayerId(target) });if(chipped){ball.vz=8.6+charge*4.2;ball.height=.12;}publishKickEvent();
     if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.1};announce(`${player.name} chọc khe vào khoảng trống!`);
   }
 
@@ -292,7 +381,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if(ball.owner!==player)return;const attackDirection=player.team===HOME?1:-1;const facing=input.magnitude>.12?normalize(input.aimX,input.aimY):{x:attackDirection,y:0};
     const teammates=players.filter((candidate)=>candidate.team===player.team&&candidate!==player&&candidate.role!=="GK");let target=null;let best=-Infinity;
     for(const candidate of teammates){const dx=candidate.x-player.x;const dy=candidate.y-player.y;const d=length(dx,dy);const wide=Math.abs(dy);const aligned=dx/d*facing.x+dy/d*facing.y;const score=aligned*240+dx*attackDirection*.25+wide*.12-d*.08;if(score>best){best=score;target=candidate;}}
-    if(!target)return;const power=lerp(.82,1.18,clamp(charge,.08,1));releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp((610+distance(player,target)*.3)*power,580,940),"loft");ball.vz*=lerp(.82,1.14,charge);
+    if(!target)return;const power=lerp(.82,1.18,clamp(charge,.08,1));const publishKickEvent=releaseBall(player,target.x+target.vx*.32-player.x,target.y+target.vy*.32-player.y,clamp((610+distance(player,target)*.3)*power,580,940),"loft", { commandType: GameCommandType.LOFTED_PASS, power: clamp(charge, 0, 1), style: "loft", targetId: compatibilityPlayerId(target) });ball.vz*=lerp(.82,1.14,charge);publishKickEvent();
     if(player.team===HOME)game.stats.passes+=1;ball.pendingPass={team:player.team,timer:2.2};announce(`${player.name} tạt bóng!`);
   }
 
@@ -303,9 +392,9 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     const openY = keeper.y < H / 2 ? FIELD.goalBottom - 34 : FIELD.goalTop + 34;
     const userAim=player===game.selected&&player.team===HOME&&input.magnitude>.12;const directedY=userAim?H/2+input.aimY*145:player.y+player.dirY*120;
     const aimY = clamp(lerp(openY,directedY,userAim ? .62 : .28)+(Math.random()-.5)*(userAim?16:34/game.ai),FIELD.goalTop+22,FIELD.goalBottom-22);
-    const power = clamp(charge, .15, 1); releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot");
-    if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}
-    game.stats.shots[player.team] += 1; spawnContextParticles(player.x+player.dirX*18,player.y+player.dirY*18,.55+power*1.2); const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
+    const power = clamp(charge, .15, 1); const publishKickEvent=releaseBall(player, targetX - player.x, aimY - player.y, style==="chip"?500+power*220:style==="finesse"?570+power*300:620+power*430, "shot", { commandType: GameCommandType.SHOOT, power, style, targetId: keeper ? compatibilityPlayerId(keeper) : null, aimY, contextEnergy: .55 + power * 1.2, contextX: player.x + player.dirX * 18, contextY: player.y + player.dirY * 18 });
+    if(style==="chip"){ball.vz=10.5+power*4.5;ball.curve=0;}else if(style==="finesse"){ball.curve=clamp((aimY-H/2)/105,-1.65,1.65);ball.vz=2.6;}publishKickEvent();
+    game.stats.shots[player.team] += 1; const shotImpulse=gameFeel.shotImpulse(power); if(shotImpulse>0){gameFeel.addImpulse(shotImpulse,game.stats.shots[HOME]+game.stats.shots[AWAY]);game.flash=Math.max(game.flash,shotImpulse*.5);} announce(power > .78 ? `${player.name} tung CÚ SÚT SẤM SÉT!` : `${player.name} dứt điểm!`);
   }
 
   function tackle(player) {
@@ -313,11 +402,20 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     const opponent = ball.owner && ball.owner.team !== player.team ? ball.owner : closestPlayer(player.team === HOME ? AWAY : HOME, player);
     if (!opponent || distance(player, opponent) > 48) return;
     player.cooldown = .7; triggerAnimation(player, "tackle", .38); const chance = .48 + (player.rating - opponent.rating) * .012;
-    spawnContextParticles(player.x+player.dirX*14,player.y+player.dirY*14,.8);
-    if (ball.owner === opponent && Math.random() < chance) {
+    const success = ball.owner === opponent && Math.random() < chance;
+    if (success) {
       ball.possession=releasePossession(ball.possession,"tackle",possessionId(opponent));ball.owner = null; const n = normalize(opponent.x - player.x, opponent.y - player.y); ball.x = opponent.x; ball.y = opponent.y;
-      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`); kickSound(.3);
+      ball.vx = n.x * 250; ball.vy = n.y * 250; ball.lock = .18; ball.lastTouch = player; gameFeel.addImpulse(gameFeel.config.feedback.tackleImpulse,player.index+game.stats.shots[0]*13); announce(`${player.name} đoạt bóng!`);
     }
+    publishCompatibilityEvent(GameEventType.TACKLE_RESOLVED, {
+      playerId: compatibilityPlayerId(player),
+      opponentId: compatibilityPlayerId(opponent),
+      success,
+      x: player.x + player.dirX * 14,
+      y: player.y + player.dirY * 14,
+      contextEnergy: .8,
+      audioPower: .3
+    });
   }
 
   function slideTackle(player) {
@@ -331,10 +429,6 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if(!runner)return;runner.vx=lerp(runner.vx,direction.x*220,.72);runner.vy=lerp(runner.vy,direction.y*220,.72);runner.controlBoost=.75;announce(`${runner.name} bắt đầu chạy chỗ!`);
   }
 
-  function beginAttackAction(code) {
-    if(input.actionStart)return;const q=input.keys.has(FO4_CONTROLS.teammateRun);if(q)input.qConsumed=true;input.actionCode=code;input.actionStart=performance.now();input.actionCharge=0;input.actionModifiers={q,z:input.keys.has(FO4_CONTROLS.finesse)};
-  }
-
   function executeAttackAction(code,charge,modifiers={}) {
     const player=game.selected;if(ball.owner!==player){input.bufferedAction={code,charge,modifiers,expires:performance.now()+280};return;}
     if(code===FO4_CONTROLS.shortPass)passBall(player,charge,modifiers.q);
@@ -343,19 +437,10 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     else if(code===FO4_CONTROLS.shoot)shootBall(player,charge,modifiers.q?"chip":modifiers.z?"finesse":"power");
   }
 
-  function finishAttackAction(code) {
-    if(input.actionCode!==code||!input.actionStart)return;const charge=Math.max(.08,input.actionCharge);const modifiers=input.actionModifiers||{};input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;executeAttackAction(code,charge,modifiers);
-  }
-
   function updateInput() {
-    let x = 0; let y = 0;
-    if (input.keys.has("ArrowLeft")) x -= 1;
-    if (input.keys.has("ArrowRight")) x += 1;
-    if (input.keys.has("ArrowUp")) y -= 1;
-    if (input.keys.has("ArrowDown")) y += 1;
-    const raw=Math.hypot(x,y);
-    if(raw<.1){input.moveX=0;input.moveY=0;input.magnitude=0;}else{const direction=normalize(x,y);input.moveX=direction.x;input.moveY=direction.y;input.magnitude=1;input.aimX=direction.x;input.aimY=direction.y;}
-    if (input.actionStart) input.actionCharge = clamp((performance.now() - input.actionStart) / 900, 0, 1);
+    const charge = browserInput?.activeCharge ?? null;
+    input.actionStart = charge ? Math.max(charge.startedAt, Number.EPSILON) : 0;
+    input.actionCharge = charge?.power ?? 0;
   }
 
   function moveToward(player, tx, ty, speed, dt) {
@@ -374,8 +459,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function updateUser(player, dt) {
-    const attacking=isAttacking();const sprinting=input.keys.has(FO4_CONTROLS.sprint);
-    const precision=input.keys.has(FO4_CONTROLS.shield);const marking=!attacking&&input.keys.has(FO4_CONTROLS.shoot);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
+    const attacking=isAttacking();const sprinting=isKeyPressed(FO4_CONTROLS.sprint);
+    const precision=isKeyPressed(FO4_CONTROLS.shield);const marking=!attacking&&isKeyPressed(FO4_CONTROLS.shoot);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
     if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
     const controlledLocomotion=locomotionConfig.controlled;const hasMove=controlMagnitude>controlledLocomotion.minimumMoveMagnitude;
     if(precision&&!attacking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const face=normalize(markTarget.x-player.x,markTarget.y-player.y);player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*20));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*20));}}
@@ -395,7 +480,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     const aiSpeed = 168 * (team === AWAY ? game.ai : .96);
 
     if (player.role === "GK") {
-      if(team===HOME&&controlMode()==="defense"&&input.keys.has(FO4_CONTROLS.throughBall)){moveToward(player,ball.x,ball.y,aiSpeed*1.34,dt);return;}
+      if(team===HOME&&controlMode()==="defense"&&isKeyPressed(FO4_CONTROLS.throughBall)){moveToward(player,ball.x,ball.y,aiSpeed*1.34,dt);return;}
       const gx=team===HOME?82:1118;const danger=team===HOME?ball.x<330:ball.x>870;const projectedY=clamp(projectedGoalY(team),FIELD.goalTop+18,FIELD.goalBottom-18);const shotIncoming=!ball.owner&&(team===HOME?ball.vx<0:ball.vx>0)&&Math.hypot(ball.vx,ball.vy)>360;
       if(shotIncoming&&danger&&Math.abs(projectedY-player.y)>24&&Math.abs(projectedY-player.y)<155&&player.diveCooldown<=0&&ball.height<3.1){
         triggerAnimation(player,"dive",.5,Math.sign(projectedY-player.y));player.diveCooldown=1.05;
@@ -403,7 +488,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
       const stepX=shotIncoming?(team===HOME?104:1096):gx;const targetY=shotIncoming?projectedY:clamp(ball.y,FIELD.goalTop+25,FIELD.goalBottom-25);moveToward(player,danger?stepX:gx,targetY,aiSpeed*(shotIncoming?1.04:.78),dt);
       if (hasBall && player.cooldown <= 0) {
         const target = players.find((p) => p.team === team && p.role === "DF");
-        releaseBall(player, target.x - player.x, target.y - player.y, 520, "pass"); player.cooldown = 1;
+        releaseBall(player, target.x - player.x, target.y - player.y, 520, "pass", { commandType: GameCommandType.SHORT_PASS, power: .35, style: "short", targetId: compatibilityPlayerId(target) })(); player.cooldown = 1;
       }
       return;
     }
@@ -421,7 +506,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     }
 
     const pressSupport=team===HOME?players.filter((candidate)=>candidate.team===HOME&&candidate.role!=="GK"&&candidate!==game.selected).sort((a,b)=>distance(a,ball)-distance(b,ball))[0]:null;
-    const teammatePress=team===HOME&&controlMode()==="defense"&&input.keys.has(FO4_CONTROLS.teammateRun)&&player===pressSupport;
+    const teammatePress=team===HOME&&controlMode()==="defense"&&isKeyPressed(FO4_CONTROLS.teammateRun)&&player===pressSupport;
     const shouldChase = (teamChaser === player||teammatePress) && (!ball.owner || ball.owner.team !== team);
     if (shouldChase) { moveToward(player, ball.x, ball.y, aiSpeed * 1.08, dt); return; }
 
@@ -465,7 +550,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
           const d=distance(player,ball);const eligibility=captureEligibility({distance:d,ballHeight:ball.height,ballSpeed:Math.hypot(ball.vx,ball.vy),locked:ball.lock>0,playerCooldown:player.cooldown,isGoalkeeper:player.role==="GK",isLastTouch:player===ball.lastTouch,config:ballControlConfig.capture});if(eligibility.eligible&&d<best){pickup=player;best=d;}
         }
         if (pickup) {
-          const ballSpeed=Math.hypot(ball.vx,ball.vy);const precision=pickup===game.selected&&input.keys.has(FO4_CONTROLS.shield);const score=firstTouchScore({ballSpeed,incomingX:ball.vx,incomingY:ball.vy,facingX:pickup.dirX,facingY:pickup.dirY,ballHeight:ball.height,playerSpeed:Math.hypot(pickup.vx,pickup.vy),rating:pickup.rating,precision,sprinting:pickup.sprinting,config:ballControlConfig.firstTouch,captureConfig:ballControlConfig.capture});const outcome=classifyFirstTouch(score,ballControlConfig.firstTouch);const touch=resolveFirstTouch({outcome,ballX:ball.x,ballY:ball.y,ballVx:ball.vx,ballVy:ball.vy,receiver:pickup});
+          const ballSpeed=Math.hypot(ball.vx,ball.vy);const precision=pickup===game.selected&&isKeyPressed(FO4_CONTROLS.shield);const score=firstTouchScore({ballSpeed,incomingX:ball.vx,incomingY:ball.vy,facingX:pickup.dirX,facingY:pickup.dirY,ballHeight:ball.height,playerSpeed:Math.hypot(pickup.vx,pickup.vy),rating:pickup.rating,precision,sprinting:pickup.sprinting,config:ballControlConfig.firstTouch,captureConfig:ballControlConfig.capture});const outcome=classifyFirstTouch(score,ballControlConfig.firstTouch);const touch=resolveFirstTouch({outcome,ballX:ball.x,ballY:ball.y,ballVx:ball.vx,ballVy:ball.vy,receiver:pickup});
           ball.x=touch.x;ball.y=touch.y;ball.vx=touch.vx;ball.vy=touch.vy;ball.lock=Math.max(ball.lock,touch.lock);
           if(touch.controls)setOwner(pickup,outcome,outcome==="cushioned"?{vx:touch.vx,vy:touch.vy}:null);else{ball.owner=null;ball.lastTouch=pickup;ball.possession=releasePossession(beginReceiving(ball.possession,possessionId(pickup)),outcome,possessionId(pickup));pickup.cooldown=Math.max(pickup.cooldown,touch.lock);triggerAnimation(pickup,"receive",outcome==="heavy"?.26:.18);}
         }
@@ -487,41 +572,35 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   function goal(team) {
     if (game.goalSequence) return;
     const scorer = ball.lastTouch?.team === team ? ball.lastTouch : closestPlayer(team, ball);
-    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.possession=releasePossession(ball.possession,"goal",possessionId(ball.owner));ball.owner = null; game.goalScorer = scorer; goalSound();
-    game.replay.frames = [...game.replay.buffer, captureReplayFrame()]; game.replay.active = game.replay.frames.length > 8; game.replay.elapsed = 0;
+    game.score[team] += 1; game.flash = 1; game.shake = 18; gameFeel.addImpulse(gameFeel.config.feedback.goalImpulse,game.score[0]*31+game.score[1]*47); ball.possession=releasePossession(ball.possession,"goal",possessionId(ball.owner));ball.owner = null; game.goalScorer = scorer;
+    game.replay.start(captureCompatibilitySnapshot());
     const goalDuration=reducedMotion?3.15:3.65; game.goalSequence = { team, nextTeam: team === HOME ? AWAY : HOME, timer: goalDuration, duration: goalDuration };
     for (const player of players) if (player.team === team) triggerAnimation(player, "celebrate", goalDuration, player === scorer ? 1 : .65);
-    for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
-    announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(team);
+    announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(captureCompatibilitySnapshot(), team);
     ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.toggle("show", game.replay.active);
-  }
-
-  function captureReplayFrame() {
-    return {
-      ball: { x: ball.x, y: ball.y, height:ball.height, angle: ball.angle, vx: ball.vx, vy: ball.vy, ownerId: possessionId(ball.owner), possession: { ...ball.possession }, trail: ball.trail.map((point)=>({x:point.x,y:point.y,height:point.height})) },
-      players: players.map((player) => ({ x: player.x, y: player.y, vx: player.vx, vy: player.vy, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: player.anim, animTime: player.animTime, animDuration: player.animDuration, animPower: player.animPower }))
-    };
-  }
-
-  function recordReplay(dt) {
-    game.replay.accumulator += dt;
-    if (game.replay.accumulator < 1 / 15) return;
-    game.replay.accumulator %= 1 / 15; game.replay.buffer.push(captureReplayFrame());
-    if (game.replay.buffer.length > 66) game.replay.buffer.shift();
+    publishCompatibilityEvent(GameEventType.SCORE_CHANGED, {
+      team,
+      scorerId: compatibilityPlayerId(scorer),
+      score: game.score.slice(),
+      replayAvailable: game.replay.active,
+      x: team === HOME ? FIELD.right : FIELD.left,
+      y: H / 2,
+      particleCount: 80,
+      particleColor: team === HOME ? "#e1bb58" : "#47c9d4",
+      particleEnergy: 3.5
+    });
+    if (game.replay.active) publishCompatibilityEvent(GameEventType.REPLAY_STARTED);
   }
 
   function updateReplay(dt) {
-    if (!game.replay.active) return;
-    game.replay.elapsed += dt;
-    if (game.replay.elapsed >= game.replay.duration) {
-      game.replay.active = false; ui.replayBadge.classList.remove("show");
+    if (game.replay.update(dt)) {
+      ui.replayBadge.classList.remove("show");
+      publishCompatibilityEvent(GameEventType.REPLAY_ENDED);
     }
   }
 
   function currentReplayFrame() {
-    if (!game.replay.active || !game.replay.frames.length) return null;
-    const progress = clamp(game.replay.elapsed / game.replay.duration, 0, .999);
-    return game.replay.frames[Math.floor(progress * game.replay.frames.length)];
+    return game.replay.currentSnapshot();
   }
 
   function spawnParticle(x, y, color, energy = 1) {
@@ -540,25 +619,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     game.particles = game.particles.filter((particle) => particle.life > 0);
   }
 
-  function updateCamera(dt) {
-    const camera = game.camera;
-    const config = cameraHudConfig.camera;
-    const active = game.state === "playing" || game.state === "paused";
-    const ballSpeed = Math.hypot(ball.vx, ball.vy);
-    camera.targetZoom = active ? cameraZoomForSpeed(ballSpeed, config) : config.baseZoom;
-    const frame = active ? cameraFrameTarget({
-      cameraX: camera.x, cameraY: camera.y, subjectX: ball.x, subjectY: ball.y,
-      velocityX: ball.vx, velocityY: ball.vy, worldWidth: W, worldHeight: H,
-      viewportWidth: W, viewportHeight: H, zoom: camera.targetZoom, config,
-    }) : { x: W / 2, y: H / 2 };
-    const followEase = 1 - Math.exp(-dt * config.followRate);
-    camera.x = lerp(camera.x, frame.x, followEase);
-    camera.y = lerp(camera.y, frame.y, followEase);
-    camera.zoom = lerp(camera.zoom, camera.targetZoom, 1 - Math.exp(-dt * config.zoomRate));
-  }
-
   function update(dt) {
-    updateInput(); updateParticles(dt); updateCamera(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
     for (const player of players) {
@@ -567,7 +629,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     }
     if (game.goalSequence) {
       game.goalSequence.timer -= dt;
-      if (game.goalSequence.timer <= 0) { const nextTeam = game.goalSequence.nextTeam; game.goalSequence = null; game.replay.active = false; ui.replayBadge.classList.remove("show"); kickoff(nextTeam); }
+      if (game.goalSequence.timer <= 0) { const nextTeam = game.goalSequence.nextTeam; game.goalSequence = null; game.replay.stop(); ui.replayBadge.classList.remove("show"); kickoff(nextTeam); }
       return;
     }
     if (game.kickOffTimer > 0) { game.kickOffTimer -= dt; return; }
@@ -582,7 +644,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
       player.stepPhase += dt * (.035 * Math.hypot(player.vx, player.vy) + 2.2);
       player.x += player.vx * dt; player.y += player.vy * dt; keepPlayerInBounds(player);
     }
-    resolvePlayerCollisions(); updateBall(dt); if (!game.goalSequence) recordReplay(dt);
+    resolvePlayerCollisions(); updateBall(dt); if (!game.goalSequence) recordReplaySnapshot = true;
     if (!ball.owner || ball.owner.team !== HOME) {
       const nearest = closestPlayer(HOME, ball, false); if (game.selected && distance(game.selected, ball) > distance(nearest, ball) + 145) game.selected = nearest;
     }
@@ -597,6 +659,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   function worldZ(value) { return (value - H / 2) * WORLD_SCALE; }
 
   function init3D() {
+    if (rendererPreference === "canvas") {
+      use3D = false;
+      ctx = canvas.getContext("2d");
+      setAssetStatus("warning", "CANVAS · FORCED FALLBACK", "Canvas fallback requested for deterministic validation");
+      return false;
+    }
     try {
       renderer3D = new THREE.WebGLRenderer({ canvas, antialias: lowPowerDevice, alpha: false, powerPreference: "high-performance" });
     } catch (error) {
@@ -877,13 +945,13 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     rig.model.rotation.x=lerp(rig.model.rotation.x,bodyPitch,1-Math.exp(-dt*18));rig.model.rotation.z=lerp(rig.model.rotation.z,bodyRoll,1-Math.exp(-dt*18));rig.model.position.y=lerp(rig.model.position.y,bodyDrop,1-Math.exp(-dt*20));
   }
 
-  function updateRigPlayer(player,pose,view,now,speed) {
-    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=player===game.selected&&controlMode()==="defense"&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&ball.owner?.team!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
+  function updateRigPlayer(player,pose,view,now,speed,renderFacts) {
+    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(renderFacts.ball.x-pose.x,renderFacts.ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=renderFacts.playerId===renderFacts.selectedPlayerId&&controlMode()==="defense"&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&renderFacts.ballOwnerTeam!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
     switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
     const actionProgress=pose.animDuration?clamp(1-pose.animTime/pose.animDuration,0,1):1;applyFootballActionPose(rig,pose,actionProgress,dt);
-    if(rig.active&&ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
+    if(rig.active&&renderFacts.ballOwnerId===renderFacts.playerId&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
     if(rig.active&&rig.head){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.active&&rig.spine){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
-    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&renderFacts.playerId===renderFacts.selectedPlayerId;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(renderFacts.playerId===renderFacts.selectedPlayerId||speed<10);
   }
 
   function cssColor(value) {return`#${value.toString(16).padStart(6,"0")}`;}
@@ -934,15 +1002,15 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     chargeView = new THREE.Group(); const bg=new THREE.Mesh(new THREE.BoxGeometry(5,.22,.28),new THREE.MeshBasicMaterial({color:0x080b0a,transparent:true,opacity:.8})); const fill=new THREE.Mesh(new THREE.BoxGeometry(4.8,.24,.3),new THREE.MeshBasicMaterial({color:0xffcf58,toneMapped:false})); fill.position.y=.02; fill.userData.baseWidth=4.8; chargeView.add(bg,fill); chargeView.userData.fill=fill; chargeView.visible=false; scene3D.add(chargeView);
   }
 
-  function updatePlayerView(player, now, pose = player) {
+  function updatePlayerView(player, now, pose, renderFacts) {
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
-    if(view.rig){updateRigPlayer(player,pose,view,now,speed);return;}
+    if(view.rig){updateRigPlayer(player,pose,view,now,speed,renderFacts);return;}
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
     const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=pose.motionYaw??webGLHeading(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025-(pose.turnLean||0)*.16; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
-    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&renderFacts.playerId===renderFacts.selectedPlayerId; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(renderFacts.playerId===renderFacts.selectedPlayerId||speed<10);
   }
 
   function updateParticleView() {
@@ -957,13 +1025,13 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     for(const net of goalNetViews){const elapsed=game.goalSequence?game.goalSequence.duration-game.goalSequence.timer:0;const impact=game.goalSequence?Math.sin(elapsed*22)*Math.exp(-elapsed*1.8):0;net.scale.x=1+Math.abs(impact)*.13;net.material.opacity=.34+Math.abs(impact)*.36;}
   }
 
-  function render3D(now) {
-    const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
-    players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
-    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
-    if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
-    const framedX=replayFrame?renderBall.x:game.camera.x;const framedY=replayFrame?renderBall.y:game.camera.y;
-    const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,game.camera.zoom);
+  function render3D(now, snapshot, renderState) {
+    const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||renderState.ball;const ballOwner=snapshot.players.find((player)=>player.id===snapshot.ball.ownerId)??null;
+    players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||renderState.players[index],{ball:renderBall,playerId:snapshot.players[index].id,selectedPlayerId:snapshot.match.selectedPlayerId,ballOwnerId:snapshot.ball.ownerId,ballOwnerTeam:ballOwner?.team??null}));
+    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||snapshot.ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
+    const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){chargeView.visible=true;chargeView.position.set(worldX(selectedPose.x),7.5,worldZ(selectedPose.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
+    const cameraState=cameraController.state;const framedX=replayFrame?renderBall.x:cameraState.x;const framedY=replayFrame?renderBall.y:cameraState.y;
+    const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,cameraState.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
     else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,(lowPowerDevice?66:60)*zoomScale,30*zoomScale+targetZ*.04);cameraLook.set(targetX,0,targetZ);}
@@ -971,13 +1039,13 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     else{cameraTarget.set(targetX,(lowPowerDevice?54:47)*zoomScale,(lowPowerDevice?66:57)*zoomScale+targetZ*.06);cameraLook.set(targetX,.7,targetZ);}
     const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
-    screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); drawRadar();
+    screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); renderRadarSnapshot(rctx,snapshot,{width:radar.width,height:radar.height,field:FIELD,config:cameraHudConfig.radar});
   }
 
-  function drawFallbackPlayerDetail(player,pose,replayFrame) {
-    const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
+  function drawFallbackPlayerDetail(player,pose,replayFrame,selectedPlayerId) {
+    const selected=!replayFrame&&pose.id===selectedPlayerId; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
-    if(selected){ctx.strokeStyle=!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
+    if(selected){ctx.strokeStyle=!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
     ctx.rotate(canvasHeading(pose.dirX,pose.dirY));ctx.lineCap="round";
     ctx.strokeStyle=sock;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-6,10);ctx.lineTo(-7+stride,25);ctx.moveTo(6,10);ctx.lineTo(7-stride,25);ctx.stroke();ctx.strokeStyle="#191c1b";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-10+stride,26);ctx.lineTo(-5+stride,26);ctx.moveTo(3-stride,26);ctx.lineTo(10-stride,26);ctx.stroke();
     ctx.fillStyle=shorts;ctx.beginPath();ctx.roundRect(-11,4,22,12,4);ctx.fill();ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(-13,-15,26,22,7);ctx.fill();ctx.fillStyle=home?"#161b19":"#e4f5f3";ctx.fillRect(-12,-5,24,3);
@@ -986,18 +1054,18 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     ctx.fillStyle=home?"#101413":"#f0fbfa";ctx.font="800 11px Barlow Condensed";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(player.number,0,-1);ctx.restore();
   }
 
-  function renderFallback2D(now) {
-    const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||ball;
+  function renderFallback2D(now, snapshot, renderState) {
+    const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||renderState.ball;
     const pitchTheme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;const ballTheme=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ctx.clearRect(0,0,W,H);ctx.fillStyle=pitchTheme.outside;ctx.fillRect(0,0,W,H);ctx.fillStyle=pitchTheme.mid;ctx.fillRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);for(let i=0;i<90;i+=1){const edge=i%4;const x=edge<2?seededNoise(i*3.1)*W:(edge===2?18:W-18);const y=edge<2?(edge===0?18:H-18):seededNoise(i*5.7)*H;ctx.fillStyle=i%9===0?"rgba(225,187,88,.65)":i%7===0?"rgba(71,201,212,.55)":"rgba(218,229,223,.24)";ctx.fillRect(x,y,2.4,2.4);}
     for(let i=0;i<14;i+=1){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,20,8,.04)";ctx.fillRect(FIELD.left+i*(FIELD.right-FIELD.left)/14,FIELD.top,(FIELD.right-FIELD.left)/14,FIELD.bottom-FIELD.top);}
     ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();for(const [x,y,s] of [[FIELD.left,FIELD.top,1],[FIELD.right,FIELD.top,-1],[FIELD.left,FIELD.bottom,1],[FIELD.right,FIELD.bottom,-1]]){ctx.strokeStyle="#eef3f0";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-18*(y<H/2?1:-1));ctx.stroke();ctx.fillStyle=s>0?"#e1bb58":"#47c9d4";ctx.beginPath();ctx.moveTo(x,y-18*(y<H/2?1:-1));ctx.lineTo(x+s*12,y-13*(y<H/2?1:-1));ctx.lineTo(x,y-8*(y<H/2?1:-1));ctx.fill();}
-    const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||player})).sort((a,b)=>a.pose.y-b.pose.y);
-    for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame);
-    ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
+    const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||renderState.players[index]})).sort((a,b)=>a.pose.y-b.pose.y);
+    for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame,snapshot.match.selectedPlayerId);
+    ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,fallbackBall.radius??snapshot.ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
     for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
     if(game.weather==="rain"){ctx.fillStyle="rgba(135,190,196,.055)";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(195,235,242,.32)";ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<(lowPowerDevice?60:140);i+=1){const x=(seededNoise(i*3.7)*W+now*.11)%W;const y=(seededNoise(i*8.9)*H+now*.34*(.7+seededNoise(i)))%H;ctx.moveTo(x,y);ctx.lineTo(x-5,y+17);}ctx.stroke();}
-    if(input.actionStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.actionCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.actionCharge,6);}
-    if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}drawRadar();
+    const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(selectedPose.x-31,selectedPose.y-50,62,8);ctx.fillStyle=input.actionCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(selectedPose.x-30,selectedPose.y-49,60*input.actionCharge,6);}
+    if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}renderRadarSnapshot(rctx,snapshot,{width:radar.width,height:radar.height,field:FIELD,config:cameraHudConfig.radar});
   }
 
   function drawPitch() {
@@ -1167,27 +1235,16 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     }
   }
 
-  function render(now) {
-    if (use3D) render3D(now); else renderFallback2D(now);
+  function render(now, snapshot, renderState) {
+    if (use3D) render3D(now, snapshot, renderState); else renderFallback2D(now, snapshot, renderState);
   }
 
-  function drawRadar() {
-    const config=cameraHudConfig.radar;const rw=radar.width;const rh=radar.height;const pad=config.plotPadding;const plotW=rw-pad*2;const plotH=rh-pad*2;
-    const mapX=(value)=>pad+clamp((value-FIELD.left)/(FIELD.right-FIELD.left),0,1)*plotW;
-    const mapY=(value)=>pad+clamp((value-FIELD.top)/(FIELD.bottom-FIELD.top),0,1)*plotH;
-    rctx.clearRect(0,0,rw,rh);rctx.fillStyle="#062d1e";rctx.fillRect(0,0,rw,rh);
-    rctx.strokeStyle="rgba(236,248,241,.5)";rctx.lineWidth=1;rctx.strokeRect(pad,pad,plotW,plotH);rctx.beginPath();rctx.moveTo(rw/2,pad);rctx.lineTo(rw/2,rh-pad);rctx.stroke();
-    rctx.beginPath();rctx.arc(rw/2,rh/2,Math.min(plotW,plotH)*.13,0,Math.PI*2);rctx.stroke();
-    for(const player of players){const x=mapX(player.x);const y=mapY(player.y);const selected=player===game.selected;const radius=selected?config.selectedRadius:config.playerRadius;rctx.fillStyle=player.team===HOME?"#f0c85d":"#55d5df";rctx.beginPath();rctx.arc(x,y,radius,0,Math.PI*2);rctx.fill();if(selected){rctx.strokeStyle="#fff3bd";rctx.lineWidth=1.7;rctx.beginPath();rctx.arc(x,y,radius+2.2,0,Math.PI*2);rctx.stroke();}}
-    const bx=mapX(ball.x);const by=mapY(ball.y);rctx.fillStyle="#ffffff";rctx.strokeStyle="#101615";rctx.lineWidth=2;rctx.beginPath();rctx.arc(bx,by,config.ballRadius,0,Math.PI*2);rctx.fill();rctx.stroke();
-  }
-
-  function updateUI(scoringTeam = null) {
-    const elapsed = MATCH_SECONDS - game.time; const matchMinute = Math.min(90, Math.floor(elapsed / MATCH_SECONDS * 90)); const seconds = Math.floor((elapsed / MATCH_SECONDS * 90 - matchMinute) * 60);
-    ui.gameClock.textContent = `${String(matchMinute).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
-    ui.homeScore.textContent = game.score[HOME]; ui.awayScore.textContent = game.score[AWAY];
-    const player = game.selected; if (player) {
-      const selectedKey=`${player.team}:${player.index}`;
+  function updateUI(snapshot, scoringTeam = null) {
+    const hud = createHudSnapshotProjection(snapshot);
+    ui.gameClock.textContent = hud.clock;
+    ui.homeScore.textContent = hud.score[HOME]; ui.awayScore.textContent = hud.score[AWAY];
+    const player = hud.selectedPlayer; if (player) {
+      const selectedKey=player.id;
       if(game.hud.selectedKey&&game.hud.selectedKey!==selectedKey&&ui.playerCard){
         ui.playerCard.classList.remove("player-change");void ui.playerCard.offsetWidth;ui.playerCard.classList.add("player-change");
         clearTimeout(game.hud.playerChangeTimer);game.hud.playerChangeTimer=setTimeout(()=>ui.playerCard?.classList.remove("player-change"),320);
@@ -1198,13 +1255,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
       const lowStamina=player.stamina<25;ui.playerCard?.classList.toggle("low-stamina",lowStamina);
       ui.staminaBar.style.background = lowStamina ? "linear-gradient(90deg,#b63f35,#ff8c78)" : "linear-gradient(90deg,#b78a2f,#ffdc78)";
     }
-    const onboardingElapsed=MATCH_SECONDS-game.time;const hintsActive=Boolean(input.actionStart||input.magnitude>.05||game.state!=="playing");
+    const onboardingElapsed=hud.elapsed;const hintsActive=Boolean(input.actionStart||input.magnitude>.05||hud.state!=="playing");
     ui.controlsCard?.classList.toggle("hints-dimmed",onboardingElapsed>18&&!hintsActive);
     ui.controlsCard?.classList.toggle("hints-active",hintsActive);
-    const totalPossession = game.stats.possession[0] + game.stats.possession[1]; const homePossession = totalPossession ? Math.round(game.stats.possession[0] / totalPossession * 100) : 50;
-    ui.possessionStat.textContent = `${homePossession}%`; ui.possessionBar.style.width = `${homePossession}%`;
-    ui.homeShots.textContent = game.stats.shots[HOME]; ui.awayShots.textContent = game.stats.shots[AWAY];
-    ui.passStat.textContent = `${game.stats.passes ? Math.round(game.stats.completed / game.stats.passes * 100) : 0}%`;
+    ui.possessionStat.textContent = `${hud.homePossession}%`; ui.possessionBar.style.width = `${hud.homePossession}%`;
+    ui.homeShots.textContent = hud.shots[HOME]; ui.awayShots.textContent = hud.shots[AWAY];
+    ui.passStat.textContent = `${hud.passAccuracy}%`;
     const mode=controlMode();if(ui.controlsMode?.dataset.mode!==mode){ui.controlsMode.dataset.mode=mode;ui.controlsMode.textContent=mode==="attack"?"TẤN CÔNG":"PHÒNG THỦ";ui.controlsCard?.classList.toggle("defense",mode==="defense");document.querySelectorAll("[data-attack][data-defense]").forEach((label)=>{label.textContent=label.dataset[mode];});}
     if (scoringTeam !== null) {
       const score = scoringTeam === HOME ? ui.homeScore : ui.awayScore;
@@ -1236,15 +1292,35 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   function whistle(long = false) { if(!audioFeedback.canPlay("whistle",audioNow()))return;tone(1450,long?.5:.25,"sine",.03);tone(1750,long?.42:.18,"sine",.02,.08); }
   function goalSound() { if(!audioFeedback.canPlay("goal",audioNow()))return;[392,523,659,784].forEach((note,index)=>tone(note,.42,"square",.025,index*.09)); }
 
+  createBrowserPresentationFeedbackAdapter({
+    target: window,
+    onKick: kickSound,
+    onWhistle: whistle,
+    onGoal: goalSound,
+    onParticles: ({ x, y, particleCount = 0, particleColor = "#f4f7f5", particleEnergy = 1 }) => {
+      for (let index = 0; index < particleCount; index += 1) spawnParticle(x, y, particleColor, particleEnergy);
+    },
+    onContextParticles: ({ x, y, contextX = x, contextY = y, contextEnergy = 1 }) => {
+      spawnContextParticles(contextX, contextY, contextEnergy);
+    }
+  });
+
   function simulationStep(dt) {
+    recordReplaySnapshot = false;
+    if (compatibilitySnapshots.snapshot) cameraController.update(compatibilitySnapshots.snapshot, dt);
+    compatibilityTick += 1;
     update(dt);
     if (game.messageTimer > 0) game.messageTimer -= dt;
+    const snapshot = captureCompatibilitySnapshot();
+    if (recordReplaySnapshot) game.replay.record(snapshot, dt);
   }
 
-  function renderFrame(_alpha, now) {
-    render(now);
+  function renderFrame(alpha, now) {
+    const frame = compatibilitySnapshots.createRenderFrame(alpha);
+    lastSnapshotRenderState = createSnapshotRenderState(frame);
+    render(now, frame.current, lastSnapshotRenderState);
     if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
-    updateUI();
+    updateUI(frame.current);
   }
 
   const simulationLoop = createSimulationLoop({
@@ -1253,26 +1329,68 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     clockOptions: gameplayConfig.simulation,
   });
 
-  function onKeyDown(event) {
-    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
-    if (event.repeat && [FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass,FO4_CONTROLS.teammateRun,FO4_CONTROLS.tackle,FO4_CONTROLS.camera,"Escape"].includes(event.code)) return;
-    input.keys.add(event.code);
-    if (event.code === "Escape") togglePause();
-    if (game.state !== "playing") return;
-    if(event.shiftKey&&event.code.startsWith("Arrow")){switchPlayerInDirection(event.code);return;}
-    const attacking=isAttacking();
-    if(attacking&&[FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass].includes(event.code))beginAttackAction(event.code);
-    if(!attacking&&event.code===FO4_CONTROLS.shortPass)switchPlayer();
-    if(!attacking&&event.code===FO4_CONTROLS.loftPass)slideTackle(game.selected);
-    if(!attacking&&event.code===FO4_CONTROLS.tackle)tackle(game.selected);
-    if(attacking&&event.code===FO4_CONTROLS.teammateRun){input.qTapStart=performance.now();input.qConsumed=false;}
-    if(event.code===FO4_CONTROLS.camera)cycleCamera();
+  function applyCompatibilityCommand(command) {
+    if (command.type === GameCommandType.MOVE) {
+      input.moveX = command.payload.x; input.moveY = command.payload.y; input.magnitude = Math.hypot(input.moveX, input.moveY);
+      if (input.magnitude > .1) { input.aimX = input.moveX; input.aimY = input.moveY; }
+      return;
+    }
+    if (command.type === GameCommandType.SWITCH_PLAYER) switchPlayer();
+    else if (command.type === GameCommandType.SWITCH_PLAYER_DIRECTION) {
+      const { x, y } = command.payload.direction;
+      const code = Math.abs(x) > Math.abs(y) ? (x < 0 ? "ArrowLeft" : "ArrowRight") : (y < 0 ? "ArrowUp" : "ArrowDown");
+      switchPlayerInDirection(code);
+    } else if (command.type === GameCommandType.TACKLE) tackle(game.selected);
+    else if (command.type === GameCommandType.SLIDE_TACKLE) slideTackle(game.selected);
+    else if (command.type === GameCommandType.TRIGGER_TEAMMATE_RUN) triggerTeammateRun();
+    else if ([GameCommandType.SHORT_PASS,GameCommandType.THROUGH_BALL,GameCommandType.LOFTED_PASS,GameCommandType.SHOOT].includes(command.type)) {
+      const actionCode = {
+        [GameCommandType.SHORT_PASS]: FO4_CONTROLS.shortPass,
+        [GameCommandType.THROUGH_BALL]: FO4_CONTROLS.throughBall,
+        [GameCommandType.LOFTED_PASS]: FO4_CONTROLS.loftPass,
+        [GameCommandType.SHOOT]: FO4_CONTROLS.shoot
+      }[command.type];
+      const modifiers = command.payload.modifiers ?? {};
+      executeAttackAction(actionCode, command.payload.power, {
+        q: Boolean(modifiers.oneTwo || modifiers.chip),
+        z: Boolean(modifiers.finesse)
+      });
+    } else if (command.type === GameCommandType.START_MATCH) {
+      startMatch(); publishCompatibilityEvent(GameEventType.MATCH_STARTED);
+    } else if (command.type === GameCommandType.RESTART_MATCH) {
+      startMatch(); publishCompatibilityEvent(GameEventType.MATCH_RESTARTED);
+    } else if (command.type === GameCommandType.PAUSE_MATCH) {
+      togglePause(true); publishCompatibilityEvent(GameEventType.MATCH_PAUSED);
+    } else if (command.type === GameCommandType.RESUME_MATCH) {
+      togglePause(false); publishCompatibilityEvent(GameEventType.MATCH_RESUMED);
+    }
   }
-  function onKeyUp(event) {
-    input.keys.delete(event.code);
-    if([FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass].includes(event.code)){if(controlMode()==="attack")finishAttackAction(event.code);else{input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;}}
-    if(event.code===FO4_CONTROLS.teammateRun){if(controlMode()==="attack"&&input.qTapStart&&!input.qConsumed)triggerTeammateRun();input.qTapStart=0;input.qConsumed=false;}
-  }
+
+  const applicationRuntime = new ApplicationRuntime({
+    dispatchGameCommand: applyCompatibilityCommand,
+    getMatchState: () => game.state,
+    onNavigation: (action) => {
+      if (action.type === ApplicationActionType.OPEN_MATCH_SETUP) showMatchSetup({ reset: true });
+      if (action.type === ApplicationActionType.OPEN_MAIN_MENU) showMainMenu();
+    }
+  });
+
+  browserInput = new BrowserInputAdapter({
+    target: window,
+    onCommand: applyCompatibilityCommand,
+    onApplicationRequest: (type) => applicationRuntime.request(type),
+    onCameraCycle: cycleCamera,
+    getControlMode: controlMode,
+    getMatchState: () => game.state
+  });
+  browserInput.attach();
+
+  const browserApplication = new BrowserApplicationAdapter({
+    target: window,
+    document,
+    runtime: applicationRuntime
+  });
+  browserApplication.attach();
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll("[data-difficulty]").forEach((item) => item.classList.remove("active")); button.classList.add("active");
@@ -1282,21 +1400,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   document.querySelectorAll("[data-ball]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-ball]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.ballStyle=button.dataset.ball;savePreference("tfBall",game.ballStyle);applyBallStyle();tone(680,.04,"sine",.018);}));
   document.querySelectorAll("[data-weather]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-weather]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.weather=button.dataset.weather;savePreference("tfWeather",game.weather);applyPitchStyle();tone(game.weather==="rain"?330:560,.05,"sine",.018);}));
   document.querySelectorAll("[data-pitch]").forEach((button)=>button.classList.toggle("active",button.dataset.pitch===game.pitchStyle));document.querySelectorAll("[data-ball]").forEach((button)=>button.classList.toggle("active",button.dataset.ball===game.ballStyle));document.querySelectorAll("[data-weather]").forEach((button)=>button.classList.toggle("active",button.dataset.weather===game.weather));
-  $("playButton").addEventListener("click", startMatch);
-  $("pauseButton").addEventListener("click", () => togglePause());
-  $("resumeButton").addEventListener("click", () => togglePause(false));
-  $("restartButton").addEventListener("click", startMatch);
-  $("setupButton").addEventListener("click", () => showMatchSetup({ reset: true }));
-  $("mainMenuButton").addEventListener("click", showMainMenu);
-  $("playAgainButton").addEventListener("click", startMatch);
   $("soundButton").addEventListener("click", () => { game.sound=!game.sound;$("soundButton").classList.toggle("muted",!game.sound);$("soundButton").setAttribute("aria-label",game.sound?"Tắt âm thanh":"Bật âm thanh");if(game.sound)tone(600,.08); });
-  window.addEventListener("keydown", onKeyDown, { passive: false }); window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", () => { input.keys.clear();input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;input.bufferedAction=null;input.qTapStart=0;input.qConsumed=false;if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
   function applyDebugScenario(name = "normal-play") {
     if (game.state !== "playing") startMatch();
-    game.replay.active = false; game.replay.frames.length = 0; ui.replayBadge.classList.remove("show");
+    game.replay.reset(); ui.replayBadge.classList.remove("show");
     ball.owner = null; ball.vx = 0; ball.vy = 0; ball.height = 0; ball.vz = 0; ball.lock = 0;
     const selected = game.selected || players.find((player) => player.team === HOME && player.role !== "GK");
     if (selected) { selected.stamina = 100; game.selected = selected; }
@@ -1308,35 +1417,50 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     } else if (name === "low-stamina") {
       if (selected) selected.stamina = 18; ball.x = selected?.x ?? W / 2; ball.y = selected?.y ?? H / 2;
     } else if (name === "replay") {
-      game.replay.frames = Array.from({ length: 24 }, (_, index) => ({
-        ball: { x: 430 + index * 10, y: 350, height: 0, angle: 0, vx: 150, vy: 0, trail: [] },
-        players: players.map((player) => ({ x: player.x, y: player.y, vx: 0, vy: 0, dirX: player.dirX, dirY: player.dirY, stepPhase: player.stepPhase, anim: "idle", animTime: 0, animDuration: 1, animPower: 0 })),
-      }));
-      game.replay.active = true; game.replay.elapsed = 0; ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.add("show");
+      const baseSnapshot = captureCompatibilitySnapshot();
+      game.replay.loadFrames(Array.from({ length: 24 }, (_, index) => Object.freeze({
+        ...baseSnapshot,
+        ball: Object.freeze({ ...baseSnapshot.ball, x: 430 + index * 10, y: 350, height: 0, angle: 0, vx: 150, vy: 0, trail: Object.freeze([]) })
+      })));
+      ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.add("show");
     }
-    updateCamera(1 / 60); updateUI();
+    const scenarioSnapshot = captureCompatibilitySnapshot(); cameraController.update(scenarioSnapshot, 1 / 60); updateUI(scenarioSnapshot);
     if (name !== "normal-play") {
       game.state = "paused";
       ui.pause.classList.remove("show");
-      input.keys.clear();
+      browserInput.reset({ requestPause: false });
     }
   }
 
   window.__TONY_DEBUG__ = {
     ready: false,
     applyScenario: applyDebugScenario,
+    emitGameEvent: (type, payload = {}) => publishCompatibilityEvent(type, payload),
     diagnostics: () => ({
-      camera: { ...game.camera },
+      camera: { ...cameraController.state },
       ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
       state: game.state,
       replay: game.replay.active,
       renderer: use3D ? "webgl" : "canvas",
       visualTestMode,
       selectedStamina: game.selected?.stamina ?? null,
+      snapshot: compatibilitySnapshots.snapshot ? {
+        tick: compatibilitySnapshots.snapshot.tick,
+        selectedPlayerId: compatibilitySnapshots.snapshot.match.selectedPlayerId,
+        score: [...compatibilitySnapshots.snapshot.match.score]
+      } : null,
+      renderState: lastSnapshotRenderState ? {
+        previousTick: lastSnapshotRenderState.previousTick,
+        currentTick: lastSnapshotRenderState.currentTick,
+        alpha: lastSnapshotRenderState.alpha,
+        selectedPlayerId: compatibilitySnapshots.snapshot?.match.selectedPlayerId ?? null,
+        selectedX: lastSnapshotRenderState.players.find((player)=>player.id===compatibilitySnapshots.snapshot?.match.selectedPlayerId)?.x ?? null,
+        ballX: lastSnapshotRenderState.ball.x
+      } : null,
     }),
   };
 
-  init3D(); createTeams(); updateUI(); simulationLoop.start();
+  init3D(); createTeams(); updateUI(captureCompatibilitySnapshot()); simulationLoop.start();
   const debugScenario = new URLSearchParams(location.search).get("debugScenario");
   if (debugScenario) applyDebugScenario(debugScenario);
   window.__TONY_DEBUG__.ready = true;

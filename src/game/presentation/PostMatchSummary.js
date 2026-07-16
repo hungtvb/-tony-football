@@ -47,3 +47,21 @@ export function createPostMatchSummary({
     passAccuracy: accuracy,
   });
 }
+
+export function createPostMatchSummaryFromMatchEvent({ score = [0, 0], stats = {} } = {}) {
+  const possession = Array.isArray(stats.possession) ? stats.possession : [0, 0];
+  const possessionTotal = Math.max(0, numberOr(possession[0])) + Math.max(0, numberOr(possession[1]));
+  const homePossession = possessionTotal > 0
+    ? Math.round(Math.max(0, numberOr(possession[0])) / possessionTotal * 100)
+    : 50;
+  const passes = Math.max(0, numberOr(stats.passes));
+  const completed = Math.max(0, numberOr(stats.completed));
+  return createPostMatchSummary({
+    homeScore: score[0],
+    awayScore: score[1],
+    homePossession,
+    homeShots: stats.shots?.[0],
+    awayShots: stats.shots?.[1],
+    passAccuracy: passes > 0 ? Math.round(completed / passes * 100) : 0
+  });
+}

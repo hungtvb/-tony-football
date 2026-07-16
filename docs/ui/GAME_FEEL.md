@@ -32,12 +32,14 @@
 - Rain overrides pitch context and uses splash palettes.
 - Burst counts scale down on low-power and reduced-motion devices.
 - Active particles always respect the central particle budget.
+- Kick, tackle, and score events carry effect position/intensity facts; gameplay actions never call particle implementations directly.
 
 ## Goal and replay
 
 - Goal feedback uses score emphasis, crowd/stadium pulse, camera impulse, flash, and the existing replay flow.
 - Reduced-motion uses a shorter goal sequence and restrained pulse.
-- Replay timing and football simulation remain authoritative outside presentation controllers.
+- `SnapshotReplayController` samples immutable match snapshots at 15 FPS, retains at most 66 history frames plus the final goal frame, and preserves the 3.05-second playback window.
+- Replay playback is presentation-only and never writes recorded positions back into simulation.
 
 ## Audio
 
@@ -45,6 +47,7 @@
 - Kick, whistle, and goal channels use cooldowns to avoid stacking.
 - Kick tone profile scales with power.
 - Muting silences all presentation audio.
+- Kick, goal, start/restart, and full-time audio is projected from immutable gameplay/lifecycle events by `BrowserPresentationFeedbackAdapter`.
 
 ## Performance
 
@@ -56,4 +59,4 @@
 
 ## Validation
 
-Automated tests cover camera easing, impulse behavior, flash decay, trail policy, WebGL trail buffers, shadow scaling, device budgets, audio cooldowns, and contextual particle selection. Manual browser validation remains required before merge.
+Automated tests cover snapshot camera framing, immutable replay sampling/playback, event-to-feedback projection, camera easing, impulse behavior, flash decay, trail policy, WebGL trail buffers, shadow scaling, device budgets, audio cooldowns, and contextual particle selection. Manual browser validation remains required before merge.

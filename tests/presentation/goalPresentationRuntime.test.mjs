@@ -14,11 +14,13 @@ test("main menu loads goal presentation beside match intro", () => {
 });
 
 
-test("goal presentation observes score increases without owning gameplay", () => {
-  assert.match(goalFlow, /new MutationObserver\(detectScoreChange\)/);
-  assert.match(goalFlow, /nextScores\[0\] > observedScores\[0\]/);
-  assert.match(goalFlow, /nextScores\[1\] > observedScores\[1\]/);
-  assert.match(goalFlow, /document\.body\.dataset\.flow/);
+test("goal presentation consumes explicit game events without owning gameplay", () => {
+  assert.match(goalFlow, /subscribeToGameEvents\(window/);
+  assert.match(goalFlow, /GameEventType\.SCORE_CHANGED/);
+  assert.match(goalFlow, /GameEventType\.REPLAY_STARTED/);
+  assert.match(goalFlow, /GameEventType\.REPLAY_ENDED/);
+  assert.doesNotMatch(goalFlow, /MutationObserver/);
+  assert.doesNotMatch(goalFlow, /homeScore|awayScore|replayBadge/);
   assert.doesNotMatch(goalFlow, /game\.score/);
   assert.doesNotMatch(goalFlow, /kickoff\(/);
 });
@@ -38,8 +40,8 @@ test("goal card starts after native highlight and clears before native replay", 
   assert.match(goalFlow, /leadIn: 460, goal: 500, score: 380, replayMax: 1800/);
   assert.match(goalFlow, /setTimelinePhase\("native-highlight"\)/);
   assert.match(goalFlow, /await wait\(timings\.leadIn, token\)/);
-  assert.match(goalFlow, /setVisible\(false\);\n    if \(replay\)/);
-  assert.match(goalFlow, /waitForNativeReplayEnd/);
+  assert.match(goalFlow, /setVisible\(false\);\n    const shouldReplay = replaySeenForGoal;\n    if \(shouldReplay\)/);
+  assert.match(goalFlow, /waitForReplayEnd/);
   assert.match(goalFlow, /setTimelinePhase\("native-replay"\)/);
   assert.match(goalFlow, /timelineHistory: timelineHistory\.map/);
 });

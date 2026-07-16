@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
+const cameraController = await readFile(new URL("../../src/game/presentation/SnapshotCameraController.js", import.meta.url), "utf8");
+const radarRenderer = await readFile(new URL("../../src/game/presentation/RadarSnapshotRenderer.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../../u3-camera-hud.css", import.meta.url), "utf8");
 
@@ -22,32 +24,35 @@ function sourceBetween(startMarker, endMarker) {
   return game.slice(start, end);
 }
 
-test("runtime imports shared camera framing policy", () => {
+test("runtime delegates shared framing policy to the snapshot camera controller", () => {
   assert.match(game, /cameraHudConfig/);
-  assert.match(game, /cameraFrameTarget/);
-  assert.match(game, /cameraZoomForSpeed/);
+  assert.match(game, /createSnapshotCameraController/);
+  assert.match(cameraController, /cameraFrameTarget/);
+  assert.match(cameraController, /cameraZoomForSpeed/);
 });
 
-test("camera runtime removes the legacy speed zoom-in formula", () => {
-  const source = functionSource("updateCamera", "update");
-  assert.doesNotMatch(source, /1\.025 \+ ballSpeed \/ 9000/);
-  assert.match(source, /cameraZoomForSpeed/);
-  assert.match(source, /cameraFrameTarget/);
+test("snapshot camera controller removes the legacy speed zoom-in formula", () => {
+  assert.doesNotMatch(cameraController, /1\.025 \+ ballSpeed \/ 9000/);
+  assert.match(cameraController, /snapshot\.ball/);
+  assert.match(cameraController, /cameraZoomForSpeed/);
+  assert.match(cameraController, /cameraFrameTarget/);
 });
 
 test("WebGL broadcast camera consumes the framed camera target", () => {
   const source = functionSource("render3D", "drawFallbackPlayerDetail");
-  assert.match(source, /game\.camera\.x/);
-  assert.match(source, /game\.camera\.y/);
+  assert.match(source, /cameraController\.state/);
+  assert.match(source, /cameraState\.x/);
+  assert.match(source, /cameraState\.y/);
   assert.match(source, /zoomScale/);
 });
 
 test("radar plot contains no text rendering and uses configured markers", () => {
-  const source = functionSource("drawRadar", "updateUI");
-  assert.doesNotMatch(source, /fillText/);
-  assert.match(source, /cameraHudConfig\.radar/);
-  assert.match(source, /selectedRadius/);
-  assert.match(source, /ballRadius/);
+  assert.doesNotMatch(radarRenderer, /fillText/);
+  assert.match(radarRenderer, /snapshot\.match\.selectedPlayerId/);
+  assert.match(radarRenderer, /selectedRadius/);
+  assert.match(radarRenderer, /ballRadius/);
+  assert.match(game, /renderRadarSnapshot\(rctx,snapshot/);
+  assert.doesNotMatch(game, /function drawRadar/);
 });
 
 test("U3 HUD stylesheet is loaded after U1 and reserves a desktop toast gap above radar", () => {

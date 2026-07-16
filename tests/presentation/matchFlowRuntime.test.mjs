@@ -5,6 +5,7 @@ import test from "node:test";
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const menuFlow = await readFile(new URL("../../src/game/presentation/MainMenuFlow.js", import.meta.url), "utf8");
+const browserApplication = await readFile(new URL("../../src/game/application/BrowserApplicationAdapter.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../../u3-match-flow.css", import.meta.url), "utf8");
 
 test("pause menu exposes setup and main menu navigation", () => {
@@ -42,10 +43,11 @@ test("main menu flow toggles overlays instead of aliasing setup", () => {
 });
 
 test("pause navigation buttons are wired", () => {
-  assert.match(game, /\$\("setupButton"\)\.addEventListener/);
-  assert.match(game, /\$\("mainMenuButton"\)\.addEventListener/);
-  assert.match(menuFlow, /setupButton\?\.addEventListener/);
-  assert.match(menuFlow, /mainMenuButton\?\.addEventListener/);
+  assert.match(browserApplication, /setupButton: ApplicationActionType\.OPEN_MATCH_SETUP/);
+  assert.match(browserApplication, /mainMenuButton: ApplicationActionType\.OPEN_MAIN_MENU/);
+  assert.match(menuFlow, /APPLICATION_HANDLED_EVENT/);
+  assert.match(menuFlow, /ApplicationActionType\.OPEN_MATCH_SETUP/);
+  assert.match(menuFlow, /ApplicationActionType\.OPEN_MAIN_MENU/);
 });
 
 test("debug scenarios bypass menu overlays for visual validation", () => {

@@ -1,9 +1,9 @@
 # Architecture
 
 ## Current constraint
-Gameplay, AI, rendering, input, animation, replay, UI, and asset loading are concentrated in `game.js`.
+Gameplay, AI, rendering, animation, replay, much of the UI projection, and asset loading are concentrated in `game.js`.
 
-The fixed 60 Hz clock and several gameplay/presentation helpers are already extracted, but authoritative state, browser input, Three.js objects, Canvas rendering, DOM state, match lifecycle, and presentation integration still share one runtime closure. R1 is the approved sprint that establishes the enforceable boundary; it does not replace the existing fixed-timestep work.
+The fixed 60 Hz clock, browser input, application actions, engine contracts, and several gameplay/presentation helpers are extracted. Goal, replay, match-ended, kick, tackle, and lifecycle presentation facts cross an immutable browser event bridge. The compatibility runtime publishes previous/current immutable snapshots; pure presentation controllers derive interpolated entity transforms, camera framing, HUD/radar facts, and replay playback from those snapshots. Authoritative compatibility gameplay state and the remaining Three.js, Canvas, DOM, audio, and particle callback implementations still share one runtime closure. R1 is the approved sprint that establishes the enforceable boundary; it does not replace the existing fixed-timestep work.
 
 Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
 
@@ -29,10 +29,12 @@ Core has no DOM or Three.js dependency. Renderers and UI read authoritative stat
 
 - Browser input adapters translate keyboard state into immutable gameplay commands.
 - `MatchEngine` consumes commands only on fixed simulation ticks.
+- Commands with a future `targetTick` remain buffered until that tick is reached.
 - The engine owns players, ball, score, statistics, match lifecycle, and gameplay event ordering.
 - The engine publishes read-only snapshots for rendering and typed events for presentation feedback.
 - Three.js, Canvas fallback, radar, HUD, audio, and presentation flows may consume snapshots and events but may not mutate engine state.
 - Render interpolation may blend previous and current snapshots without changing authoritative positions.
+- Start, restart, and kickoff resets are snapshot discontinuities; their first render frame uses `previous === current` and never blends entities across matches or kickoffs.
 - Application commands own navigation and match lifecycle requests; DOM clicks are not an integration API.
 
 ## Source-of-truth rule

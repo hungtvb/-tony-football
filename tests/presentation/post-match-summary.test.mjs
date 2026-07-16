@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPostMatchSummary } from "../../src/game/presentation/PostMatchSummary.js";
+import {
+  createPostMatchSummary,
+  createPostMatchSummaryFromMatchEvent
+} from "../../src/game/presentation/PostMatchSummary.js";
 
 test("post-match summary classifies a Tony FC win", () => {
   const summary = createPostMatchSummary({
@@ -40,4 +43,21 @@ test("post-match summary clamps invalid statistics", () => {
   assert.deepEqual(summary.possession, [100, 0]);
   assert.deepEqual(summary.shots, [0, 0]);
   assert.equal(summary.passAccuracy, 0);
+});
+
+test("match-ended event facts project into the post-match summary", () => {
+  const summary = createPostMatchSummaryFromMatchEvent({
+    score: [2, 1],
+    stats: {
+      possession: [90, 60],
+      shots: [8, 3],
+      passes: 20,
+      completed: 15
+    }
+  });
+
+  assert.deepEqual(summary.score, [2, 1]);
+  assert.deepEqual(summary.possession, [60, 40]);
+  assert.deepEqual(summary.shots, [8, 3]);
+  assert.equal(summary.passAccuracy, 75);
 });

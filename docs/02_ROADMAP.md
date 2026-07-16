@@ -8,7 +8,7 @@
 ## Phase 2 — Core Gameplay
 - **G2** Player Locomotion — Done
 - **G3** Ball Control and First Touch — Done
-- **R1** Engine and Presentation Boundary — Planned, approved architecture gate after U3 closeout
+- **R1** Engine and Presentation Boundary — In Progress
 - **G4** Passing — Planned
 - **G5** Shooting — Planned
 - **G6** Physical Contest — Planned
@@ -23,9 +23,9 @@
 - **A7** Fair Difficulty
 
 ## Phase 4 — Expanded UI/UX
-- **U3.1** Camera and HUD — Implementation Complete, Manual Closeout Pending
+- **U3.1** Camera and HUD — Done
 - **U3.2** Match Flow and Pause Navigation — Done
-- **U3.3** Match Presentation — In Progress (Post-Match Hub)
+- **U3.3** Match Presentation — Done
 - **U3.4** UI Foundation and Design Tokens — Planned
 - **U4** Advanced Radar Modes — Planned
 - **U5** Controls and First-Match Onboarding — Planned
