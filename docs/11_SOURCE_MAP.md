@@ -31,6 +31,8 @@ Before modifying code:
 | `src/game/input/` | FO4 keyboard mapping, browser key lifecycle, charge state, and immutable human commands | Browser adapter only; compatibility gameplay bridge remains in `game.js` |
 | `src/game/application/` | Explicit lifecycle and navigation requests plus browser button/event adapter | Match lifecycle becomes engine commands; setup/main-menu stay outside MatchEngine |
 | `src/game/presentation/BrowserGameEventBridge.js` | Projects immutable game events onto a browser `EventTarget` | Temporary compatibility bridge until `MatchEngine` is the live runtime owner |
+| `src/game/presentation/CompatibilitySnapshotAdapter.js` | Projects legacy runtime state into immutable previous/current `MatchSnapshot` frames | Temporary producer bridge; HUD/radar already consume it |
+| `src/game/presentation/HudSnapshotProjection.js`, `RadarSnapshotRenderer.js` | Pure HUD facts and radar drawing from match snapshots | Presentation-only snapshot consumers |
 | `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Uses `FixedClock`; exposes interpolation alpha |
 | `scripts/dev-server.mjs` | Local static development server | Development only; never the Vercel production entry point |
 | `scripts/build-static.mjs` | Produces the static `dist` bundle | Vercel publishes `dist` |
@@ -45,6 +47,7 @@ FO4 keyboard → immutable commands → game.js compatibility state/update
 AI decisions ──────────────────────→ game.js compatibility state/update
 Application actions → lifecycle/navigation bridge
 Typed game events ─────────────────→ replay, goal and result presentation
+Compatibility snapshots ──────────→ HUD and radar
 ```
 
 ### R1 target
@@ -63,7 +66,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Question or subsystem | Current source | Current owner | Focused tests/specification | R1 direction |
 | --- | --- | --- | --- | --- |
 | Fixed timestep and render cadence | `src/game/core/FixedClock.js`, `src/game/core/SimulationLoop.js` | Core | `tests/simulation/`, `docs/gameplay/SIMULATION.md`, ADR-001 | Retain unchanged; `MatchEngine` consumes fixed ticks |
-| Commands, events and snapshots | `src/game/engine/` | Engine contracts | `tests/engine/`, R1 sprint document, ADR-002 | Slice A foundation; runtime adapters consume these contracts in later slices |
+| Commands, events and snapshots | `src/game/engine/`, `src/game/presentation/CompatibilitySnapshotAdapter.js` | Engine contracts plus temporary browser producer | `tests/engine/`, `tests/presentation/compatibilitySnapshotAdapter.test.mjs`, R1 sprint document, ADR-002 | HUD/radar consume the contract; replace the producer with live MatchEngine frames after renderer parity |
 | Deterministic randomness | `src/game/core/Random.js` | Core | `tests/simulation/` | Engine-only service with no browser dependency |
 | Gameplay tuning | `src/game/config/gameplayConfig.js` | Config | Simulation and gameplay contracts | Inject into engine; never read from renderer |
 | Player movement, facing and stamina | `src/game/engine/PlayerMovementSystem.js`, `src/game/gameplay/PlayerLocomotion.js`, `src/game/config/locomotionConfig.js`; compatibility runtime remains in `game.js` | Headless engine system plus legacy runtime | `tests/engine/EngineSimulation.test.mjs`, `tests/gameplay/playerLocomotion.test.mjs`, `docs/gameplay/PLAYER_MOVEMENT.md` | Connect browser commands and snapshots, then remove duplicate runtime ownership |
@@ -75,7 +78,8 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Replay recording and playback | `game.js` | `game.js` | Replay presentation contracts | Engine owns replay facts; presentation owns playback projection |
 | WebGL scene, assets and model animation | `game.js`, `assets/models/` | Presentation inside `game.js` | Asset validation, desktop Playwright, `assets/models/README.md` | Extract Three.js renderer consuming snapshots/events |
 | Canvas 2D fallback | `game.js` | Presentation inside `game.js` | Canvas smoke path and browser validation | Extract Canvas renderer using the same snapshots |
-| Camera and radar | `src/game/presentation/CameraFraming.js`, `src/game/config/cameraHudConfig.js`, `game.js` | Presentation | `tests/presentation/cameraFraming.test.mjs`, `docs/ui/CAMERA_HUD.md`, U3.1 sprint | Consume snapshots only; never affect simulation |
+| Camera and radar | `src/game/presentation/CameraFraming.js`, `RadarSnapshotRenderer.js`, `src/game/config/cameraHudConfig.js`, `game.js` | Presentation | Camera/radar presentation tests, `docs/ui/CAMERA_HUD.md`, U3.1 sprint | Radar consumes snapshots; move camera subjects to interpolated frames next |
+| HUD match facts | `src/game/presentation/HudSnapshotProjection.js`, `game.js` DOM binding | Presentation | `tests/presentation/hudSnapshotProjection.test.mjs`, HUD runtime contracts, camera/HUD Playwright | Snapshot-driven; retain DOM only as the output projection |
 | Game feel, particles, trails and audio | `src/game/presentation/`, `game.js` | Presentation | `tests/presentation/`, `docs/ui/GAME_FEEL.md` | Consume ordered gameplay events and snapshots |
 | Main menu, intro, goal and result flows | `src/game/application/`, `src/game/presentation/MainMenuFlow.js`, `MatchIntroFlow.js`, `GoalPresentationFlow.js`, `PostMatchHub.js`, `BrowserGameEventBridge.js` | Application lifecycle/navigation plus event-driven presentation | `tests/application/`, `tests/presentation/`, U3.2/U3.3 sprint docs, Playwright | Lifecycle/navigation and score/replay/match-ended facts are explicit; next connect the live MatchEngine event queue |
 | Presentation state machines | `src/game/state/` | Presentation state | `tests/presentation/` | Remain presentation-only and event-driven |
@@ -89,7 +93,7 @@ These are known migration points, not patterns to copy:
 - `game.js` temporarily projects compatibility score, replay, lifecycle, and match-ended facts through `BrowserGameEventBridge`.
 - `game.js` temporarily applies immutable input and application commands to the legacy mutable runtime.
 - presentation modules rely partly on import-time side effects.
-- WebGL, Canvas fallback, radar, HUD and replay read mutable runtime objects directly.
+- WebGL, Canvas entity transforms, camera, audio and replay still read mutable runtime objects directly.
 
 R1 removes each bridge only after an equivalent command, event, snapshot, and regression test exists.
 

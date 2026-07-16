@@ -14,6 +14,7 @@
 - FO4 browser input adapter with immutable movement, pass, shot, tackle, sprint, shield, goalkeeper-rush, and team-press commands.
 - Application runtime for explicit match lifecycle and setup/main-menu navigation actions.
 - Browser game-event bridge for immutable score, replay, lifecycle, and match-ended presentation facts.
+- Compatibility snapshot adapter plus pure HUD and radar snapshot consumers.
 
 ### Changed
 - Active sprint moved from G1 to U1.
@@ -23,6 +24,7 @@
   single-worker WebGL execution, and state-history assertions instead of transient timing windows.
 - Match intro and post-match navigation now request semantic application actions instead of synthetic button clicks.
 - Goal and post-match presentation now consume explicit events instead of inferring gameplay facts from rendered DOM mutations.
+- HUD match facts and radar markers now consume immutable fixed-tick snapshots in both WebGL and Canvas fallback paths.
 
 ### Fixed
 - Prevented the post-match observer from reacting to its own overlay mutations and locking the browser main thread.

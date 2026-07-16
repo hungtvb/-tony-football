@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
+const radarRenderer = await readFile(new URL("../../src/game/presentation/RadarSnapshotRenderer.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../../u3-camera-hud.css", import.meta.url), "utf8");
 
@@ -43,11 +44,12 @@ test("WebGL broadcast camera consumes the framed camera target", () => {
 });
 
 test("radar plot contains no text rendering and uses configured markers", () => {
-  const source = functionSource("drawRadar", "updateUI");
-  assert.doesNotMatch(source, /fillText/);
-  assert.match(source, /cameraHudConfig\.radar/);
-  assert.match(source, /selectedRadius/);
-  assert.match(source, /ballRadius/);
+  assert.doesNotMatch(radarRenderer, /fillText/);
+  assert.match(radarRenderer, /snapshot\.match\.selectedPlayerId/);
+  assert.match(radarRenderer, /selectedRadius/);
+  assert.match(radarRenderer, /ballRadius/);
+  assert.match(game, /renderRadarSnapshot\(rctx,snapshot/);
+  assert.doesNotMatch(game, /function drawRadar/);
 });
 
 test("U3 HUD stylesheet is loaded after U1 and reserves a desktop toast gap above radar", () => {

@@ -16,6 +16,9 @@ function functionSource(name, nextName) {
 test("HUD runtime binds the player card and tracks selected identity", () => {
   assert.match(game, /playerCard:document\.querySelector\("\.hud-player-card"\)/);
   assert.match(game, /hud:\s*\{\s*selectedKey:/);
+  const source = functionSource("updateUI", "announce");
+  assert.match(source, /createHudSnapshotProjection\(snapshot\)/);
+  assert.doesNotMatch(source, /game\.(score|stats|selected|time)/);
 });
 
 test("player changes trigger a restrained card transition", () => {
