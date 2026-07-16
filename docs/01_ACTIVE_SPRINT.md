@@ -1,37 +1,31 @@
-# Active Sprint
+# Delivery Planning Pointer
 
-```yaml
-Sprint: R1
-Title: Engine and Presentation Boundary
-Status: In Progress — Slice D2c snapshot camera, replay, and feedback adapters complete
-Owner: Codex or Antigravity agent
-Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
-Primary goals:
-  - define immutable gameplay commands and deterministic buffering
-  - define explicit ordered gameplay events
-  - define deeply read-only match snapshots with stable entity identifiers
-  - enforce that engine modules remain independent of DOM, Three.js, Canvas, audio, and render frames
-  - prepare parity-first extraction of authoritative state from game.js
-Architecture:
-  - fixed 60 Hz SimulationLoop remains unchanged
-  - engine contracts contain only plain serializable JavaScript data
-  - presentation consumes snapshots and events but never owns authoritative gameplay
-  - game.js compatibility bridges remain until each extraction has equivalent tests
-Validation required:
-  - command validation, immutability, buffering, and ordering tests
-  - event immutability and deterministic ordering tests
-  - snapshot identity, ownership, immutability, and interpolation-frame tests
-  - engine import-boundary tests
-  - all existing simulation, gameplay, presentation, and asset tests
-  - desktop and narrow browser flows for score, replay, and match-ended events
-  - WebGL and Canvas fallback browser coverage for snapshot-driven HUD/radar and entity transforms
-Do not modify:
-  - simulation timing
-  - movement, possession, pass, shot, tackle, or goalkeeper balance
-  - FO4 control mapping
-  - WebGL, Canvas fallback, models, camera, or presentation behavior
-Next slices:
-  - Slice E Explicit bootstrap and compatibility cleanup
-```
+This repository does not maintain a mutable active-sprint record.
 
-Only one sprint may be active at a time.
+## Current delivery source
+
+Use the [Tony Football Linear project](https://linear.app/tony-football/project/tony-football-product-delivery-b20205c7650f) for:
+
+- active and queued work;
+- priority and sequencing;
+- ownership and role handoffs;
+- dependencies and blockers;
+- delivery status and acceptance state.
+
+## Session alignment
+
+Before acting on a `TON-x` item:
+
+1. read the latest Linear issue description and handoff comments;
+2. confirm the active owner and detect branch/file ownership collisions;
+3. correlate the Linear issue with its GitHub issue, branch, and pull request;
+4. verify the exact GitHub head SHA and current CI/review freshness;
+5. write a durable Linear update after each material implementation, review, merge, or blocker event.
+
+Chat-only information is not considered communicated to the team.
+
+## Repository technical records
+
+Files under `docs/sprints/` remain technical scope and validation records. They may explain architecture, contracts, risks, and acceptance evidence, but they do not indicate current priority, ownership, or delivery status.
+
+Use `docs/00_PROJECT_CONTEXT.md`, `docs/05_ARCHITECTURE.md`, `docs/11_SOURCE_MAP.md`, relevant specifications, and accepted ADRs to recover technical context.
