@@ -56,6 +56,11 @@ jobs:
             package.json
             package-lock.json
             playwright.config.mjs
+            vercel.json
+            u3-camera-hud.css
+            u3-goal-presentation.css
+            u3-match-flow.css
+            u3-match-intro.css
             scripts
             src
             tests
