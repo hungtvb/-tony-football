@@ -124,6 +124,32 @@ test("human commands advance deterministically through the same live runtime bou
   assert.equal(leftSnapshot.match.controls.sprinting, true);
 });
 
+test("visual-test goal seam still drives the authoritative engine lifecycle", () => {
+  const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
+  const adapter = new CompatibilitySnapshotAdapter({
+    mode: BrowserRuntimeMode.ENGINE,
+    runtimeComposition: composition,
+  });
+  const source = createSource(0);
+
+  adapter.capture(source);
+  composition.dispatch(createGameCommand(GameCommandType.START_MATCH, {}, {
+    source: GameCommandSource.APPLICATION,
+  }));
+  source.tick = 1;
+  adapter.capture(source);
+
+  assert.equal(composition.recordGoalForTesting(0), true);
+  source.tick = 2;
+  adapter.capture(source);
+  source.tick = 3;
+  const scored = adapter.capture(source);
+
+  assert.deepEqual(scored.match.score, [1, 0]);
+  assert.equal(scored.match.replay.active, true);
+  assert.equal(scored.match.goalSequence.team, 0);
+});
+
 test("engine snapshots are mirrored only into legacy presentation objects", () => {
   const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
   const adapter = new CompatibilitySnapshotAdapter({

@@ -75,19 +75,39 @@ function assertEventTarget(target) {
   }
 }
 
-function installLiveDiagnostics(target, getState) {
+function snapshotDiagnostics(snapshot) {
+  if (!snapshot) return null;
+  return {
+    tick: snapshot.tick,
+    score: [...snapshot.match.score],
+    replayActive: Boolean(snapshot.match.replay?.active),
+    goalSequence: snapshot.match.goalSequence ? { ...snapshot.match.goalSequence } : null,
+    kickoffTimer: snapshot.match.kickoffTimer,
+    ballOwnerId: snapshot.ball.ownerId,
+  };
+}
+
+function installLiveDiagnostics(target, getRuntimeDiagnostics, recordGoalForTesting) {
   const install = () => {
     const debug = target?.__TONY_DEBUG__;
     if (!debug || typeof debug.diagnostics !== "function") return false;
     if (debug.diagnostics.liveRuntimeProjection === true) return true;
     const legacyDiagnostics = debug.diagnostics.bind(debug);
-    const diagnostics = () => ({
-      ...legacyDiagnostics(),
-      state: getState(),
-      runtimeMode: BrowserRuntimeMode.ENGINE,
-    });
+    const diagnostics = () => {
+      const runtime = getRuntimeDiagnostics();
+      return {
+        ...legacyDiagnostics(),
+        state: runtime.state,
+        runtimeMode: BrowserRuntimeMode.ENGINE,
+        engineSnapshot: snapshotDiagnostics(runtime.snapshot),
+      };
+    };
     diagnostics.liveRuntimeProjection = true;
     debug.diagnostics = diagnostics;
+    const params = new URLSearchParams(target.location?.search ?? "");
+    if (params.get("visualTest") === "1") {
+      debug.recordEngineGoal = recordGoalForTesting;
+    }
     return true;
   };
 
@@ -155,7 +175,11 @@ export class BrowserRuntimeComposition {
     if (!this.authoritative) return false;
     assertEventTarget(target);
     this.#target = target;
-    installLiveDiagnostics(target, () => this.state);
+    installLiveDiagnostics(
+      target,
+      () => ({ state: this.state, snapshot: this.snapshot }),
+      (team, options) => this.recordGoalForTesting(team, options),
+    );
     return true;
   }
 
@@ -185,6 +209,11 @@ export class BrowserRuntimeComposition {
     }
     this.#runtime.dispatch(command);
     return true;
+  }
+
+  recordGoalForTesting(team, options = {}) {
+    if (!this.authoritative || !this.#runtime) return false;
+    return this.#runtime.recordGoalForTesting(team, options);
   }
 
   advanceToSourceTick(sourceTick) {

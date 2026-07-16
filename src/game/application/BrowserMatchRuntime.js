@@ -10,6 +10,7 @@ function assertEngine(engine) {
     || typeof engine.drainEvents !== "function"
     || typeof engine.drainActionIntents !== "function"
     || typeof engine.startReplay !== "function"
+    || typeof engine.recordGoal !== "function"
   ) {
     throw new TypeError("BrowserMatchRuntime requires a MatchEngine-compatible engine");
   }
@@ -80,6 +81,10 @@ export class BrowserMatchRuntime {
       source: command.source,
       targetTick,
     });
+  }
+
+  recordGoalForTesting(team, options = {}) {
+    return this.#engine.recordGoal(team, options);
   }
 
   step(deltaSeconds) {

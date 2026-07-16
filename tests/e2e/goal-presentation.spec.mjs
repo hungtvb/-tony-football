@@ -117,3 +117,55 @@ test("separate replay events extend the goal flow without score DOM inference", 
   await page.evaluate(() => window.__TONY_DEBUG__.emitGameEvent("replay:ended"));
   await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__.diagnostics().running === false);
 });
+
+test("default engine goal drives browser score, replay, commentary, and coherent kickoff", async ({ page }) => {
+  await openGoalTest(page);
+
+  await page.locator("#quickMatchButton").click();
+  await page.locator("#playButton").click();
+  await expect.poll(
+    () => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state),
+  ).toBe("playing");
+
+  const beforeGoal = await page.locator("#commentary").textContent();
+  const triggered = await page.evaluate(() => {
+    const diagnostics = window.__TONY_DEBUG__.diagnostics();
+    if (diagnostics.runtimeMode !== "engine") return false;
+    return window.__TONY_DEBUG__.recordEngineGoal(0);
+  });
+  expect(triggered).toBe(true);
+
+  await expect(page.locator("#homeScore")).toHaveText("1");
+  await expect(page.locator("#awayScore")).toHaveText("0");
+  await expect(page.locator("#replayBadge")).toHaveClass(/show/);
+  await expect(page.locator("#commentary")).toHaveText("Đang xem lại bàn thắng.");
+  expect(await page.locator("#commentary").textContent()).not.toBe(beforeGoal);
+
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
+  ));
+  await expect(page.locator("#goalPresentationHomeScore")).toHaveText("1");
+  await expect(page.locator("#goalPresentationAwayScore")).toHaveText("0");
+  await expect(page.locator("#goalPresentationReplayFlag")).toHaveText("REPLAY AVAILABLE");
+
+  await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.releaseTestHold());
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "native-replay"
+  ));
+  await expect(page.locator("#goalPresentationOverlay")).not.toHaveClass(/show/);
+
+  await page.waitForFunction(() => {
+    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+    return snapshot
+      && snapshot.score[0] === 1
+      && snapshot.replayActive === false
+      && snapshot.goalSequence === null
+      && snapshot.kickoffTimer > 0
+      && snapshot.ballOwnerId === null;
+  }, null, { timeout: 12_000 });
+
+  await expect(page.locator("#replayBadge")).not.toHaveClass(/show/);
+  await expect(page.locator("#commentary")).toHaveText("Chuẩn bị giao bóng lại.");
+  await expect(page.locator("#homeScore")).toHaveText("1");
+  await expect(page.locator("#awayScore")).toHaveText("0");
+});
