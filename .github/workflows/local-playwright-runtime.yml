@@ -160,7 +160,9 @@ jobs:
               `- Expires around: \`${expires}\``,
               '',
               'Before bootstrapping, fetch the current `main` SHA and pass it as `--expected-main-sha`.',
-              'Run `bash bootstrap-local-playwright.sh <runtime.zip> <browsers.zip> --expected-main-sha <current-main-sha> --force`.',
+              'For a new workspace, run `bash bootstrap-local-playwright.sh <runtime.zip> <browsers.zip> --expected-main-sha <current-main-sha>`.',
+              'For an existing Git workspace, run `bash scripts/sync-local-main.sh <runtime.zip> <browsers.zip> --expected-main-sha <current-main-sha>` from that workspace.',
+              'Never run bootstrap against a destination containing `.git`; bootstrap creates new output only.',
             ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
