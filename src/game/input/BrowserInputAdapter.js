@@ -1,3 +1,4 @@
+import { browserRuntimeComposition } from "../application/BrowserRuntimeComposition.js";
 import {
   GameCommandSource,
   GameCommandType,
@@ -39,6 +40,7 @@ export class BrowserInputAdapter {
   #onCameraCycle;
   #getControlMode;
   #getMatchState;
+  #runtimeComposition;
   #pressed = new Set();
   #charge = null;
   #lastAim = Object.freeze({ x: 1, y: 0 });
@@ -54,7 +56,8 @@ export class BrowserInputAdapter {
     onApplicationRequest = () => {},
     onCameraCycle = () => {},
     getControlMode = () => "attack",
-    getMatchState = () => "playing"
+    getMatchState = () => "playing",
+    runtimeComposition = browserRuntimeComposition
   }) {
     assertEventTarget(target);
     if (typeof clock !== "function") throw new TypeError("clock must be a function");
@@ -64,8 +67,13 @@ export class BrowserInputAdapter {
     this.#onCommand = onCommand;
     this.#onApplicationRequest = onApplicationRequest;
     this.#onCameraCycle = onCameraCycle;
-    this.#getControlMode = getControlMode;
-    this.#getMatchState = getMatchState;
+    this.#runtimeComposition = runtimeComposition;
+    this.#getControlMode = runtimeComposition.authoritative
+      ? () => runtimeComposition.controlMode
+      : getControlMode;
+    this.#getMatchState = runtimeComposition.authoritative
+      ? () => runtimeComposition.state
+      : getMatchState;
   }
 
   get attached() {
@@ -130,7 +138,7 @@ export class BrowserInputAdapter {
       sequence: this.#sequence
     });
     this.#sequence += 1;
-    this.#onCommand(command);
+    if (!this.#runtimeComposition.dispatch(command)) this.#onCommand(command);
     return command;
   }
 
