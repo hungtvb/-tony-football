@@ -1,4 +1,5 @@
 import { ApplicationActionType, createApplicationAction } from "./ApplicationActions.js";
+import { browserRuntimeComposition } from "./BrowserRuntimeComposition.js";
 
 export const APPLICATION_REQUEST_EVENT = "tony:application-request";
 export const APPLICATION_HANDLED_EVENT = "tony:application-handled";
@@ -25,18 +26,27 @@ export class BrowserApplicationAdapter {
   #target;
   #document;
   #runtime;
+  #runtimeComposition;
   #buttonActions;
   #buttonHandlers = new Map();
   #attached = false;
 
-  constructor({ target, document, runtime, buttonActions = defaultButtonActions }) {
+  constructor({
+    target,
+    document,
+    runtime,
+    buttonActions = defaultButtonActions,
+    runtimeComposition = browserRuntimeComposition
+  }) {
     if (!target || typeof target.addEventListener !== "function") throw new TypeError("target must be an event target");
     if (!document || typeof document.getElementById !== "function") throw new TypeError("document is required");
     if (!runtime || typeof runtime.request !== "function") throw new TypeError("runtime is required");
     this.#target = target;
     this.#document = document;
     this.#runtime = runtime;
+    this.#runtimeComposition = runtimeComposition;
     this.#buttonActions = buttonActions;
+    if (runtimeComposition.authoritative) runtimeComposition.attachTarget(target);
   }
 
   attach() {
@@ -60,7 +70,36 @@ export class BrowserApplicationAdapter {
     this.#attached = false;
   }
 
+  #projectLiveLifecycle(action) {
+    if (!this.#runtimeComposition.authoritative) return;
+    let type = action.type;
+    if (type === ApplicationActionType.TOGGLE_PAUSE) {
+      type = this.#runtimeComposition.state === "playing"
+        ? ApplicationActionType.PAUSE_MATCH
+        : ApplicationActionType.RESUME_MATCH;
+    }
+
+    const start = this.#document.getElementById("startOverlay");
+    const pause = this.#document.getElementById("pauseOverlay");
+    const result = this.#document.getElementById("resultOverlay");
+    const matchState = this.#document.getElementById("matchState");
+
+    if (type === ApplicationActionType.START_MATCH || type === ApplicationActionType.RESTART_MATCH) {
+      start?.classList.remove("show");
+      pause?.classList.remove("show");
+      result?.classList.remove("show");
+      if (matchState) matchState.textContent = "LIVE";
+    } else if (type === ApplicationActionType.PAUSE_MATCH) {
+      pause?.classList.add("show");
+      if (matchState) matchState.textContent = "TẠM DỪNG";
+    } else if (type === ApplicationActionType.RESUME_MATCH) {
+      pause?.classList.remove("show");
+      if (matchState) matchState.textContent = "LIVE";
+    }
+  }
+
   #handleAction(action) {
+    this.#projectLiveLifecycle(action);
     this.#runtime.request(action.type, action.payload);
     this.#target.dispatchEvent(new CustomEvent(APPLICATION_HANDLED_EVENT, { detail: action }));
   }
