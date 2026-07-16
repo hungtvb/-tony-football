@@ -47,16 +47,19 @@ Some ChatGPT sessions can execute local processes but cannot resolve public pack
 1. Comment exactly `/build-local-runtime` on issue `#44`.
 2. Wait for the workflow reply containing the source SHA, workflow run ID, and two artifact names.
 3. Download the runtime and browser artifacts through the GitHub connector.
-4. Unzip the runtime artifact and run its bundled bootstrap script:
+4. Immediately before bootstrap, fetch the current `main` SHA through the GitHub connector.
+5. Unzip the runtime artifact and run its bundled bootstrap script with that exact SHA:
 
 ```bash
+CURRENT_MAIN_SHA=<current-40-character-main-sha>
 bash bootstrap-local-playwright.sh \
   /mnt/data/tony-local-runtime.zip \
   /mnt/data/tony-playwright-browsers.zip \
+  --expected-main-sha "$CURRENT_MAIN_SHA" \
   --force
 ```
 
-The generated workspace contains the exact `main` source, `node_modules`, Chromium, Firefox, and `.local-playwright-env`.
+The bootstrap refuses the artifact before replacing existing generated output when its `.local-runtime-sha` differs from the supplied current `main` SHA. The generated workspace contains that exact `main` source, `node_modules`, Chromium, Firefox, and `.local-playwright-env`.
 
 Use the repository scripts in this order:
 
@@ -75,7 +78,9 @@ The local runtime is an early feedback mechanism, not the final merge signal. Th
 Runtime safety rules:
 
 - Only repository owner/member/collaborator comments are accepted.
-- The workflow always packages the latest `main`; arbitrary refs are not accepted.
+- The workflow checks out only `main`; arbitrary refs are not accepted.
+- The workflow verifies that `main` did not move before artifact upload and again immediately before publishing the ready comment.
+- The bootstrap requires the current 40-character `main` SHA and refuses stale artifacts before deleting generated workspace contents.
 - Artifacts expire after three days.
 - The bootstrap script only replaces generated paths under `/mnt/data` or `.local-runtime`, and requires `--force` for non-empty output.
 - No gameplay, deployment, or production HTML is modified to support offline testing.
