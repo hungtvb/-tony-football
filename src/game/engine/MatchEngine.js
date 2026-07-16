@@ -49,6 +49,7 @@ export class MatchEngine {
   #random;
   #previousSnapshot;
   #currentSnapshot;
+  #snapshotDiscontinuity = false;
 
   constructor({
     formations = DEFAULT_FORMATIONS,
@@ -107,9 +108,13 @@ export class MatchEngine {
     this.#tick += 1;
     this.#previousSnapshot = this.#currentSnapshot;
 
-    for (const command of this.#commands.drain()) this.#applyCommand(command);
+    for (const command of this.#commands.drainReady(this.#tick)) this.#applyCommand(command);
     if (this.#advanceLifecycle(deltaSeconds)) this.#advanceSimulation(deltaSeconds);
     this.#currentSnapshot = this.#captureSnapshot();
+    if (this.#snapshotDiscontinuity) {
+      this.#previousSnapshot = this.#currentSnapshot;
+      this.#snapshotDiscontinuity = false;
+    }
     return this.#currentSnapshot;
   }
 
@@ -328,6 +333,7 @@ export class MatchEngine {
           width: this.#config.width,
           height: this.#config.height
         });
+        this.#snapshotDiscontinuity = true;
       }
       return false;
     }
@@ -416,6 +422,7 @@ export class MatchEngine {
     });
     this.#random = createSeededRandom(this.#config.randomSeed);
     this.#actionIntents.length = 0;
+    this.#snapshotDiscontinuity = true;
   }
 
   #captureSnapshot() {

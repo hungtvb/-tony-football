@@ -148,6 +148,18 @@ export class GameCommandBuffer {
     return drained;
   }
 
+  drainReady(tick) {
+    assertNonNegativeInteger(tick, "command buffer tick");
+    const ready = [];
+    const pending = [];
+    for (const command of this.#commands) {
+      if (command.targetTick === null || command.targetTick <= tick) ready.push(command);
+      else pending.push(command);
+    }
+    this.#commands = pending;
+    return Object.freeze(ready);
+  }
+
   clear() {
     this.#commands.length = 0;
   }

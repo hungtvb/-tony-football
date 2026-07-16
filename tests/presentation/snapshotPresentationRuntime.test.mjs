@@ -18,4 +18,6 @@ test("browser runtime delegates camera, replay, and gameplay feedback to present
   assert.doesNotMatch(goalBody, /goalSound|spawnParticle/);
   assert.match(releaseBallBody, /GameEventType\.BALL_KICKED/);
   assert.match(goalBody, /GameEventType\.SCORE_CHANGED/);
+  assert.match(goalBody, /scorerId: compatibilityPlayerId\(scorer\)/);
+  assert.doesNotMatch(goalBody, /scorerId: possessionId\(scorer\)/);
 });

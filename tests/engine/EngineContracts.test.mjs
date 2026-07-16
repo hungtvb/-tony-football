@@ -68,6 +68,18 @@ test("command buffer assigns deterministic order and drains atomically", () => {
   assert.equal(buffer.size, 0);
 });
 
+test("command buffer retains future commands until their target tick", () => {
+  const buffer = new GameCommandBuffer();
+  buffer.enqueue(GameCommandType.MOVE, { x: 1, y: 0 }, { targetTick: 4 });
+  buffer.enqueue(GameCommandType.SET_SPRINT, { active: true });
+
+  assert.deepEqual(buffer.drainReady(1).map((command) => command.type), [GameCommandType.SET_SPRINT]);
+  assert.equal(buffer.size, 1);
+  assert.equal(buffer.drainReady(3).length, 0);
+  assert.deepEqual(buffer.drainReady(4).map((command) => command.type), [GameCommandType.MOVE]);
+  assert.equal(buffer.size, 0);
+});
+
 test("game event queue preserves explicit tick and emission order", () => {
   const queue = new GameEventQueue();
   queue.emit(GameEventType.MATCH_STARTED, { side: 0 }, { tick: 10 });

@@ -105,6 +105,8 @@ flowchart LR
 - Kick, tackle, goal, start/restart, and full-time feedback now crosses the immutable browser game-event bridge; a presentation adapter maps those events to audio and contextual particle callbacks.
 - Particle simulation remains presentation state in `game.js`, but gameplay actions no longer invoke particle or audio implementations directly.
 - Slice D2c focused validation adds snapshot camera, replay, feedback projection, and runtime-boundary contracts; full browser parity remains required before Slice E cleanup.
+- Review hardening retains future commands until `targetTick`, snaps snapshot history across start/restart/kickoff discontinuities, keeps custom formations without a number 10 referentially valid, and aligns compatibility scorer events with stable snapshot player IDs.
+- Slice D2c local game/R1 validation passes 211 tests and the static build. Browser suites and the filesystem ownership portability test remain delegated to CI in this workspace because Chromium is absent and managed storage rejects `chown`.
 - `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 

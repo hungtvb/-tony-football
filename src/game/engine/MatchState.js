@@ -83,6 +83,13 @@ export function createMatchPlayers(formations = DEFAULT_FORMATIONS) {
   ];
 }
 
+function preferredHomePlayer(players) {
+  return players.find((player) => player.team === HOME_TEAM && player.number === 10)
+    ?? players.find((player) => player.team === HOME_TEAM && player.role !== "GK")
+    ?? players.find((player) => player.team === HOME_TEAM)
+    ?? null;
+}
+
 export function createMatchBall({ width = 1200, height = 700, lock = 0 } = {}) {
   return {
     id: MATCH_BALL_ID,
@@ -151,7 +158,7 @@ export function createMatchState({
       height,
       lock: runtimeState === "playing" ? ballControlConfig.release.kickoffLock : 0
     }),
-    selectedPlayerId: players.find((player) => player.team === HOME_TEAM && player.number === 10)?.id ?? players[0].id,
+    selectedPlayerId: preferredHomePlayer(players)?.id ?? null,
     controls: {
       moveX: 0,
       moveY: 0,
@@ -225,12 +232,12 @@ export function resetForKickoff(state, team, {
   }
 
   if (team === HOME_TEAM) {
-    state.selectedPlayerId = state.players.find((player) => player.team === HOME_TEAM && player.number === 10)?.id;
+    state.selectedPlayerId = preferredHomePlayer(state.players)?.id ?? null;
   } else {
     const homeOutfield = state.players.filter((player) => player.team === HOME_TEAM && player.role !== "GK");
     state.selectedPlayerId = homeOutfield.sort((a, b) => (
       Math.hypot(a.x - width / 2, a.y - height / 2) - Math.hypot(b.x - width / 2, b.y - height / 2)
-    ))[0]?.id;
+    ))[0]?.id ?? preferredHomePlayer(state.players)?.id ?? null;
   }
 }
 

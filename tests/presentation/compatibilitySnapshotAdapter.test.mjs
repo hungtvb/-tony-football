@@ -81,6 +81,7 @@ test("compatibility snapshot converts legacy classes into immutable engine-shape
   source.ball.trail[0].x = 999;
 
   assert.equal(compatibilityPlayerId(source.players[0]), "home-4");
+  assert.ok(snapshot.players.some((player) => player.id === compatibilityPlayerId(source.players[0])));
   assert.equal(snapshot.match.selectedPlayerId, "home-4");
   assert.deepEqual(snapshot.match.score, [1, 0]);
   assert.equal(snapshot.players[0].x, 690);

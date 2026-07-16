@@ -34,6 +34,25 @@ test("MatchEngine processes lifecycle commands and emits ordered events", () => 
   );
 });
 
+test("MatchEngine applies scheduled commands only when targetTick is reached", () => {
+  const engine = new MatchEngine({ kickoffDelay: 0 });
+  engine.enqueue(GameCommandType.START_MATCH, {}, {
+    source: GameCommandSource.APPLICATION,
+    targetTick: 3
+  });
+
+  engine.step(1 / 60);
+  engine.step(1 / 60);
+  assert.equal(engine.snapshot.match.state, "menu");
+  assert.equal(engine.commandCount, 1);
+  assert.equal(engine.drainEvents().length, 0);
+
+  engine.step(1 / 60);
+  assert.equal(engine.snapshot.match.state, "playing");
+  assert.equal(engine.commandCount, 0);
+  assert.equal(engine.drainEvents()[0].tick, 3);
+});
+
 test("MatchEngine clock starts after kickoff delay and ends exactly once", () => {
   const engine = new MatchEngine({ matchSeconds: 0.05, kickoffDelay: 0.02 });
   engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.APPLICATION });
@@ -64,6 +83,8 @@ test("restart creates fresh entities while preserving selected match settings", 
   assert.equal(snapshot.match.difficulty, "legend");
   assert.deepEqual(snapshot.match.settings, { pitchStyle: "dry", ballStyle: "volt", weather: "rain" });
   assert.equal(snapshot.players.find((player) => player.id === "home-4").x, 690);
+  const frame = engine.createRenderFrame(0.5);
+  assert.equal(frame.previous, frame.current);
 });
 
 test("control commands drive movement and authoritative kick actions", () => {
@@ -202,17 +223,40 @@ test("goal sequence returns to kickoff without resetting score or match time", (
   assert.ok(engine.snapshot.match.time < timeBeforeGoal);
 });
 
-test("render frames retain previous and current immutable snapshots", () => {
+test("render frames snap across lifecycle resets instead of interpolating old entities", () => {
   const engine = new MatchEngine({ kickoffDelay: 0 });
-  const initial = engine.snapshot;
   engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.APPLICATION });
   engine.step(1 / 60);
 
   const frame = engine.createRenderFrame(0.4);
-  assert.equal(frame.previous, initial);
+  assert.equal(frame.previous, engine.snapshot);
   assert.equal(frame.current, engine.snapshot);
   assert.equal(frame.alpha, 0.4);
   assert.ok(Object.isFrozen(frame.current.players[0]));
+});
+
+test("custom formations without number 10 retain a valid selected player through home kickoff", () => {
+  const formations = {
+    home: [
+      { x: 90, y: 350, role: "GK", name: "KEEPER", number: 1, rating: 80 },
+      { x: 600, y: 350, role: "FW", name: "SEVEN", number: 7, rating: 85 }
+    ],
+    away: [
+      { x: 1110, y: 350, role: "GK", name: "AWAY GK", number: 1, rating: 80 },
+      { x: 640, y: 350, role: "FW", name: "NINE", number: 9, rating: 85 }
+    ]
+  };
+  const engine = new MatchEngine({ formations, kickoffDelay: 0, goalDuration: 0.01 });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+  assert.equal(engine.snapshot.match.selectedPlayerId, "home-1");
+
+  engine.recordGoal(1, { scorerId: "away-1" });
+  engine.step(0.01);
+  assert.equal(engine.snapshot.match.selectedPlayerId, "home-1");
+  assert.ok(engine.snapshot.players.some((player) => player.id === engine.snapshot.match.selectedPlayerId));
+  const frame = engine.createRenderFrame(0.5);
+  assert.equal(frame.previous, frame.current);
 });
 
 test("fixed render schedules produce equal headless lifecycle snapshots", () => {

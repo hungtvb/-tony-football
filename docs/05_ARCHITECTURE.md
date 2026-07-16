@@ -29,10 +29,12 @@ Core has no DOM or Three.js dependency. Renderers and UI read authoritative stat
 
 - Browser input adapters translate keyboard state into immutable gameplay commands.
 - `MatchEngine` consumes commands only on fixed simulation ticks.
+- Commands with a future `targetTick` remain buffered until that tick is reached.
 - The engine owns players, ball, score, statistics, match lifecycle, and gameplay event ordering.
 - The engine publishes read-only snapshots for rendering and typed events for presentation feedback.
 - Three.js, Canvas fallback, radar, HUD, audio, and presentation flows may consume snapshots and events but may not mutate engine state.
 - Render interpolation may blend previous and current snapshots without changing authoritative positions.
+- Start, restart, and kickoff resets are snapshot discontinuities; their first render frame uses `previous === current` and never blends entities across matches or kickoffs.
 - Application commands own navigation and match lifecycle requests; DOM clicks are not an integration API.
 
 ## Source-of-truth rule
