@@ -33,6 +33,7 @@ import { publishGameEvent } from "./src/game/presentation/BrowserGameEventBridge
 import { CompatibilitySnapshotAdapter } from "./src/game/presentation/CompatibilitySnapshotAdapter.js";
 import { createHudSnapshotProjection } from "./src/game/presentation/HudSnapshotProjection.js";
 import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRenderer.js";
+import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRenderState.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -137,6 +138,7 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
   let compatibilityTick = 0;
   let compatibilityEventSequence = 0;
   const compatibilitySnapshots = new CompatibilitySnapshotAdapter();
+  let lastSnapshotRenderState = null;
 
   function publishCompatibilityEvent(type, payload = {}) {
     const event = createGameEvent(type, payload, {
@@ -928,13 +930,13 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
     rig.model.rotation.x=lerp(rig.model.rotation.x,bodyPitch,1-Math.exp(-dt*18));rig.model.rotation.z=lerp(rig.model.rotation.z,bodyRoll,1-Math.exp(-dt*18));rig.model.position.y=lerp(rig.model.position.y,bodyDrop,1-Math.exp(-dt*20));
   }
 
-  function updateRigPlayer(player,pose,view,now,speed) {
-    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=player===game.selected&&controlMode()==="defense"&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&ball.owner?.team!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
+  function updateRigPlayer(player,pose,view,now,speed,renderFacts) {
+    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(renderFacts.ball.x-pose.x,renderFacts.ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=renderFacts.playerId===renderFacts.selectedPlayerId&&controlMode()==="defense"&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&renderFacts.ballOwnerTeam!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
     switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
     const actionProgress=pose.animDuration?clamp(1-pose.animTime/pose.animDuration,0,1):1;applyFootballActionPose(rig,pose,actionProgress,dt);
-    if(rig.active&&ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
+    if(rig.active&&renderFacts.ballOwnerId===renderFacts.playerId&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
     if(rig.active&&rig.head){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.active&&rig.spine){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
-    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&renderFacts.playerId===renderFacts.selectedPlayerId;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(renderFacts.playerId===renderFacts.selectedPlayerId||speed<10);
   }
 
   function cssColor(value) {return`#${value.toString(16).padStart(6,"0")}`;}
@@ -985,15 +987,15 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
     chargeView = new THREE.Group(); const bg=new THREE.Mesh(new THREE.BoxGeometry(5,.22,.28),new THREE.MeshBasicMaterial({color:0x080b0a,transparent:true,opacity:.8})); const fill=new THREE.Mesh(new THREE.BoxGeometry(4.8,.24,.3),new THREE.MeshBasicMaterial({color:0xffcf58,toneMapped:false})); fill.position.y=.02; fill.userData.baseWidth=4.8; chargeView.add(bg,fill); chargeView.userData.fill=fill; chargeView.visible=false; scene3D.add(chargeView);
   }
 
-  function updatePlayerView(player, now, pose = player) {
+  function updatePlayerView(player, now, pose, renderFacts) {
     const view=playerViews.get(player); if(!view)return; const speed=Math.hypot(pose.vx,pose.vy); const running=speed>30; const stride=running?Math.sin(pose.stepPhase)*clamp(speed/185,.35,1.25):0;
-    if(view.rig){updateRigPlayer(player,pose,view,now,speed);return;}
+    if(view.rig){updateRigPlayer(player,pose,view,now,speed,renderFacts);return;}
     const progress=pose.animDuration?1-pose.animTime/pose.animDuration:1; const wave=pose.animTime>0?Math.sin(clamp(progress,0,1)*Math.PI):0; const kick=(pose.anim==="shoot"||pose.anim==="pass")?wave:0; const tackle=pose.anim==="tackle"?wave:0; const dive=pose.anim==="dive"?wave:0; const celebrate=pose.anim==="celebrate"?Math.sin(now*.012)*.12+1:0;
     const sprintLean=running?clamp(speed/310,0,.16):0; view.root.position.set(worldX(pose.x),0,worldZ(pose.y)); view.root.rotation.y=pose.motionYaw??webGLHeading(pose.dirX,pose.dirY); view.body.position.y=celebrate?Math.abs(Math.sin(now*.009))*pose.animPower*.65:(running?Math.abs(Math.sin(pose.stepPhase))*.12:0); view.body.rotation.z=dive*pose.animPower*.9+stride*.025-(pose.turnLean||0)*.16; view.body.rotation.x=tackle*.6-sprintLean-kick*.08;
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
-    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&renderFacts.playerId===renderFacts.selectedPlayerId; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(renderFacts.playerId===renderFacts.selectedPlayerId||speed<10);
   }
 
   function updateParticleView() {
@@ -1008,11 +1010,11 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
     for(const net of goalNetViews){const elapsed=game.goalSequence?game.goalSequence.duration-game.goalSequence.timer:0;const impact=game.goalSequence?Math.sin(elapsed*22)*Math.exp(-elapsed*1.8):0;net.scale.x=1+Math.abs(impact)*.13;net.material.opacity=.34+Math.abs(impact)*.36;}
   }
 
-  function render3D(now, snapshot) {
-    const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||ball;
-    players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||player));
-    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
-    if(input.actionStart&&ball.owner===game.selected){chargeView.visible=true;chargeView.position.set(worldX(game.selected.x),7.5,worldZ(game.selected.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
+  function render3D(now, snapshot, renderState) {
+    const replayFrame=currentReplayFrame(); const renderBall=replayFrame?.ball||renderState.ball;const ballOwner=snapshot.players.find((player)=>player.id===snapshot.ball.ownerId)??null;
+    players.forEach((player,index)=>updatePlayerView(player,now,replayFrame?.players[index]||renderState.players[index],{ball:renderBall,playerId:snapshot.players[index].id,selectedPlayerId:snapshot.match.selectedPlayerId,ballOwnerId:snapshot.ball.ownerId,ballOwnerTeam:ballOwner?.team??null}));
+    ballView.position.set(worldX(renderBall.x),.58+(renderBall.height||0),worldZ(renderBall.y)); ballView.rotation.set(renderBall.angle*.7,renderBall.angle,renderBall.angle*.35); const renderTrail=replayFrame?.ball.trail||snapshot.ball.trail;const visualSpeed=Math.hypot(renderBall.vx||0,renderBall.vy||0);ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);
+    const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){chargeView.visible=true;chargeView.position.set(worldX(selectedPose.x),7.5,worldZ(selectedPose.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;
     const framedX=replayFrame?renderBall.x:game.camera.x;const framedY=replayFrame?renderBall.y:game.camera.y;
     const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,game.camera.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
@@ -1025,8 +1027,8 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); renderRadarSnapshot(rctx,snapshot,{width:radar.width,height:radar.height,field:FIELD,config:cameraHudConfig.radar});
   }
 
-  function drawFallbackPlayerDetail(player,pose,replayFrame) {
-    const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
+  function drawFallbackPlayerDetail(player,pose,replayFrame,selectedPlayerId) {
+    const selected=!replayFrame&&pose.id===selectedPlayerId; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
     if(selected){ctx.strokeStyle=!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
     ctx.rotate(canvasHeading(pose.dirX,pose.dirY));ctx.lineCap="round";
@@ -1037,17 +1039,17 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
     ctx.fillStyle=home?"#101413":"#f0fbfa";ctx.font="800 11px Barlow Condensed";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(player.number,0,-1);ctx.restore();
   }
 
-  function renderFallback2D(now, snapshot) {
-    const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||ball;
+  function renderFallback2D(now, snapshot, renderState) {
+    const replayFrame=currentReplayFrame(); const fallbackBall=replayFrame?.ball||renderState.ball;
     const pitchTheme=PITCH_STYLES[game.pitchStyle]||PITCH_STYLES.classic;const ballTheme=BALL_STYLES[game.ballStyle]||BALL_STYLES.classic;ctx.clearRect(0,0,W,H);ctx.fillStyle=pitchTheme.outside;ctx.fillRect(0,0,W,H);ctx.fillStyle=pitchTheme.mid;ctx.fillRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);for(let i=0;i<90;i+=1){const edge=i%4;const x=edge<2?seededNoise(i*3.1)*W:(edge===2?18:W-18);const y=edge<2?(edge===0?18:H-18):seededNoise(i*5.7)*H;ctx.fillStyle=i%9===0?"rgba(225,187,88,.65)":i%7===0?"rgba(71,201,212,.55)":"rgba(218,229,223,.24)";ctx.fillRect(x,y,2.4,2.4);}
     for(let i=0;i<14;i+=1){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,20,8,.04)";ctx.fillRect(FIELD.left+i*(FIELD.right-FIELD.left)/14,FIELD.top,(FIELD.right-FIELD.left)/14,FIELD.bottom-FIELD.top);}
     ctx.strokeStyle="rgba(245,250,247,.88)";ctx.lineWidth=3;ctx.strokeRect(FIELD.left,FIELD.top,FIELD.right-FIELD.left,FIELD.bottom-FIELD.top);ctx.beginPath();ctx.moveTo(W/2,FIELD.top);ctx.lineTo(W/2,FIELD.bottom);ctx.stroke();ctx.beginPath();ctx.arc(W/2,H/2,83,0,Math.PI*2);ctx.stroke();for(const [x,y,s] of [[FIELD.left,FIELD.top,1],[FIELD.right,FIELD.top,-1],[FIELD.left,FIELD.bottom,1],[FIELD.right,FIELD.bottom,-1]]){ctx.strokeStyle="#eef3f0";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-18*(y<H/2?1:-1));ctx.stroke();ctx.fillStyle=s>0?"#e1bb58":"#47c9d4";ctx.beginPath();ctx.moveTo(x,y-18*(y<H/2?1:-1));ctx.lineTo(x+s*12,y-13*(y<H/2?1:-1));ctx.lineTo(x,y-8*(y<H/2?1:-1));ctx.fill();}
-    const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||player})).sort((a,b)=>a.pose.y-b.pose.y);
-    for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame);
-    ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
+    const fallbackPlayers=players.map((player,index)=>({base:player,pose:replayFrame?.players[index]||renderState.players[index]})).sort((a,b)=>a.pose.y-b.pose.y);
+    for(const {base:player,pose} of fallbackPlayers)drawFallbackPlayerDetail(player,pose,replayFrame,snapshot.match.selectedPlayerId);
+    ctx.fillStyle=`#${ballTheme.base.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x,fallbackBall.y,fallbackBall.radius??snapshot.ball.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ballTheme.stroke;ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=`#${ballTheme.patch.toString(16).padStart(6,"0")}`;ctx.beginPath();ctx.arc(fallbackBall.x-2.5,fallbackBall.y-2.5,3.1,0,Math.PI*2);ctx.fill();
     for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}ctx.globalAlpha=1;
     if(game.weather==="rain"){ctx.fillStyle="rgba(135,190,196,.055)";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(195,235,242,.32)";ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<(lowPowerDevice?60:140);i+=1){const x=(seededNoise(i*3.7)*W+now*.11)%W;const y=(seededNoise(i*8.9)*H+now*.34*(.7+seededNoise(i)))%H;ctx.moveTo(x,y);ctx.lineTo(x-5,y+17);}ctx.stroke();}
-    if(input.actionStart&&ball.owner===game.selected){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(game.selected.x-31,game.selected.y-50,62,8);ctx.fillStyle=input.actionCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(game.selected.x-30,game.selected.y-49,60*input.actionCharge,6);}
+    const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(selectedPose.x-31,selectedPose.y-50,62,8);ctx.fillStyle=input.actionCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(selectedPose.x-30,selectedPose.y-49,60*input.actionCharge,6);}
     if(game.flash>0){ctx.fillStyle=`rgba(255,225,126,${game.flash*.16})`;ctx.fillRect(0,0,W,H);ctx.fillStyle=`rgba(255,255,255,${game.flash})`;ctx.font="800 96px Barlow Condensed";ctx.textAlign="center";ctx.fillText("GOAL!",W/2,145);}renderRadarSnapshot(rctx,snapshot,{width:radar.width,height:radar.height,field:FIELD,config:cameraHudConfig.radar});
   }
 
@@ -1218,8 +1220,8 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
     }
   }
 
-  function render(now, snapshot) {
-    if (use3D) render3D(now, snapshot); else renderFallback2D(now, snapshot);
+  function render(now, snapshot, renderState) {
+    if (use3D) render3D(now, snapshot, renderState); else renderFallback2D(now, snapshot, renderState);
   }
 
   function updateUI(snapshot, scoringTeam = null) {
@@ -1284,7 +1286,8 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
 
   function renderFrame(alpha, now) {
     const frame = compatibilitySnapshots.createRenderFrame(alpha);
-    render(now, frame.current);
+    lastSnapshotRenderState = createSnapshotRenderState(frame);
+    render(now, frame.current, lastSnapshotRenderState);
     if (!game.replay.active && game.cameraNotice <= 0) ui.replayBadge.classList.remove("show");
     updateUI(frame.current);
   }
@@ -1413,6 +1416,14 @@ import { renderRadarSnapshot } from "./src/game/presentation/RadarSnapshotRender
         tick: compatibilitySnapshots.snapshot.tick,
         selectedPlayerId: compatibilitySnapshots.snapshot.match.selectedPlayerId,
         score: [...compatibilitySnapshots.snapshot.match.score]
+      } : null,
+      renderState: lastSnapshotRenderState ? {
+        previousTick: lastSnapshotRenderState.previousTick,
+        currentTick: lastSnapshotRenderState.currentTick,
+        alpha: lastSnapshotRenderState.alpha,
+        selectedPlayerId: compatibilitySnapshots.snapshot?.match.selectedPlayerId ?? null,
+        selectedX: lastSnapshotRenderState.players.find((player)=>player.id===compatibilitySnapshots.snapshot?.match.selectedPlayerId)?.x ?? null,
+        ballX: lastSnapshotRenderState.ball.x
       } : null,
     }),
   };

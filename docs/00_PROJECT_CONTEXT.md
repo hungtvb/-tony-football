@@ -23,9 +23,9 @@ R1 architecture gate before returning to G4, U4, U5, or major AI expansion.
 R1 — Engine and Presentation Boundary.
 
 ## Priority order
-1. Make WebGL and Canvas entity transforms consume interpolated snapshots
-2. Preserve WebGL and Canvas parity through compatibility bridges
-3. Replace remaining mutable camera, replay, and audio facts with snapshots/events
+1. Replace remaining mutable camera, replay, and audio facts with snapshots/events
+2. Preserve WebGL and Canvas parity while compatibility bridges are removed
+3. Connect the live MatchEngine snapshot/event stream to browser presentation
 4. Reduce `game.js` to explicit composition and bootstrap
 
 ## Explicitly out of scope

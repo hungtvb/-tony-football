@@ -17,6 +17,14 @@ async function openScenario(page, scenario) {
   await page.evaluate(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }));
+  const renderDiagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics().renderState);
+  expect(renderDiagnostics).not.toBeNull();
+  expect(renderDiagnostics.currentTick).toBeGreaterThanOrEqual(renderDiagnostics.previousTick);
+  expect(renderDiagnostics.alpha).toBeGreaterThanOrEqual(0);
+  expect(renderDiagnostics.alpha).toBeLessThanOrEqual(1);
+  expect(renderDiagnostics.selectedPlayerId).toMatch(/^home-/);
+  expect(Number.isFinite(renderDiagnostics.selectedX)).toBe(true);
+  expect(Number.isFinite(renderDiagnostics.ballX)).toBe(true);
   expect(consoleErrors).toEqual([]);
 }
 
@@ -90,6 +98,10 @@ test("Canvas fallback keeps snapshot-backed radar and HUD usable", async ({ page
   const diagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(diagnostics.renderer).toBe("canvas");
   expect(diagnostics.snapshot.selectedPlayerId).toMatch(/^home-/);
+  expect(diagnostics.renderState.selectedPlayerId).toBe(diagnostics.snapshot.selectedPlayerId);
+  expect(diagnostics.renderState.currentTick).toBeGreaterThanOrEqual(diagnostics.renderState.previousTick);
+  expect(Number.isFinite(diagnostics.renderState.selectedX)).toBe(true);
+  expect(Number.isFinite(diagnostics.renderState.ballX)).toBe(true);
   await expect(page.locator("#staminaText")).toHaveText("18%");
 
   const radarHasPixels = await page.evaluate(() => {

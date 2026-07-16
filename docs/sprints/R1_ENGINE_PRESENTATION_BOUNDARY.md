@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice D2a HUD/radar snapshot adapters complete
+Status: In Progress — Slice D2b interpolated entity transforms complete
 
 ## Objective
 
@@ -12,10 +12,10 @@ R1 implements the accepted decisions in ADR-001 and ADR-002. It does not recreat
 
 - Fixed simulation timing already runs at 60 Hz through `SimulationLoop`.
 - Locomotion, ball control, and possession helpers already have headless tests.
-- `game.js` still owns the compatibility players, ball, match state, AI updates, replay, Three.js, Canvas fallback, audio, DOM updates, and debug wiring.
+- `game.js` still owns the compatibility players, ball, match state, AI updates, replay, Three.js/Canvas scene drawing, audio, DOM updates, and debug wiring.
 - Browser keyboard listeners and FO4 mapping now live in `src/game/input`; `game.js` temporarily applies their immutable commands until renderer migration is complete.
 - Goal, replay, and result presentation consume explicit immutable game events; lifecycle and navigation use semantic application actions instead of synthetic clicks.
-- The compatibility runtime now captures immutable previous/current snapshots on fixed ticks. HUD and radar consume current snapshots; entity transforms do not yet consume interpolation frames.
+- The compatibility runtime captures immutable previous/current snapshots on fixed ticks. HUD/radar consume current snapshots, while WebGL and Canvas consume a shared interpolated player/ball render state.
 
 ## Target flow
 
@@ -95,6 +95,11 @@ flowchart LR
 - Radar rendering now consumes snapshot players, selected-player ID, and ball facts through a presentation-only renderer shared by WebGL and Canvas fallback paths.
 - A deterministic `renderer=canvas` validation mode now proves Canvas fallback HUD/radar parity without requiring WebGL failure.
 - Slice D2a validation passed 190 unit tests, the static build, 24 local match-flow scenarios, and 12 local camera/HUD browser scenarios across WebGL/Canvas, desktop, and narrow landscape.
+- Slice D2b adds a pure render-state adapter for player position, velocity, facing, locomotion phase, action timing, ball position, height, velocity, and rotation.
+- Direction and yaw interpolate across the shortest angular path; same-tick resets and large kickoff teleports snap directly to current transforms instead of sliding across the pitch.
+- WebGL model/fallback rigs and Canvas fallback players now use the same interpolated poses and snapshot entity IDs. The 3D rig also faces the interpolated ball rather than mutable compatibility coordinates.
+- Legacy replay frames remain the explicit render override in this parity slice; camera, replay ownership, particles, and audio remain the next migration boundary.
+- Slice D2b local validation passed 199 game/R1 tests (including 89 presentation contracts), the static build, 24 match-flow scenarios, and 12 WebGL/Canvas camera-HUD scenarios across desktop and narrow landscape.
 - `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 

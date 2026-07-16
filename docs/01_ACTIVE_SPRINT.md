@@ -3,7 +3,7 @@
 ```yaml
 Sprint: R1
 Title: Engine and Presentation Boundary
-Status: In Progress — Slice D2a HUD/radar snapshot adapters complete
+Status: In Progress — Slice D2b interpolated entity transforms complete
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
@@ -24,14 +24,14 @@ Validation required:
   - engine import-boundary tests
   - all existing simulation, gameplay, presentation, and asset tests
   - desktop and narrow browser flows for score, replay, and match-ended events
-  - WebGL and Canvas fallback browser coverage for snapshot-driven HUD/radar
+  - WebGL and Canvas fallback browser coverage for snapshot-driven HUD/radar and entity transforms
 Do not modify:
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
   - FO4 control mapping
   - WebGL, Canvas fallback, models, camera, or presentation behavior
 Next slices:
-  - Slice D2b Snapshot-driven WebGL and Canvas entity transforms
+  - Slice D2c Snapshot/event-driven camera, replay, and audio facts
   - Slice E Explicit bootstrap and compatibility cleanup
 ```
 

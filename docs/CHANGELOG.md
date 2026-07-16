@@ -15,6 +15,7 @@
 - Application runtime for explicit match lifecycle and setup/main-menu navigation actions.
 - Browser game-event bridge for immutable score, replay, lifecycle, and match-ended presentation facts.
 - Compatibility snapshot adapter plus pure HUD and radar snapshot consumers.
+- Pure snapshot render-state interpolation shared by WebGL and Canvas entity transforms.
 
 ### Changed
 - Restricted-container bootstrap now initializes a verified local Git `main` baseline.
@@ -28,6 +29,7 @@
 - Match intro and post-match navigation now request semantic application actions instead of synthetic button clicks.
 - Goal and post-match presentation now consume explicit events instead of inferring gameplay facts from rendered DOM mutations.
 - HUD match facts and radar markers now consume immutable fixed-tick snapshots in both WebGL and Canvas fallback paths.
+- WebGL and Canvas player position, facing, locomotion pose, ball position, height, and rotation now consume one interpolated snapshot render state with reset/teleport guards.
 
 ### Fixed
 - Runtime and browser artifacts no longer try to restore the GitHub runner UID/GID or archived permissions when extracted in restricted containers.
