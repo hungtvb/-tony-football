@@ -15,6 +15,7 @@ Options:
 
 The artifact ZIP files are downloaded from the Local Playwright Runtime workflow.
 The expected main SHA must be fetched immediately before bootstrap.
+The generated workspace is initialized as a local Git repository on branch main.
 USAGE
 }
 
@@ -73,7 +74,7 @@ for archive in "$runtime_zip" "$browser_zip"; do
   [[ -f "$archive" ]] || { echo "Artifact not found: $archive" >&2; exit 1; }
 done
 
-for command in unzip tar node npm; do
+for command in unzip tar git node npm; do
   command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 
@@ -129,6 +130,16 @@ browser_path="$browser_root/ms-playwright"
 extracted_sha=$(tr -d '\r\n' < "$workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
 [[ "$extracted_sha" == "$expected_main_sha" ]] || { echo "Extracted runtime SHA changed unexpectedly" >&2; exit 1; }
 
+git -C "$workspace" init --quiet
+if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$workspace"; then
+  git config --global --add safe.directory "$workspace"
+fi
+git -C "$workspace" symbolic-ref HEAD refs/heads/main
+mkdir -p "$workspace/.git/info"
+for generated in .local-playwright-env .local-home/; do
+  grep -Fxq "$generated" "$workspace/.git/info/exclude" 2>/dev/null || printf '%s\n' "$generated" >> "$workspace/.git/info/exclude"
+done
+
 cat > "$workspace/.local-playwright-env" <<ENV
 export PLAYWRIGHT_BROWSERS_PATH="$browser_path"
 export TONY_LOCAL_WORKSPACE="$workspace"
@@ -137,8 +148,14 @@ export TONY_LOCAL_SOURCE_SHA="$extracted_sha"
 ENV
 mkdir -p "$workspace/.local-home"
 
+git -C "$workspace" config user.name "Tony Football Workspace"
+git -C "$workspace" config user.email "tony-football-workspace@local.invalid"
+git -C "$workspace" add -A
+git -C "$workspace" commit --quiet -m "chore(workspace): snapshot main ${extracted_sha:0:12}"
+
 printf 'Workspace: %s\n' "$workspace"
 printf 'Browser cache: %s\n' "$browser_path"
 printf 'Source SHA: %s\n' "$extracted_sha"
+printf 'Local branch: main\n'
 printf 'Playwright: %s\n' "$(node -p "require('$workspace/node_modules/@playwright/test/package.json').version")"
-printf '\nRun next:\n  cd %q\n  bash scripts/run-local-preflight.sh smoke\n' "$workspace"
+printf '\nRun next:\n  cd %q\n  bash scripts/start-local-sprint.sh <branch-name>\n  bash scripts/run-local-preflight.sh smoke\n' "$workspace"
