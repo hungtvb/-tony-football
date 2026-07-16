@@ -35,6 +35,7 @@
 - Camera framing and replay playback now consume immutable match snapshots; gameplay actions publish feedback events instead of calling audio or particle implementations directly.
 
 ### Fixed
+- Local Playwright bootstrap now refuses existing Git or non-empty destinations even with `--force`, validates staged runtime/browser artifacts before publication, and directs existing workspaces to the safe sync flow.
 - Future gameplay commands no longer execute before their declared `targetTick`.
 - Start, restart, and post-goal kickoff frames no longer interpolate against pre-reset snapshots.
 - Custom formations without a number 10 retain a valid home selection, and compatibility score events use stable snapshot player IDs.
