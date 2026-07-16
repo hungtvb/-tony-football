@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice B headless gameplay complete
+Status: In Progress — Slice C adapters implemented; browser CI pending
 
 ## Objective
 
@@ -12,8 +12,9 @@ R1 implements the accepted decisions in ADR-001 and ADR-002. It does not recreat
 
 - Fixed simulation timing already runs at 60 Hz through `SimulationLoop`.
 - Locomotion, ball control, and possession helpers already have headless tests.
-- `game.js` still owns authoritative players, ball, match state, browser input, AI updates, replay, Three.js, Canvas fallback, radar, audio, DOM updates, and debug wiring.
-- Goal and result presentation currently infer state from rendered DOM and delegate some actions through synthetic clicks.
+- `game.js` still owns the compatibility players, ball, match state, AI updates, replay, Three.js, Canvas fallback, radar, audio, DOM updates, and debug wiring.
+- Browser keyboard listeners and FO4 mapping now live in `src/game/input`; `game.js` temporarily applies their immutable commands until renderer migration is complete.
+- Goal and result presentation still infer state from rendered DOM, while lifecycle and navigation no longer delegate through synthetic clicks.
 - Render interpolation alpha exists, but entity transforms are not yet driven from previous/current engine snapshots.
 
 ## Target flow
@@ -81,7 +82,11 @@ flowchart LR
 - AI decisions use fixed match time and the seeded engine random source; ball actions cross the same immutable command boundary as human actions.
 - Defensive W goalkeeper-rush and Q team-press hold state are engine commands ready for the Slice C FO4 keyboard adapter.
 - Movement and ball systems reuse the existing locomotion, ball-control, possession, and tuning modules; their fixed-step constants remain unchanged.
-- Slice B headless gameplay migration is complete; `game.js` remains the live compatibility owner until Slice C and Slice D adapters are connected and browser parity is proven.
+- Slice C centralizes the FO4 mapping and keyboard lifecycle in `BrowserInputAdapter`; normalized movement, charge/release actions, defensive holds, standing/slide tackles, Shift-direction switching, blur cleanup, and camera requests preserve the desktop map.
+- Slice C centralizes start, pause, resume, restart, Match Setup, and Main Menu requests in `ApplicationRuntime` and `BrowserApplicationAdapter`.
+- Match intro and post-match presentation now emit explicit application actions; synthetic `.click()` navigation bridges are removed.
+- Slice C unit and static-build validation is complete. Desktop Playwright execution remains delegated to CI because the local container has no Chromium executable.
+- `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 
 ## Out of scope

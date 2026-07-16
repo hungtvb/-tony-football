@@ -26,6 +26,7 @@ function closestOpponent(state, player) {
 
 export function executeTackle(state, {
   playerId = state.selectedPlayerId,
+  style = "slide",
   random,
   config = ballControlConfig
 } = {}) {
@@ -61,17 +62,22 @@ export function executeTackle(state, {
     state.ball.lock = config.release.tackleLock;
   }
 
-  player.cooldown = 1.05;
-  player.vx += player.dirX * 105;
-  player.vy += player.dirY * 105;
+  if (style !== "standing" && style !== "slide") throw new TypeError(`Unknown tackle style: ${style}`);
+  const sliding = style === "slide";
+  player.cooldown = sliding ? 1.05 : 0.7;
+  if (sliding) {
+    player.vx += player.dirX * 105;
+    player.vy += player.dirY * 105;
+  }
   player.anim = "tackle";
-  player.animTime = 0.52;
-  player.animDuration = 0.52;
-  player.animPower = 1;
+  player.animTime = sliding ? 0.52 : 0.38;
+  player.animDuration = player.animTime;
+  player.animPower = sliding ? 1 : 0;
   return Object.freeze({
     playerId: player.id,
     opponentId: opponent.id,
     won,
+    style,
     chance,
     previousOwnerId: owner?.id ?? null,
     ownerId: state.ball.ownerId

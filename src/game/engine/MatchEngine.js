@@ -254,8 +254,14 @@ export class MatchEngine {
       case GameCommandType.SWITCH_PLAYER:
         if (this.#state.match.state === "playing") this.#switchControlledPlayer();
         break;
+      case GameCommandType.SWITCH_PLAYER_DIRECTION:
+        if (this.#state.match.state === "playing") this.#switchControlledPlayer(command.payload.direction);
+        break;
       case GameCommandType.TACKLE:
-        if (this.#state.match.state === "playing") this.#applyTackleCommand();
+        if (this.#state.match.state === "playing") this.#applyTackleCommand("standing");
+        break;
+      case GameCommandType.SLIDE_TACKLE:
+        if (this.#state.match.state === "playing") this.#applyTackleCommand("slide");
         break;
       case GameCommandType.TRIGGER_TEAMMATE_RUN:
         if (this.#state.match.state === "playing") this.#applyTeammateRunCommand();
@@ -283,8 +289,8 @@ export class MatchEngine {
     }, { tick: this.#tick });
   }
 
-  #applyTackleCommand() {
-    const result = executeTackle(this.#state, { random: this.#random });
+  #applyTackleCommand(style) {
+    const result = executeTackle(this.#state, { random: this.#random, style });
     if (!result) return;
     this.#events.emit(GameEventType.TACKLE_RESOLVED, result, { tick: this.#tick });
     if (result.won) {
@@ -371,8 +377,30 @@ export class MatchEngine {
     }
   }
 
-  #switchControlledPlayer() {
+  #switchControlledPlayer(direction = null) {
     const candidates = this.#state.players.filter((player) => player.team === HOME_TEAM && player.role !== "GK");
+    if (direction) {
+      const selected = findPlayer(this.#state, this.#state.selectedPlayerId);
+      if (!selected) return;
+      const target = findPlayer(this.#state, this.#state.ball.ownerId) ?? this.#state.ball;
+      let best = null;
+      let bestScore = 20;
+      for (const player of candidates) {
+        if (player === selected) continue;
+        const dx = player.x - selected.x;
+        const dy = player.y - selected.y;
+        const gap = Math.hypot(dx, dy) || 1;
+        const alignment = dx / gap * direction.x + dy / gap * direction.y;
+        const targetGap = Math.hypot(player.x - target.x, player.y - target.y);
+        const score = alignment * 360 - gap * 0.22 - targetGap * 0.06;
+        if (score > bestScore) {
+          best = player;
+          bestScore = score;
+        }
+      }
+      if (best) this.#state.selectedPlayerId = best.id;
+      return;
+    }
     const currentIndex = candidates.findIndex((player) => player.id === this.#state.selectedPlayerId);
     this.#state.selectedPlayerId = candidates[(currentIndex + 1 + candidates.length) % candidates.length].id;
   }

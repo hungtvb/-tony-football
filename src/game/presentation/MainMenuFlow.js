@@ -1,18 +1,15 @@
 import "./MatchIntroFlow.js";
 import "./GoalPresentationFlow.js";
 import "./PostMatchHub.js";
+import { ApplicationActionType } from "../application/ApplicationActions.js";
+import { APPLICATION_HANDLED_EVENT } from "../application/BrowserApplicationAdapter.js";
 
 const mainMenu = document.getElementById("mainMenuOverlay");
 const matchSetup = document.getElementById("startOverlay");
 const pauseOverlay = document.getElementById("pauseOverlay");
 const resultOverlay = document.getElementById("resultOverlay");
 const quickMatchButton = document.getElementById("quickMatchButton");
-const setupBackButton = document.getElementById("setupBackButton");
-const setupButton = document.getElementById("setupButton");
-const mainMenuButton = document.getElementById("mainMenuButton");
 const playButton = document.getElementById("playButton");
-const restartButton = document.getElementById("restartButton");
-const playAgainButton = document.getElementById("playAgainButton");
 
 function setOverlayVisible(element, visible) {
   if (!element) return;
@@ -43,16 +40,15 @@ function markMatchActive() {
   document.body.dataset.flow = "match";
 }
 
-quickMatchButton?.addEventListener("click", () => showMatchSetupView());
-setupBackButton?.addEventListener("click", () => showMainMenuView());
-
-// game.js owns the simulation reset. These listeners run after its handlers and
-// only decide which presentation surface remains visible.
-setupButton?.addEventListener("click", () => queueMicrotask(() => showMatchSetupView()));
-mainMenuButton?.addEventListener("click", () => queueMicrotask(() => showMainMenuView()));
-playButton?.addEventListener("click", markMatchActive);
-restartButton?.addEventListener("click", markMatchActive);
-playAgainButton?.addEventListener("click", markMatchActive);
+window.addEventListener(APPLICATION_HANDLED_EVENT, (event) => {
+  const type = event.detail?.type;
+  if (type === ApplicationActionType.OPEN_MATCH_SETUP) showMatchSetupView();
+  else if (type === ApplicationActionType.OPEN_MAIN_MENU) showMainMenuView();
+  else if (
+    type === ApplicationActionType.START_MATCH
+    || type === ApplicationActionType.RESTART_MATCH
+  ) markMatchActive();
+});
 
 const debugScenario = new URLSearchParams(window.location.search).get("debugScenario");
 if (debugScenario) {

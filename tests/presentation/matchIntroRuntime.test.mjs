@@ -14,7 +14,8 @@ test("main menu loads the match intro presentation before its own bindings", () 
 test("match intro intercepts only the initial start action", () => {
   assert.match(introFlow, /closest\("#playButton"\)/);
   assert.match(introFlow, /event\.stopImmediatePropagation\(\)/);
-  assert.match(introFlow, /allowNativeStart = true/);
+  assert.match(introFlow, /requestApplicationAction\(window, ApplicationActionType\.START_MATCH\)/);
+  assert.doesNotMatch(introFlow, /playButton\?\.click\(\)/);
   assert.doesNotMatch(introFlow, /closest\("#restartButton"\)/);
 });
 

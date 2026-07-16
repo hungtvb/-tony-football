@@ -10,11 +10,13 @@ export const GameCommandType = Object.freeze({
   MOVE: "player:move",
   SET_SPRINT: "player:set-sprint",
   SWITCH_PLAYER: "player:switch",
+  SWITCH_PLAYER_DIRECTION: "player:switch-direction",
   SHORT_PASS: "ball:short-pass",
   THROUGH_BALL: "ball:through-pass",
   LOFTED_PASS: "ball:lofted-pass",
   SHOOT: "ball:shoot",
   TACKLE: "player:tackle",
+  SLIDE_TACKLE: "player:slide-tackle",
   SET_SHIELD: "player:set-shield",
   SET_GOALKEEPER_RUSH: "team:set-goalkeeper-rush",
   SET_TEAM_PRESS: "team:set-press",
@@ -37,6 +39,7 @@ const commandSources = new Set(Object.values(GameCommandSource));
 const noPayloadCommands = new Set([
   GameCommandType.SWITCH_PLAYER,
   GameCommandType.TACKLE,
+  GameCommandType.SLIDE_TACKLE,
   GameCommandType.TRIGGER_TEAMMATE_RUN,
   GameCommandType.START_MATCH,
   GameCommandType.PAUSE_MATCH,
@@ -60,6 +63,12 @@ function validatePayload(type, payload) {
   if (type === GameCommandType.MOVE) {
     assertUnitNumber(payload.x, "move.x");
     assertUnitNumber(payload.y, "move.y");
+  }
+
+  if (type === GameCommandType.SWITCH_PLAYER_DIRECTION) {
+    assertPlainRecord(payload.direction, "switch direction");
+    assertUnitNumber(payload.direction.x, "switch direction.x");
+    assertUnitNumber(payload.direction.y, "switch direction.y");
   }
 
   if (

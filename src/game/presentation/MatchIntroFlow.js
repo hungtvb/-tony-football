@@ -2,6 +2,8 @@ import {
   MATCH_PRESENTATION_STATES,
   createMatchPresentationState,
 } from "../state/MatchPresentationState.js";
+import { ApplicationActionType } from "../application/ApplicationActions.js";
+import { requestApplicationAction } from "../application/BrowserApplicationAdapter.js";
 
 const params = new URLSearchParams(window.location.search);
 const debugScenario = params.get("debugScenario");
@@ -21,7 +23,6 @@ const pitchPanel = document.querySelector(".match-pitch");
 const history = [];
 let overlay = null;
 let running = false;
-let allowNativeStart = false;
 let skipRequested = false;
 let testHold = introTestMode;
 let runToken = 0;
@@ -170,15 +171,10 @@ function setCountdown(value) {
   record(`countdown:${value}`);
 }
 
-function startNativeMatch() {
+function requestMatchStart() {
   setIntroVisible(false);
   running = false;
-  allowNativeStart = true;
-  try {
-    playButton?.click();
-  } finally {
-    allowNativeStart = false;
-  }
+  requestApplicationAction(window, ApplicationActionType.START_MATCH);
   presentation.reset({ reason: "match-started" });
 }
 
@@ -214,7 +210,7 @@ async function beginMatchIntro() {
     if (token !== runToken) return;
 
     presentation.transition(MATCH_PRESENTATION_STATES.COMPLETE);
-    startNativeMatch();
+    requestMatchStart();
   } catch (error) {
     console.error("Match intro failed", error);
     running = false;
@@ -233,7 +229,7 @@ document.addEventListener(
   "click",
   (event) => {
     const target = event.target instanceof Element ? event.target.closest("#playButton") : null;
-    if (!target || allowNativeStart || debugScenario || introDisabled) return;
+    if (!target || debugScenario || introDisabled) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     void beginMatchIntro();

@@ -11,6 +11,8 @@
 - Headless fixed-step player movement and ball simulation systems with engine parity coverage.
 - Headless kick, tackle, and teammate-run systems with seeded outcomes and explicit gameplay events.
 - Deterministic headless goalkeeper and team AI decisions routed through engine commands.
+- FO4 browser input adapter with immutable movement, pass, shot, tackle, sprint, shield, goalkeeper-rush, and team-press commands.
+- Application runtime for explicit match lifecycle and setup/main-menu navigation actions.
 
 ### Changed
 - Active sprint moved from G1 to U1.
@@ -18,6 +20,7 @@
 - U3.1, U3.2, and U3.3 are closed; R1 Engine and Presentation Boundary is active.
 - Playwright browser validation now uses deterministic local Three.js fixtures,
   single-worker WebGL execution, and state-history assertions instead of transient timing windows.
+- Match intro and post-match navigation now request semantic application actions instead of synthetic button clicks.
 
 ### Fixed
 - Prevented the post-match observer from reacting to its own overlay mutations and locking the browser main thread.

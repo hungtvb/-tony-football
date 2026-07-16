@@ -22,6 +22,12 @@ import { ballControlConfig } from "./src/game/config/ballControlConfig.js";
 import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore, resolveFirstTouch } from "./src/game/gameplay/BallControl.js";
 import { beginReceiving, controlPossession, createPossessionLifecycle, releasePossession, settleLoose } from "./src/game/gameplay/PossessionLifecycle.js";
 import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity, webGLHeading } from "./src/game/gameplay/PlayerLocomotion.js";
+import { GameCommandType } from "./src/game/engine/GameCommands.js";
+import { FO4_CONTROLS } from "./src/game/input/FO4Controls.js";
+import { BrowserInputAdapter } from "./src/game/input/BrowserInputAdapter.js";
+import { ApplicationActionType } from "./src/game/application/ApplicationActions.js";
+import { ApplicationRuntime } from "./src/game/application/ApplicationRuntime.js";
+import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplicationAdapter.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -115,15 +121,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   const audioFeedback = createAudioFeedbackController();
   const contextualParticles = createContextualParticlePolicy({ lowPowerDevice, reducedMotion });
   let players = [];
-  const FO4_CONTROLS = Object.freeze({
-    sprint:"KeyE", shortPass:"KeyS", throughBall:"KeyW", shoot:"KeyD", loftPass:"KeyA",
-    teammateRun:"KeyQ", finesse:"KeyZ", shield:"KeyC", tackle:"Space", camera:"KeyB"
-  });
+  let browserInput = null;
   const input = {
-    keys: new Set(), moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0,
-    actionCode: null, actionStart: 0, actionCharge: 0, actionModifiers: null,
-    bufferedAction: null, lastMode: "defense", qTapStart: 0, qConsumed: false
+    moveX: 0, moveY: 0, magnitude: 0, aimX: 1, aimY: 0,
+    actionStart: 0, actionCharge: 0, bufferedAction: null, lastMode: "defense"
   };
+  const isKeyPressed = (code) => browserInput?.isPressed(code) ?? false;
 
   function loadPreference(key,fallback,options){try{const value=localStorage.getItem(key);return options[value]?value:fallback;}catch{return fallback;}}
   function savePreference(key,value){try{localStorage.setItem(key,value);}catch{}}
@@ -172,8 +175,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function clearActiveInput() {
-    input.keys.clear(); input.actionCode = null; input.actionStart = 0; input.actionCharge = 0; input.actionModifiers = null;
-    input.bufferedAction = null; input.qTapStart = 0; input.qConsumed = false; input.moveX = 0; input.moveY = 0; input.magnitude = 0;
+    browserInput?.reset({ requestPause: false }); input.actionStart = 0; input.actionCharge = 0;
+    input.bufferedAction = null; input.moveX = 0; input.moveY = 0; input.magnitude = 0;
   }
 
   function showMatchSetup({ reset = true } = {}) {
@@ -331,10 +334,6 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if(!runner)return;runner.vx=lerp(runner.vx,direction.x*220,.72);runner.vy=lerp(runner.vy,direction.y*220,.72);runner.controlBoost=.75;announce(`${runner.name} bắt đầu chạy chỗ!`);
   }
 
-  function beginAttackAction(code) {
-    if(input.actionStart)return;const q=input.keys.has(FO4_CONTROLS.teammateRun);if(q)input.qConsumed=true;input.actionCode=code;input.actionStart=performance.now();input.actionCharge=0;input.actionModifiers={q,z:input.keys.has(FO4_CONTROLS.finesse)};
-  }
-
   function executeAttackAction(code,charge,modifiers={}) {
     const player=game.selected;if(ball.owner!==player){input.bufferedAction={code,charge,modifiers,expires:performance.now()+280};return;}
     if(code===FO4_CONTROLS.shortPass)passBall(player,charge,modifiers.q);
@@ -343,19 +342,10 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     else if(code===FO4_CONTROLS.shoot)shootBall(player,charge,modifiers.q?"chip":modifiers.z?"finesse":"power");
   }
 
-  function finishAttackAction(code) {
-    if(input.actionCode!==code||!input.actionStart)return;const charge=Math.max(.08,input.actionCharge);const modifiers=input.actionModifiers||{};input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;executeAttackAction(code,charge,modifiers);
-  }
-
   function updateInput() {
-    let x = 0; let y = 0;
-    if (input.keys.has("ArrowLeft")) x -= 1;
-    if (input.keys.has("ArrowRight")) x += 1;
-    if (input.keys.has("ArrowUp")) y -= 1;
-    if (input.keys.has("ArrowDown")) y += 1;
-    const raw=Math.hypot(x,y);
-    if(raw<.1){input.moveX=0;input.moveY=0;input.magnitude=0;}else{const direction=normalize(x,y);input.moveX=direction.x;input.moveY=direction.y;input.magnitude=1;input.aimX=direction.x;input.aimY=direction.y;}
-    if (input.actionStart) input.actionCharge = clamp((performance.now() - input.actionStart) / 900, 0, 1);
+    const charge = browserInput?.activeCharge ?? null;
+    input.actionStart = charge ? Math.max(charge.startedAt, Number.EPSILON) : 0;
+    input.actionCharge = charge?.power ?? 0;
   }
 
   function moveToward(player, tx, ty, speed, dt) {
@@ -374,8 +364,8 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function updateUser(player, dt) {
-    const attacking=isAttacking();const sprinting=input.keys.has(FO4_CONTROLS.sprint);
-    const precision=input.keys.has(FO4_CONTROLS.shield);const marking=!attacking&&input.keys.has(FO4_CONTROLS.shoot);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
+    const attacking=isAttacking();const sprinting=isKeyPressed(FO4_CONTROLS.sprint);
+    const precision=isKeyPressed(FO4_CONTROLS.shield);const marking=!attacking&&isKeyPressed(FO4_CONTROLS.shoot);let controlX=input.aimX;let controlY=input.aimY;let controlMagnitude=input.magnitude;let markTarget=null;
     if(marking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const dx=markTarget.x-player.x;const dy=markTarget.y-player.y;const d=Math.hypot(dx,dy);const toward=normalize(dx,dy);if(d>46){const mixed=normalize(toward.x+input.moveX*.65,toward.y+input.moveY*.65);controlX=mixed.x;controlY=mixed.y;controlMagnitude=clamp(.58+(d-46)/150,0,1);}else if(input.magnitude>.08){controlX=input.aimX;controlY=input.aimY;controlMagnitude=input.magnitude*.62;}else controlMagnitude=0;}}
     const controlledLocomotion=locomotionConfig.controlled;const hasMove=controlMagnitude>controlledLocomotion.minimumMoveMagnitude;
     if(precision&&!attacking){markTarget=ball.owner?.team===AWAY?ball.owner:closestPlayer(AWAY,ball,false);if(markTarget){const face=normalize(markTarget.x-player.x,markTarget.y-player.y);player.dirX=lerp(player.dirX,face.x,1-Math.exp(-dt*20));player.dirY=lerp(player.dirY,face.y,1-Math.exp(-dt*20));}}
@@ -395,7 +385,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     const aiSpeed = 168 * (team === AWAY ? game.ai : .96);
 
     if (player.role === "GK") {
-      if(team===HOME&&controlMode()==="defense"&&input.keys.has(FO4_CONTROLS.throughBall)){moveToward(player,ball.x,ball.y,aiSpeed*1.34,dt);return;}
+      if(team===HOME&&controlMode()==="defense"&&isKeyPressed(FO4_CONTROLS.throughBall)){moveToward(player,ball.x,ball.y,aiSpeed*1.34,dt);return;}
       const gx=team===HOME?82:1118;const danger=team===HOME?ball.x<330:ball.x>870;const projectedY=clamp(projectedGoalY(team),FIELD.goalTop+18,FIELD.goalBottom-18);const shotIncoming=!ball.owner&&(team===HOME?ball.vx<0:ball.vx>0)&&Math.hypot(ball.vx,ball.vy)>360;
       if(shotIncoming&&danger&&Math.abs(projectedY-player.y)>24&&Math.abs(projectedY-player.y)<155&&player.diveCooldown<=0&&ball.height<3.1){
         triggerAnimation(player,"dive",.5,Math.sign(projectedY-player.y));player.diveCooldown=1.05;
@@ -421,7 +411,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     }
 
     const pressSupport=team===HOME?players.filter((candidate)=>candidate.team===HOME&&candidate.role!=="GK"&&candidate!==game.selected).sort((a,b)=>distance(a,ball)-distance(b,ball))[0]:null;
-    const teammatePress=team===HOME&&controlMode()==="defense"&&input.keys.has(FO4_CONTROLS.teammateRun)&&player===pressSupport;
+    const teammatePress=team===HOME&&controlMode()==="defense"&&isKeyPressed(FO4_CONTROLS.teammateRun)&&player===pressSupport;
     const shouldChase = (teamChaser === player||teammatePress) && (!ball.owner || ball.owner.team !== team);
     if (shouldChase) { moveToward(player, ball.x, ball.y, aiSpeed * 1.08, dt); return; }
 
@@ -465,7 +455,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
           const d=distance(player,ball);const eligibility=captureEligibility({distance:d,ballHeight:ball.height,ballSpeed:Math.hypot(ball.vx,ball.vy),locked:ball.lock>0,playerCooldown:player.cooldown,isGoalkeeper:player.role==="GK",isLastTouch:player===ball.lastTouch,config:ballControlConfig.capture});if(eligibility.eligible&&d<best){pickup=player;best=d;}
         }
         if (pickup) {
-          const ballSpeed=Math.hypot(ball.vx,ball.vy);const precision=pickup===game.selected&&input.keys.has(FO4_CONTROLS.shield);const score=firstTouchScore({ballSpeed,incomingX:ball.vx,incomingY:ball.vy,facingX:pickup.dirX,facingY:pickup.dirY,ballHeight:ball.height,playerSpeed:Math.hypot(pickup.vx,pickup.vy),rating:pickup.rating,precision,sprinting:pickup.sprinting,config:ballControlConfig.firstTouch,captureConfig:ballControlConfig.capture});const outcome=classifyFirstTouch(score,ballControlConfig.firstTouch);const touch=resolveFirstTouch({outcome,ballX:ball.x,ballY:ball.y,ballVx:ball.vx,ballVy:ball.vy,receiver:pickup});
+          const ballSpeed=Math.hypot(ball.vx,ball.vy);const precision=pickup===game.selected&&isKeyPressed(FO4_CONTROLS.shield);const score=firstTouchScore({ballSpeed,incomingX:ball.vx,incomingY:ball.vy,facingX:pickup.dirX,facingY:pickup.dirY,ballHeight:ball.height,playerSpeed:Math.hypot(pickup.vx,pickup.vy),rating:pickup.rating,precision,sprinting:pickup.sprinting,config:ballControlConfig.firstTouch,captureConfig:ballControlConfig.capture});const outcome=classifyFirstTouch(score,ballControlConfig.firstTouch);const touch=resolveFirstTouch({outcome,ballX:ball.x,ballY:ball.y,ballVx:ball.vx,ballVy:ball.vy,receiver:pickup});
           ball.x=touch.x;ball.y=touch.y;ball.vx=touch.vx;ball.vy=touch.vy;ball.lock=Math.max(ball.lock,touch.lock);
           if(touch.controls)setOwner(pickup,outcome,outcome==="cushioned"?{vx:touch.vx,vy:touch.vy}:null);else{ball.owner=null;ball.lastTouch=pickup;ball.possession=releasePossession(beginReceiving(ball.possession,possessionId(pickup)),outcome,possessionId(pickup));pickup.cooldown=Math.max(pickup.cooldown,touch.lock);triggerAnimation(pickup,"receive",outcome==="heavy"?.26:.18);}
         }
@@ -878,12 +868,12 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   }
 
   function updateRigPlayer(player,pose,view,now,speed) {
-    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=player===game.selected&&controlMode()==="defense"&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&ball.owner?.team!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
+    const rig=view.rig;const dt=Math.min(.05,(now-rig.lastTime)/1000);rig.lastTime=now;const ballDirection=normalize(ball.x-pose.x,ball.y-pose.y);const ballYaw=Math.atan2(ballDirection.x,ballDirection.y);const movementYaw=pose.motionYaw??Math.atan2(pose.vx||pose.dirX,pose.vy||pose.dirY);const engaged=player===game.selected&&controlMode()==="defense"&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield));const moving=speed>42;let desired=moving?movementYaw:ballYaw;if(engaged)desired=Math.atan2(pose.dirX,pose.dirY);else if(moving&&ball.owner?.team!==player.team&&speed<125)desired=smoothAngle(movementYaw,ballYaw,.24);rig.yaw=smoothAngle(rig.yaw,desired,1-Math.exp(-dt*(pose.sprinting?8:11)));view.root.position.set(worldX(pose.x),0,worldZ(pose.y));view.root.rotation.y=rig.yaw;
     switchRigAnimation(view,rigAnimationState(pose,speed,rig.state));if(rig.active)rig.active.timeScale=rig.state==="Sprint_Loop"?clamp(speed/225,.82,1.42):rig.state==="Jog_Fwd_Loop"?clamp(speed/160,.78,1.34):1;rig.mixer.update(dt);
     const actionProgress=pose.animDuration?clamp(1-pose.animTime/pose.animDuration,0,1):1;applyFootballActionPose(rig,pose,actionProgress,dt);
     if(rig.active&&ball.owner===player&&speed>35){const footWave=Math.sin(pose.stepPhase);const foot=footWave>0?rig.rightThigh:rig.leftThigh;if(foot)foot.rotation.x-=Math.abs(footWave)*.13*clamp(speed/180,.35,1);}
     if(rig.active&&rig.head){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));rig.head.rotation.y+=clamp(look,-.68,.68)*.62;}if(rig.active&&rig.spine){const look=Math.atan2(Math.sin(ballYaw-rig.yaw),Math.cos(ballYaw-rig.yaw));if(speed<75)rig.spine.rotation.y+=clamp(look,-.28,.28)*.22;rig.spine.rotation.z-=(pose.turnLean||0)*.1;rig.spine.rotation.x-=clamp(speed/320,0,.12);}
-    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected;if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);}view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function cssColor(value) {return`#${value.toString(16).padStart(6,"0")}`;}
@@ -942,7 +932,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     view.torso.rotation.z=running?-stride*.035:0; view.torso.rotation.x=running ? .045 : 0; view.head.rotation.y=running?Math.sin(pose.stepPhase*.5)*.055:Math.sin(now*.0015+player.index)*.025; view.head.rotation.x=kick*-.1+celebrate*.04;
     view.leftLeg.rotation.x=stride*.72-tackle*1.05; view.rightLeg.rotation.x=-stride*.72-kick*(pose.anim==="shoot"?1.45:1.05); view.leftArm.rotation.x=celebrate?2.65+Math.sin(now*.01)*.24:-stride*.62-kick*.45; view.rightArm.rotation.x=celebrate?2.65-Math.sin(now*.01)*.24:stride*.62+kick*.72;
     view.leftArm.rotation.z=celebrate?-.72:-.24; view.rightArm.rotation.z=celebrate ? .72 : .24;
-    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
+    view.marker.visible=!game.replay.active&&player===game.selected; if(view.marker.visible){const pulse=1+Math.sin(now*.006)*.08;view.marker.scale.setScalar(pulse);view.marker.material.color.set(!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?0x47c9d4:0xffd86b);} view.label.visible=!game.replay.active&&(player===game.selected||speed<10);
   }
 
   function updateParticleView() {
@@ -977,7 +967,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   function drawFallbackPlayerDetail(player,pose,replayFrame) {
     const selected=!replayFrame&&player===game.selected; const home=player.team===HOME; const keeper=player.role==="GK"; const speed=Math.hypot(pose.vx,pose.vy); const stride=speed>30?Math.sin(pose.stepPhase)*6:0; const skinTones=["#d89d78","#b97958","#8f5a3d","#e5b08b"]; const skin=skinTones[(player.index+player.team)%4]; const jersey=keeper?(home?"#8a62dd":"#ed6757"):(home?"#e1bb58":"#47c9d4"); const shorts=keeper?"#20212c":(home?"#171b1a":"#092e35"); const sock=home?"#e9d58f":"#b8eff3";
     ctx.save();ctx.translate(pose.x,pose.y+(speed>30?Math.abs(Math.sin(pose.stepPhase))*-2:0));ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(5,17,23,9,0,0,Math.PI*2);ctx.fill();
-    if(selected){ctx.strokeStyle=!isAttacking()&&(input.keys.has(FO4_CONTROLS.shoot)||input.keys.has(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
+    if(selected){ctx.strokeStyle=!isAttacking()&&(isKeyPressed(FO4_CONTROLS.shoot)||isKeyPressed(FO4_CONTROLS.shield))?"#47c9d4":"#ffdb6d";ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,13,28,14,0,0,Math.PI*2);ctx.stroke();}
     ctx.rotate(canvasHeading(pose.dirX,pose.dirY));ctx.lineCap="round";
     ctx.strokeStyle=sock;ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(-6,10);ctx.lineTo(-7+stride,25);ctx.moveTo(6,10);ctx.lineTo(7-stride,25);ctx.stroke();ctx.strokeStyle="#191c1b";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-10+stride,26);ctx.lineTo(-5+stride,26);ctx.moveTo(3-stride,26);ctx.lineTo(10-stride,26);ctx.stroke();
     ctx.fillStyle=shorts;ctx.beginPath();ctx.roundRect(-11,4,22,12,4);ctx.fill();ctx.fillStyle=jersey;ctx.beginPath();ctx.roundRect(-13,-15,26,22,7);ctx.fill();ctx.fillStyle=home?"#161b19":"#e4f5f3";ctx.fillRect(-12,-5,24,3);
@@ -1253,26 +1243,62 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     clockOptions: gameplayConfig.simulation,
   });
 
-  function onKeyDown(event) {
-    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) event.preventDefault();
-    if (event.repeat && [FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass,FO4_CONTROLS.teammateRun,FO4_CONTROLS.tackle,FO4_CONTROLS.camera,"Escape"].includes(event.code)) return;
-    input.keys.add(event.code);
-    if (event.code === "Escape") togglePause();
-    if (game.state !== "playing") return;
-    if(event.shiftKey&&event.code.startsWith("Arrow")){switchPlayerInDirection(event.code);return;}
-    const attacking=isAttacking();
-    if(attacking&&[FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass].includes(event.code))beginAttackAction(event.code);
-    if(!attacking&&event.code===FO4_CONTROLS.shortPass)switchPlayer();
-    if(!attacking&&event.code===FO4_CONTROLS.loftPass)slideTackle(game.selected);
-    if(!attacking&&event.code===FO4_CONTROLS.tackle)tackle(game.selected);
-    if(attacking&&event.code===FO4_CONTROLS.teammateRun){input.qTapStart=performance.now();input.qConsumed=false;}
-    if(event.code===FO4_CONTROLS.camera)cycleCamera();
+  function applyCompatibilityCommand(command) {
+    if (command.type === GameCommandType.MOVE) {
+      input.moveX = command.payload.x; input.moveY = command.payload.y; input.magnitude = Math.hypot(input.moveX, input.moveY);
+      if (input.magnitude > .1) { input.aimX = input.moveX; input.aimY = input.moveY; }
+      return;
+    }
+    if (command.type === GameCommandType.SWITCH_PLAYER) switchPlayer();
+    else if (command.type === GameCommandType.SWITCH_PLAYER_DIRECTION) {
+      const { x, y } = command.payload.direction;
+      const code = Math.abs(x) > Math.abs(y) ? (x < 0 ? "ArrowLeft" : "ArrowRight") : (y < 0 ? "ArrowUp" : "ArrowDown");
+      switchPlayerInDirection(code);
+    } else if (command.type === GameCommandType.TACKLE) tackle(game.selected);
+    else if (command.type === GameCommandType.SLIDE_TACKLE) slideTackle(game.selected);
+    else if (command.type === GameCommandType.TRIGGER_TEAMMATE_RUN) triggerTeammateRun();
+    else if ([GameCommandType.SHORT_PASS,GameCommandType.THROUGH_BALL,GameCommandType.LOFTED_PASS,GameCommandType.SHOOT].includes(command.type)) {
+      const actionCode = {
+        [GameCommandType.SHORT_PASS]: FO4_CONTROLS.shortPass,
+        [GameCommandType.THROUGH_BALL]: FO4_CONTROLS.throughBall,
+        [GameCommandType.LOFTED_PASS]: FO4_CONTROLS.loftPass,
+        [GameCommandType.SHOOT]: FO4_CONTROLS.shoot
+      }[command.type];
+      const modifiers = command.payload.modifiers ?? {};
+      executeAttackAction(actionCode, command.payload.power, {
+        q: Boolean(modifiers.oneTwo || modifiers.chip),
+        z: Boolean(modifiers.finesse)
+      });
+    } else if (command.type === GameCommandType.START_MATCH || command.type === GameCommandType.RESTART_MATCH) startMatch();
+    else if (command.type === GameCommandType.PAUSE_MATCH) togglePause(true);
+    else if (command.type === GameCommandType.RESUME_MATCH) togglePause(false);
   }
-  function onKeyUp(event) {
-    input.keys.delete(event.code);
-    if([FO4_CONTROLS.shortPass,FO4_CONTROLS.throughBall,FO4_CONTROLS.shoot,FO4_CONTROLS.loftPass].includes(event.code)){if(controlMode()==="attack")finishAttackAction(event.code);else{input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;}}
-    if(event.code===FO4_CONTROLS.teammateRun){if(controlMode()==="attack"&&input.qTapStart&&!input.qConsumed)triggerTeammateRun();input.qTapStart=0;input.qConsumed=false;}
-  }
+
+  const applicationRuntime = new ApplicationRuntime({
+    dispatchGameCommand: applyCompatibilityCommand,
+    getMatchState: () => game.state,
+    onNavigation: (action) => {
+      if (action.type === ApplicationActionType.OPEN_MATCH_SETUP) showMatchSetup({ reset: true });
+      if (action.type === ApplicationActionType.OPEN_MAIN_MENU) showMainMenu();
+    }
+  });
+
+  browserInput = new BrowserInputAdapter({
+    target: window,
+    onCommand: applyCompatibilityCommand,
+    onApplicationRequest: (type) => applicationRuntime.request(type),
+    onCameraCycle: cycleCamera,
+    getControlMode: controlMode,
+    getMatchState: () => game.state
+  });
+  browserInput.attach();
+
+  const browserApplication = new BrowserApplicationAdapter({
+    target: window,
+    document,
+    runtime: applicationRuntime
+  });
+  browserApplication.attach();
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll("[data-difficulty]").forEach((item) => item.classList.remove("active")); button.classList.add("active");
@@ -1282,16 +1308,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
   document.querySelectorAll("[data-ball]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-ball]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.ballStyle=button.dataset.ball;savePreference("tfBall",game.ballStyle);applyBallStyle();tone(680,.04,"sine",.018);}));
   document.querySelectorAll("[data-weather]").forEach((button)=>button.addEventListener("click",()=>{document.querySelectorAll("[data-weather]").forEach((item)=>item.classList.remove("active"));button.classList.add("active");game.weather=button.dataset.weather;savePreference("tfWeather",game.weather);applyPitchStyle();tone(game.weather==="rain"?330:560,.05,"sine",.018);}));
   document.querySelectorAll("[data-pitch]").forEach((button)=>button.classList.toggle("active",button.dataset.pitch===game.pitchStyle));document.querySelectorAll("[data-ball]").forEach((button)=>button.classList.toggle("active",button.dataset.ball===game.ballStyle));document.querySelectorAll("[data-weather]").forEach((button)=>button.classList.toggle("active",button.dataset.weather===game.weather));
-  $("playButton").addEventListener("click", startMatch);
-  $("pauseButton").addEventListener("click", () => togglePause());
-  $("resumeButton").addEventListener("click", () => togglePause(false));
-  $("restartButton").addEventListener("click", startMatch);
-  $("setupButton").addEventListener("click", () => showMatchSetup({ reset: true }));
-  $("mainMenuButton").addEventListener("click", showMainMenu);
-  $("playAgainButton").addEventListener("click", startMatch);
   $("soundButton").addEventListener("click", () => { game.sound=!game.sound;$("soundButton").classList.toggle("muted",!game.sound);$("soundButton").setAttribute("aria-label",game.sound?"Tắt âm thanh":"Bật âm thanh");if(game.sound)tone(600,.08); });
-  window.addEventListener("keydown", onKeyDown, { passive: false }); window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", () => { input.keys.clear();input.actionCode=null;input.actionStart=0;input.actionCharge=0;input.actionModifiers=null;input.bufferedAction=null;input.qTapStart=0;input.qConsumed=false;if(game.state === "playing") togglePause(true); });
   document.addEventListener("contextmenu", (event) => event.preventDefault());
 
   function applyDebugScenario(name = "normal-play") {
@@ -1318,7 +1335,7 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
     if (name !== "normal-play") {
       game.state = "paused";
       ui.pause.classList.remove("show");
-      input.keys.clear();
+      browserInput.reset({ requestPause: false });
     }
   }
 

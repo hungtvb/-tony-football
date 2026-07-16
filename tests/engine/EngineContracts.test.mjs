@@ -41,11 +41,20 @@ test("game commands reject unknown types and invalid payloads", () => {
   assert.throws(() => createGameCommand(GameCommandType.MOVE, { x: 2, y: 0 }), /move.x/);
   assert.throws(() => createGameCommand(GameCommandType.SET_SPRINT, { active: 1 }), /boolean/);
   assert.throws(() => createGameCommand(GameCommandType.SET_TEAM_PRESS, { active: 1 }), /boolean/);
+  assert.throws(() => createGameCommand(GameCommandType.SWITCH_PLAYER_DIRECTION, { direction: { x: 2, y: 0 } }), /switch direction.x/);
   assert.throws(() => createGameCommand(GameCommandType.SHORT_PASS, { power: 1.2 }), /between 0 and 1/);
   assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, playerId: "" }), /non-empty string/);
   assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, modifiers: { finesse: 1 } }), /boolean/);
   assert.throws(() => createGameCommand(GameCommandType.SHOOT, { power: 0.5, modifiers: { knuckle: true } }), /not supported/);
   assert.throws(() => createGameCommand(GameCommandType.PAUSE_MATCH, { reason: "menu" }), /does not accept/);
+});
+
+test("directional player switching is an immutable command contract", () => {
+  const command = createGameCommand(GameCommandType.SWITCH_PLAYER_DIRECTION, {
+    direction: { x: -1, y: 0 }
+  });
+  assert.deepEqual(command.payload.direction, { x: -1, y: 0 });
+  assert.ok(Object.isFrozen(command.payload.direction));
 });
 
 test("command buffer assigns deterministic order and drains atomically", () => {

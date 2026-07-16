@@ -1,4 +1,6 @@
 import { createPostMatchSummary } from "./PostMatchSummary.js";
+import { ApplicationActionType } from "../application/ApplicationActions.js";
+import { requestApplicationAction } from "../application/BrowserApplicationAdapter.js";
 
 const resultOverlay = document.getElementById("resultOverlay");
 const resultCard = resultOverlay?.querySelector(".result-card");
@@ -129,8 +131,8 @@ function enhanceResultCard() {
   actions.append(playAgainButton, resultSetupButton, resultMainMenuButton);
   resultCard.replaceChildren(header, scoreStage, resultDetail, stats, actions);
 
-  resultSetupButton.addEventListener("click", () => document.getElementById("setupButton")?.click());
-  resultMainMenuButton.addEventListener("click", () => document.getElementById("mainMenuButton")?.click());
+  resultSetupButton.addEventListener("click", () => requestApplicationAction(window, ApplicationActionType.OPEN_MATCH_SETUP));
+  resultMainMenuButton.addEventListener("click", () => requestApplicationAction(window, ApplicationActionType.OPEN_MAIN_MENU));
 }
 
 function renderSummary(summary) {

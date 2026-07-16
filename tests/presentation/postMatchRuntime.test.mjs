@@ -24,3 +24,10 @@ test("post-match diagnostics expose one presentation per preview", () => {
   assert.match(postMatchHub, /presentationCount,/);
   assert.match(postMatchHub, /document\.body\.dataset\.flow !== "result"/);
 });
+
+test("post-match navigation uses explicit application actions", () => {
+  assert.match(postMatchHub, /ApplicationActionType\.OPEN_MATCH_SETUP/);
+  assert.match(postMatchHub, /ApplicationActionType\.OPEN_MAIN_MENU/);
+  assert.doesNotMatch(postMatchHub, /setupButton"\)\?\.click/);
+  assert.doesNotMatch(postMatchHub, /mainMenuButton"\)\?\.click/);
+});

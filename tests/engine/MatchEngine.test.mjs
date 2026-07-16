@@ -125,6 +125,20 @@ test("defensive AI hold controls remain engine-owned command state", () => {
   assert.equal(engine.snapshot.match.controls.teamPress, true);
 });
 
+test("directional switch command selects a teammate in the requested lane", () => {
+  const engine = new MatchEngine({ kickoffDelay: 0 });
+  engine.enqueue(GameCommandType.START_MATCH, {}, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+  const before = engine.snapshot.match.selectedPlayerId;
+  engine.enqueue(GameCommandType.SWITCH_PLAYER_DIRECTION, {
+    direction: { x: -1, y: 0 }
+  }, { source: GameCommandSource.TEST });
+  engine.step(1 / 60);
+
+  assert.notEqual(engine.snapshot.match.selectedPlayerId, before);
+  assert.ok(engine.snapshot.players.find((player) => player.id === engine.snapshot.match.selectedPlayerId).x < 690);
+});
+
 test("equal kick commands and seeds produce deterministic ball outcomes", () => {
   function shoot() {
     const engine = new MatchEngine({ kickoffDelay: 0, randomSeed: "kick-parity" });

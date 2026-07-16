@@ -53,6 +53,20 @@ test("failed tackle still commits the slide without stealing possession", () => 
   assert.equal(player.vx, 105);
 });
 
+test("standing tackle keeps the FO4 Space timing without slide impulse", () => {
+  const { state, player } = tackleState();
+  const result = executeTackle(state, {
+    style: "standing",
+    random: { next: () => 0 }
+  });
+
+  assert.equal(result.style, "standing");
+  assert.equal(player.cooldown, 0.7);
+  assert.equal(player.vx, 0);
+  assert.equal(player.animTime, 0.38);
+  assert.equal(player.animPower, 0);
+});
+
 test("tackle rejects cooldown and out-of-range attempts without mutation", () => {
   const cooldown = tackleState();
   cooldown.player.cooldown = 0.1;
