@@ -84,6 +84,12 @@ function snapshotDiagnostics(snapshot) {
     goalSequence: snapshot.match.goalSequence ? { ...snapshot.match.goalSequence } : null,
     kickoffTimer: snapshot.match.kickoffTimer,
     ballOwnerId: snapshot.ball.ownerId,
+    stats: {
+      possession: [...snapshot.match.stats.possession],
+      shots: [...snapshot.match.stats.shots],
+      passes: snapshot.match.stats.passes,
+      completed: snapshot.match.stats.completed,
+    },
   };
 }
 

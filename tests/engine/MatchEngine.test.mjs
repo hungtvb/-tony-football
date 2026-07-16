@@ -296,5 +296,6 @@ test("headless AI match remains finite and referentially valid during a ten-seco
   assert.ok(Number.isFinite(snapshot.ball.x));
   assert.ok(Number.isFinite(snapshot.ball.y));
   assert.ok(snapshot.ball.ownerId === null || playerIds.has(snapshot.ball.ownerId));
-  assert.ok(snapshot.match.elapsed > 9.9);
+  assert.ok(snapshot.match.elapsed > 0 && snapshot.match.elapsed <= 10);
+  assert.ok(snapshot.match.time >= 10 && snapshot.match.time < 20);
 });
