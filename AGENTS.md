@@ -32,6 +32,28 @@ At the beginning of every new coding session:
 
 Never implement sprint work directly on local or remote `main`. One sprint still equals one branch and one pull request.
 
+## Publishing local changes
+
+Restricted local workspaces may not contain an authenticated Git remote. Use the local workspace to edit, test, inspect diffs, and create recoverable local commits, but publish repository changes through the GitHub connector.
+
+Required publishing path:
+
+1. Create or reuse the task branch from the latest verified `main` SHA.
+2. Publish file changes with GitHub file APIs or an atomic blob/tree/commit/ref update.
+3. Open or update the task pull request from that branch.
+4. Verify that the published branch head matches the intended local change.
+5. Run and monitor standard exact-head PR CI.
+
+Do not:
+
+- Create a temporary GitHub Actions workflow or script whose purpose is to decode, apply, commit, or push a patch.
+- Grant `contents: write` to a PR workflow merely to transport code from a local workspace.
+- Encode source patches in workflow YAML, repository secrets, issue comments, or workflow inputs.
+- Make a workflow delete itself or its patch payload after pushing.
+- Treat a transport workflow as implementation validation or as part of the required CI gate.
+
+If the GitHub connector cannot safely publish an atomic multi-file change, report the publishing blocker on the related Linear/GitHub item. Do not invent a write-enabled transport workflow as a workaround.
+
 ## Scope rule
 
 Implement only the active sprint unless the user explicitly requests another task.
