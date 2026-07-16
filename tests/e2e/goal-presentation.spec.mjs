@@ -196,7 +196,6 @@ test("default engine goal drives browser score, replay, commentary, and coherent
   }, null, { timeout: 12_000 });
 
   await expect(page.locator("#replayBadge")).not.toHaveClass(/show/);
-  await expect(page.locator("#commentary")).toHaveText("Chuẩn bị giao bóng lại.");
   await expect(page.locator("#homeScore")).toHaveText("1");
   await expect(page.locator("#awayScore")).toHaveText("0");
 
@@ -205,6 +204,7 @@ test("default engine goal drives browser score, replay, commentary, and coherent
     timeline: window.__TONY_GOAL_PRESENTATION__.diagnostics().timelineHistory,
   }));
   expect(evidence.commentary).toContain("Đang xem lại bàn thắng.");
+  expect(evidence.commentary).toContain("Chuẩn bị giao bóng lại.");
   expect(evidence.commentary).not.toEqual([beforeGoal]);
   expect(evidence.badge.some(({ className, text }) => (
     className.includes("show") && text.includes("INSTANT REPLAY")
