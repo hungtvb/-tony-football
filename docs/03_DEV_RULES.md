@@ -20,7 +20,9 @@
 Preserve WebGL, Canvas fallback, FO4 controls, model loading/fallback, replay, GitHub Pages, pitch, ball, weather, HUD, and match flow.
 
 ## Safety
-Do not use destructive disk, filesystem, git-history, secret-printing, or credential-upload commands.
+- Do not use destructive disk, filesystem, git-history, secret-printing, or credential-upload commands.
+- `bootstrap-local-playwright.sh` creates a new workspace only and must never target a destination containing `.git`.
+- Use `scripts/sync-local-main.sh` from an existing bootstrapped Git workspace; destructive reset requires a separate reviewed recovery flow.
 
 ## Completion
 Tests pass, manual validation is reported, documentation routing is checked, regressions are explained, and limitations are documented.
