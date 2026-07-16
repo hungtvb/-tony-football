@@ -1,6 +1,11 @@
-import { createPostMatchSummary } from "./PostMatchSummary.js";
+import {
+  createPostMatchSummary,
+  createPostMatchSummaryFromMatchEvent
+} from "./PostMatchSummary.js";
 import { ApplicationActionType } from "../application/ApplicationActions.js";
 import { requestApplicationAction } from "../application/BrowserApplicationAdapter.js";
+import { GameEventType } from "../engine/GameEvents.js";
+import { subscribeToGameEvents } from "./BrowserGameEventBridge.js";
 
 const resultOverlay = document.getElementById("resultOverlay");
 const resultCard = resultOverlay?.querySelector(".result-card");
@@ -9,10 +14,6 @@ const resultDetail = document.getElementById("resultDetail");
 const finalHome = document.getElementById("finalHome");
 const finalAway = document.getElementById("finalAway");
 const playAgainButton = document.getElementById("playAgainButton");
-const sourcePossession = document.getElementById("possessionStat");
-const sourceHomeShots = document.getElementById("homeShots");
-const sourceAwayShots = document.getElementById("awayShots");
-const sourcePassAccuracy = document.getElementById("passStat");
 const competingOverlays = [
   document.getElementById("mainMenuOverlay"),
   document.getElementById("startOverlay"),
@@ -23,7 +24,6 @@ let currentSummary = null;
 let resultSetupButton = null;
 let resultMainMenuButton = null;
 let presentationCount = 0;
-let resultObserver = null;
 
 function ensureStylesheet() {
   if (document.querySelector('link[data-u3-post-match="true"]')) return;
@@ -32,22 +32,6 @@ function ensureStylesheet() {
   link.href = new URL("../../../u3-post-match.css", import.meta.url).href;
   link.dataset.u3PostMatch = "true";
   document.head.append(link);
-}
-
-function percentFrom(element, fallback = 0) {
-  const value = Number.parseInt(element?.textContent ?? "", 10);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-function readSummary() {
-  return createPostMatchSummary({
-    homeScore: finalHome?.textContent,
-    awayScore: finalAway?.textContent,
-    homePossession: percentFrom(sourcePossession, 50),
-    homeShots: sourceHomeShots?.textContent,
-    awayShots: sourceAwayShots?.textContent,
-    passAccuracy: percentFrom(sourcePassAccuracy),
-  });
 }
 
 function hideCompetingOverlays() {
@@ -152,32 +136,25 @@ function renderSummary(summary) {
   document.getElementById("resultPassAccuracy").textContent = `${summary.passAccuracy}%`;
 }
 
-function presentResult(summary = readSummary(), { focus = true } = {}) {
+function presentResult(summary = createPostMatchSummary(), { focus = true } = {}) {
   presentationCount += 1;
-  resultObserver?.disconnect();
-  try {
-    enhanceResultCard();
-    hideCompetingOverlays();
-    renderSummary(summary);
-    if (!resultOverlay.classList.contains("show")) resultOverlay.classList.add("show");
-    resultOverlay.setAttribute("aria-hidden", "false");
-    document.body.dataset.flow = "result";
-    if (focus) requestAnimationFrame(() => playAgainButton?.focus());
-  } finally {
-    resultObserver?.observe(resultOverlay, { attributes: true, attributeFilter: ["class"] });
-  }
+  enhanceResultCard();
+  hideCompetingOverlays();
+  renderSummary(summary);
+  if (!resultOverlay.classList.contains("show")) resultOverlay.classList.add("show");
+  resultOverlay.setAttribute("aria-hidden", "false");
+  document.body.dataset.flow = "result";
+  if (focus) requestAnimationFrame(() => playAgainButton?.focus());
 }
 
 ensureStylesheet();
 enhanceResultCard();
 
-resultObserver = new MutationObserver(() => {
-  if (
-    resultOverlay?.classList.contains("show")
-    && document.body.dataset.flow !== "result"
-  ) presentResult(readSummary());
+subscribeToGameEvents(window, (event) => {
+  if (event.type === GameEventType.MATCH_ENDED) {
+    presentResult(createPostMatchSummaryFromMatchEvent(event.payload));
+  }
 });
-if (resultOverlay) resultObserver.observe(resultOverlay, { attributes: true, attributeFilter: ["class"] });
 
 window.__TONY_POST_MATCH__ = {
   ready: true,

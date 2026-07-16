@@ -69,6 +69,25 @@ test("post-match hub renders the final score, statistics, and three actions", as
   expect(diagnostics.presentationCount).toBe(1);
 });
 
+test("match-ended event opens the report from explicit match facts", async ({ page }) => {
+  await openPostMatch(page);
+  await page.evaluate(() => window.__TONY_DEBUG__.emitGameEvent("match:ended", {
+    score: [3, 2],
+    stats: {
+      possession: [70, 30],
+      shots: [9, 5],
+      passes: 20,
+      completed: 16,
+    },
+  }));
+
+  await expect(page.locator("#resultOverlay")).toHaveClass(/show/);
+  await expect(page.locator("#finalHome")).toHaveText("3");
+  await expect(page.locator("#finalAway")).toHaveText("2");
+  await expect(page.locator("#resultHomePossession")).toHaveText("70%");
+  await expect(page.locator("#resultPassAccuracy")).toHaveText("80%");
+});
+
 test("play again keeps the selected match setup and starts immediately", async ({ page }) => {
   await openPostMatch(page);
   await page.locator("#quickMatchButton").click();

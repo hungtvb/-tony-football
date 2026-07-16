@@ -23,9 +23,9 @@ R1 architecture gate before returning to G4, U4, U5, or major AI expansion.
 R1 — Engine and Presentation Boundary.
 
 ## Priority order
-1. Make renderers and presentation consume snapshots and events
+1. Make WebGL, Canvas, radar, and HUD consume snapshots
 2. Preserve WebGL and Canvas parity through compatibility bridges
-3. Replace DOM-derived score, result, replay, HUD, and audio facts with engine events
+3. Replace remaining DOM-derived HUD and audio facts with engine events
 4. Reduce `game.js` to explicit composition and bootstrap
 
 ## Explicitly out of scope

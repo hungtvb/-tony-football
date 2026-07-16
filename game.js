@@ -23,11 +23,13 @@ import { captureEligibility, classifyFirstTouch, dribbleAnchor, firstTouchScore,
 import { beginReceiving, controlPossession, createPossessionLifecycle, releasePossession, settleLoose } from "./src/game/gameplay/PossessionLifecycle.js";
 import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, dampVelocity, stepFacing, stepStamina, stepTowardTarget, stepVelocity, webGLHeading } from "./src/game/gameplay/PlayerLocomotion.js";
 import { GameCommandType } from "./src/game/engine/GameCommands.js";
+import { GameEventType, createGameEvent } from "./src/game/engine/GameEvents.js";
 import { FO4_CONTROLS } from "./src/game/input/FO4Controls.js";
 import { BrowserInputAdapter } from "./src/game/input/BrowserInputAdapter.js";
 import { ApplicationActionType } from "./src/game/application/ApplicationActions.js";
 import { ApplicationRuntime } from "./src/game/application/ApplicationRuntime.js";
 import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplicationAdapter.js";
+import { publishGameEvent } from "./src/game/presentation/BrowserGameEventBridge.js";
 
 (() => {
   const canvas = document.querySelector("#gameCanvas");
@@ -127,6 +129,18 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
     actionStart: 0, actionCharge: 0, bufferedAction: null, lastMode: "defense"
   };
   const isKeyPressed = (code) => browserInput?.isPressed(code) ?? false;
+  let compatibilityTick = 0;
+  let compatibilityEventSequence = 0;
+
+  function publishCompatibilityEvent(type, payload = {}) {
+    const event = createGameEvent(type, payload, {
+      tick: compatibilityTick,
+      sequence: compatibilityEventSequence
+    });
+    compatibilityEventSequence += 1;
+    publishGameEvent(window, event);
+    return event;
+  }
 
   function loadPreference(key,fallback,options){try{const value=localStorage.getItem(key);return options[value]?value:fallback;}catch{return fallback;}}
   function savePreference(key,value){try{localStorage.setItem(key,value);}catch{}}
@@ -143,6 +157,7 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
   }
 
   function resetMatch() {
+    if (game.replay.active) publishCompatibilityEvent(GameEventType.REPLAY_ENDED);
     createTeams();
     game.time = MATCH_SECONDS; game.score = [0, 0]; game.stats = { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 };
     game.particles.length = 0; game.flash = 0; game.goalSequence = null; game.goalScorer = null;
@@ -195,11 +210,16 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
   }
 
   function endMatch() {
-    game.state = "ended"; ui.result.classList.add("show"); ui.matchState.textContent = "FULL TIME"; whistle(true);
-    $("finalHome").textContent = game.score[HOME]; $("finalAway").textContent = game.score[AWAY];
-    const diff = game.score[HOME] - game.score[AWAY];
-    $("resultTitle").textContent = diff > 0 ? "CHIẾN THẮNG!" : diff < 0 ? "CHƯA ĐỦ!" : "HÒA KỊCH TÍNH";
-    $("resultDetail").textContent = diff > 0 ? "Tony FC đã làm chủ sân đấu." : diff < 0 ? "Chỉ còn một chút nữa. Đá lại nào!" : "Hai đội bất phân thắng bại.";
+    game.state = "ended"; ui.matchState.textContent = "FULL TIME"; whistle(true);
+    publishCompatibilityEvent(GameEventType.MATCH_ENDED, {
+      score: game.score.slice(),
+      stats: {
+        possession: game.stats.possession.slice(),
+        shots: game.stats.shots.slice(),
+        passes: game.stats.passes,
+        completed: game.stats.completed
+      }
+    });
   }
 
   function closestPlayer(team, target, includeKeeper = true) {
@@ -484,6 +504,13 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
     for (let i = 0; i < 80; i += 1) spawnParticle(team === HOME ? FIELD.right : FIELD.left, H / 2, team === HOME ? "#e1bb58" : "#47c9d4", 3.5);
     announce(team === HOME ? "GOOOOAL! TONY FC GHI BÀN!" : "Neon United ghi bàn!"); updateUI(team);
     ui.replayBadge.textContent = "● INSTANT REPLAY"; ui.replayBadge.classList.toggle("show", game.replay.active);
+    publishCompatibilityEvent(GameEventType.SCORE_CHANGED, {
+      team,
+      scorerId: possessionId(scorer),
+      score: game.score.slice(),
+      replayAvailable: game.replay.active
+    });
+    if (game.replay.active) publishCompatibilityEvent(GameEventType.REPLAY_STARTED);
   }
 
   function captureReplayFrame() {
@@ -505,6 +532,7 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
     game.replay.elapsed += dt;
     if (game.replay.elapsed >= game.replay.duration) {
       game.replay.active = false; ui.replayBadge.classList.remove("show");
+      publishCompatibilityEvent(GameEventType.REPLAY_ENDED);
     }
   }
 
@@ -1227,6 +1255,7 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
   function goalSound() { if(!audioFeedback.canPlay("goal",audioNow()))return;[392,523,659,784].forEach((note,index)=>tone(note,.42,"square",.025,index*.09)); }
 
   function simulationStep(dt) {
+    compatibilityTick += 1;
     update(dt);
     if (game.messageTimer > 0) game.messageTimer -= dt;
   }
@@ -1269,9 +1298,15 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
         q: Boolean(modifiers.oneTwo || modifiers.chip),
         z: Boolean(modifiers.finesse)
       });
-    } else if (command.type === GameCommandType.START_MATCH || command.type === GameCommandType.RESTART_MATCH) startMatch();
-    else if (command.type === GameCommandType.PAUSE_MATCH) togglePause(true);
-    else if (command.type === GameCommandType.RESUME_MATCH) togglePause(false);
+    } else if (command.type === GameCommandType.START_MATCH) {
+      startMatch(); publishCompatibilityEvent(GameEventType.MATCH_STARTED);
+    } else if (command.type === GameCommandType.RESTART_MATCH) {
+      startMatch(); publishCompatibilityEvent(GameEventType.MATCH_RESTARTED);
+    } else if (command.type === GameCommandType.PAUSE_MATCH) {
+      togglePause(true); publishCompatibilityEvent(GameEventType.MATCH_PAUSED);
+    } else if (command.type === GameCommandType.RESUME_MATCH) {
+      togglePause(false); publishCompatibilityEvent(GameEventType.MATCH_RESUMED);
+    }
   }
 
   const applicationRuntime = new ApplicationRuntime({
@@ -1342,6 +1377,7 @@ import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplica
   window.__TONY_DEBUG__ = {
     ready: false,
     applyScenario: applyDebugScenario,
+    emitGameEvent: (type, payload = {}) => publishCompatibilityEvent(type, payload),
     diagnostics: () => ({
       camera: { ...game.camera },
       ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },

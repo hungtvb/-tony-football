@@ -26,10 +26,11 @@ Before modifying code:
 | Entry point | Current responsibility | Notes |
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, HUD and overlay DOM | Presentation projection; not gameplay authority |
-| `game.js` | Current composition root plus authoritative match state, simulation updates, input, rendering, replay, audio, DOM and debug wiring | Primary R1 extraction target |
+| `game.js` | Current composition root plus compatibility match state, simulation updates, command application, rendering, replay, audio, DOM and debug wiring | Primary R1 extraction target |
 | `src/game/engine/` | R1 contracts, state, MatchEngine lifecycle, movement, ball simulation, player actions, goalkeeper behavior, and team AI | Headless only; no DOM, Three.js, Canvas, audio, or render-frame dependencies |
 | `src/game/input/` | FO4 keyboard mapping, browser key lifecycle, charge state, and immutable human commands | Browser adapter only; compatibility gameplay bridge remains in `game.js` |
 | `src/game/application/` | Explicit lifecycle and navigation requests plus browser button/event adapter | Match lifecycle becomes engine commands; setup/main-menu stay outside MatchEngine |
+| `src/game/presentation/BrowserGameEventBridge.js` | Projects immutable game events onto a browser `EventTarget` | Temporary compatibility bridge until `MatchEngine` is the live runtime owner |
 | `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Uses `FixedClock`; exposes interpolation alpha |
 | `scripts/dev-server.mjs` | Local static development server | Development only; never the Vercel production entry point |
 | `scripts/build-static.mjs` | Produces the static `dist` bundle | Vercel publishes `dist` |
@@ -43,7 +44,7 @@ Before modifying code:
 FO4 keyboard → immutable commands → game.js compatibility state/update
 AI decisions ──────────────────────→ game.js compatibility state/update
 Application actions → lifecycle/navigation bridge
-DOM observers ─────────────────────→ replay and presentation bridges
+Typed game events ─────────────────→ replay, goal and result presentation
 ```
 
 ### R1 target
@@ -76,7 +77,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Canvas 2D fallback | `game.js` | Presentation inside `game.js` | Canvas smoke path and browser validation | Extract Canvas renderer using the same snapshots |
 | Camera and radar | `src/game/presentation/CameraFraming.js`, `src/game/config/cameraHudConfig.js`, `game.js` | Presentation | `tests/presentation/cameraFraming.test.mjs`, `docs/ui/CAMERA_HUD.md`, U3.1 sprint | Consume snapshots only; never affect simulation |
 | Game feel, particles, trails and audio | `src/game/presentation/`, `game.js` | Presentation | `tests/presentation/`, `docs/ui/GAME_FEEL.md` | Consume ordered gameplay events and snapshots |
-| Main menu, intro, goal and result flows | `src/game/application/`, `src/game/presentation/MainMenuFlow.js`, `MatchIntroFlow.js`, `GoalPresentationFlow.js`, `PostMatchHub.js` | Application lifecycle/navigation plus presentation | `tests/application/`, `tests/presentation/`, U3.2/U3.3 sprint docs, Playwright | Lifecycle/navigation are explicit; Slice D removes remaining score/result DOM inference |
+| Main menu, intro, goal and result flows | `src/game/application/`, `src/game/presentation/MainMenuFlow.js`, `MatchIntroFlow.js`, `GoalPresentationFlow.js`, `PostMatchHub.js`, `BrowserGameEventBridge.js` | Application lifecycle/navigation plus event-driven presentation | `tests/application/`, `tests/presentation/`, U3.2/U3.3 sprint docs, Playwright | Lifecycle/navigation and score/replay/match-ended facts are explicit; next connect the live MatchEngine event queue |
 | Presentation state machines | `src/game/state/` | Presentation state | `tests/presentation/` | Remain presentation-only and event-driven |
 | Static deployment | `package.json`, `scripts/build-static.mjs`, `vercel.json` | Build system | `tests/presentation/staticDeployment.test.mjs` | Preserve; add preview asset smoke validation |
 
@@ -85,8 +86,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 These are known migration points, not patterns to copy:
 
 - `game.js` contains both authoritative state and visual objects in one closure.
-- goal presentation observes rendered score DOM through `MutationObserver`.
-- post-match presentation observes the result overlay and reads rendered statistics.
+- `game.js` temporarily projects compatibility score, replay, lifecycle, and match-ended facts through `BrowserGameEventBridge`.
 - `game.js` temporarily applies immutable input and application commands to the legacy mutable runtime.
 - presentation modules rely partly on import-time side effects.
 - WebGL, Canvas fallback, radar, HUD and replay read mutable runtime objects directly.

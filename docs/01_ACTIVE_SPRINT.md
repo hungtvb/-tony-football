@@ -3,7 +3,7 @@
 ```yaml
 Sprint: R1
 Title: Engine and Presentation Boundary
-Status: In Progress — Slice C input/application adapters complete
+Status: In Progress — Slice D1 presentation event bridge complete
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
@@ -23,13 +23,14 @@ Validation required:
   - snapshot identity, ownership, immutability, and interpolation-frame tests
   - engine import-boundary tests
   - all existing simulation, gameplay, presentation, and asset tests
+  - desktop and narrow browser flows for score, replay, and match-ended events
 Do not modify:
   - simulation timing
   - movement, possession, pass, shot, tackle, or goalkeeper balance
   - FO4 control mapping
   - WebGL, Canvas fallback, models, camera, or presentation behavior
 Next slices:
-  - Slice D Rendering and presentation adapters
+  - Slice D2 Snapshot-driven WebGL, Canvas, radar, and HUD adapters
   - Slice E Explicit bootstrap and compatibility cleanup
 ```
 

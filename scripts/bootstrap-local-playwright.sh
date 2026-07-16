@@ -120,8 +120,8 @@ browser_tgz=$(find "$temporary/browsers" -type f -name '*.tgz' -print -quit)
 prepare_destination "$workspace"
 prepare_destination "$browser_root"
 
-tar -xzf "$runtime_tgz" -C "$workspace"
-tar -xzf "$browser_tgz" -C "$browser_root"
+tar --no-same-owner -xzf "$runtime_tgz" -C "$workspace"
+tar --no-same-owner -xzf "$browser_tgz" -C "$browser_root"
 
 browser_path="$browser_root/ms-playwright"
 [[ -d "$browser_path" ]] || { echo "Expected Playwright cache missing: $browser_path" >&2; exit 1; }

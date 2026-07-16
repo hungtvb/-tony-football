@@ -14,9 +14,6 @@ test("goal presentation yields native highlight and replay windows", async ({ pa
   await openGoalTest(page);
 
   await page.evaluate(() => {
-    const badge = document.getElementById("replayBadge");
-    badge.textContent = "● INSTANT REPLAY";
-    badge.classList.add("show");
     void window.__TONY_GOAL_PRESENTATION__.preview({
       team: "home",
       score: [2, 1],
@@ -50,7 +47,7 @@ test("goal presentation yields native highlight and replay windows", async ({ pa
   ));
   await expect(overlay).not.toHaveClass(/show/);
 
-  await page.evaluate(() => document.getElementById("replayBadge").classList.remove("show"));
+  await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.endPreviewReplay());
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_GOAL_PRESENTATION__.diagnostics();
     const required = ["goal", "score", "replay", "complete", "hidden"];
@@ -59,12 +56,16 @@ test("goal presentation yields native highlight and replay windows", async ({ pa
   await expect(overlay).not.toHaveClass(/show/);
 });
 
-test("score observer automatically presents an away goal after the highlight lead-in", async ({ page }) => {
+test("score event automatically presents an away goal after the highlight lead-in", async ({ page }) => {
   await openGoalTest(page);
 
   await page.evaluate(() => {
     document.body.dataset.flow = "match";
-    document.getElementById("awayScore").textContent = "1";
+    window.__TONY_DEBUG__.emitGameEvent("score:changed", {
+      team: 1,
+      score: [0, 1],
+      replayAvailable: false,
+    });
   });
 
   await page.waitForFunction(() => {
@@ -87,4 +88,32 @@ test("score observer automatically presents an away goal after the highlight lea
   await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.releaseTestHold());
   await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__.diagnostics().running === false);
   await expect(overlay).not.toHaveClass(/show/);
+});
+
+test("separate replay events extend the goal flow without score DOM inference", async ({ page }) => {
+  await openGoalTest(page);
+
+  await page.evaluate(() => {
+    document.body.dataset.flow = "match";
+    window.__TONY_DEBUG__.emitGameEvent("score:changed", {
+      team: 0,
+      score: [1, 0],
+    });
+    window.__TONY_DEBUG__.emitGameEvent("replay:started");
+  });
+
+  const overlay = page.locator("#goalPresentationOverlay");
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
+  ));
+  await expect(page.locator("#goalPresentationReplayFlag")).toHaveText("REPLAY AVAILABLE");
+
+  await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.releaseTestHold());
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "native-replay"
+  ));
+  await expect(overlay).not.toHaveClass(/show/);
+
+  await page.evaluate(() => window.__TONY_DEBUG__.emitGameEvent("replay:ended"));
+  await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__.diagnostics().running === false);
 });

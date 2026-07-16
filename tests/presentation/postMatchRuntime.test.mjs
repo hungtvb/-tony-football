@@ -7,22 +7,18 @@ const postMatchHub = await readFile(
   "utf8",
 );
 
-test("post-match presentation cannot observe its own class mutations", () => {
-  const presentResult = postMatchHub.slice(
-    postMatchHub.indexOf("function presentResult"),
-    postMatchHub.indexOf("ensureStylesheet();"),
-  );
-
-  assert.match(presentResult, /resultObserver\?\.disconnect\(\)/);
-  assert.match(presentResult, /if \(!resultOverlay\.classList\.contains\("show"\)\)/);
-  assert.match(presentResult, /finally \{/);
-  assert.match(presentResult, /resultObserver\?\.observe\(resultOverlay/);
+test("post-match presentation consumes match-ended facts directly", () => {
+  assert.match(postMatchHub, /subscribeToGameEvents\(window/);
+  assert.match(postMatchHub, /GameEventType\.MATCH_ENDED/);
+  assert.match(postMatchHub, /createPostMatchSummaryFromMatchEvent\(event\.payload\)/);
+  assert.doesNotMatch(postMatchHub, /MutationObserver/);
+  assert.doesNotMatch(postMatchHub, /sourcePossession|sourceHomeShots|sourceAwayShots|sourcePassAccuracy/);
 });
 
 test("post-match diagnostics expose one presentation per preview", () => {
   assert.match(postMatchHub, /presentationCount \+= 1/);
   assert.match(postMatchHub, /presentationCount,/);
-  assert.match(postMatchHub, /document\.body\.dataset\.flow !== "result"/);
+  assert.match(postMatchHub, /document\.body\.dataset\.flow = "result"/);
 });
 
 test("post-match navigation uses explicit application actions", () => {

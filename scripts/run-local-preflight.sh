@@ -95,13 +95,15 @@ run_webgl_project() {
 
 flow_cases=(
   'tests/e2e/goal-presentation.spec.mjs|goal presentation yields native highlight and replay windows'
-  'tests/e2e/goal-presentation.spec.mjs|score observer automatically presents an away goal after the highlight lead-in'
+  'tests/e2e/goal-presentation.spec.mjs|score event automatically presents an away goal after the highlight lead-in'
+  'tests/e2e/goal-presentation.spec.mjs|separate replay events extend the goal flow without score DOM inference'
   'tests/e2e/match-flow-navigation.spec.js|main menu opens match setup as a distinct screen'
   'tests/e2e/match-flow-navigation.spec.js|pause can return directly to match setup'
   'tests/e2e/match-flow-navigation.spec.js|pause can return to the distinct main menu'
   'tests/e2e/match-intro.spec.mjs|match setup enters versus countdown kickoff and playing'
   'tests/e2e/match-intro.spec.mjs|gameplay remains locked until the presentation completes'
   'tests/e2e/post-match-hub.spec.mjs|post-match hub renders the final score, statistics, and three actions'
+  'tests/e2e/post-match-hub.spec.mjs|match-ended event opens the report from explicit match facts'
   'tests/e2e/post-match-hub.spec.mjs|play again keeps the selected match setup and starts immediately'
   'tests/e2e/post-match-hub.spec.mjs|post-match navigation returns to setup and the main menu'
 )

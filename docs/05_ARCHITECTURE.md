@@ -1,9 +1,9 @@
 # Architecture
 
 ## Current constraint
-Gameplay, AI, rendering, input, animation, replay, UI, and asset loading are concentrated in `game.js`.
+Gameplay, AI, rendering, animation, replay, much of the UI projection, and asset loading are concentrated in `game.js`.
 
-The fixed 60 Hz clock and several gameplay/presentation helpers are already extracted, but authoritative state, browser input, Three.js objects, Canvas rendering, DOM state, match lifecycle, and presentation integration still share one runtime closure. R1 is the approved sprint that establishes the enforceable boundary; it does not replace the existing fixed-timestep work.
+The fixed 60 Hz clock, browser input, application actions, engine contracts, and several gameplay/presentation helpers are extracted. Goal, replay, and match-ended presentation facts now cross an immutable browser event bridge, while authoritative compatibility state, Three.js objects, Canvas rendering, DOM projection, and match lifecycle application still share one runtime closure. R1 is the approved sprint that establishes the enforceable boundary; it does not replace the existing fixed-timestep work.
 
 Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
 

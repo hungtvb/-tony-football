@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice C input/application adapters complete
+Status: In Progress — Slice D1 presentation event bridge complete
 
 ## Objective
 
@@ -14,7 +14,7 @@ R1 implements the accepted decisions in ADR-001 and ADR-002. It does not recreat
 - Locomotion, ball control, and possession helpers already have headless tests.
 - `game.js` still owns the compatibility players, ball, match state, AI updates, replay, Three.js, Canvas fallback, radar, audio, DOM updates, and debug wiring.
 - Browser keyboard listeners and FO4 mapping now live in `src/game/input`; `game.js` temporarily applies their immutable commands until renderer migration is complete.
-- Goal and result presentation still infer state from rendered DOM, while lifecycle and navigation no longer delegate through synthetic clicks.
+- Goal, replay, and result presentation consume explicit immutable game events; lifecycle and navigation use semantic application actions instead of synthetic clicks.
 - Render interpolation alpha exists, but entity transforms are not yet driven from previous/current engine snapshots.
 
 ## Target flow
@@ -85,7 +85,11 @@ flowchart LR
 - Slice C centralizes the FO4 mapping and keyboard lifecycle in `BrowserInputAdapter`; normalized movement, charge/release actions, defensive holds, standing/slide tackles, Shift-direction switching, blur cleanup, and camera requests preserve the desktop map.
 - Slice C centralizes start, pause, resume, restart, Match Setup, and Main Menu requests in `ApplicationRuntime` and `BrowserApplicationAdapter`.
 - Match intro and post-match presentation now emit explicit application actions; synthetic `.click()` navigation bridges are removed.
-- Slice C unit, static-build, desktop Playwright, narrow-landscape Playwright, and CI-gate validation passed in CI run #247. The local container has no Chromium executable, so browser evidence comes from CI.
+- Slice C unit, static-build, desktop Playwright, narrow-landscape Playwright, and CI-gate validation passed in CI run #247.
+- Slice D1 adds `BrowserGameEventBridge` as the compatibility event projection from `game.js` to presentation modules.
+- Goal presentation now consumes score/replay events and post-match presentation consumes match-ended score/stat facts; both score/result `MutationObserver` integrations are removed.
+- Slice D1 unit validation passed 185 tests. Local Chromium validation passed 24 match-flow scenarios and 10 camera/HUD scenarios across desktop and narrow-landscape; Firefox software-WebGL remains pending CI because the local container has no `xvfb-run`.
+- The persistent local Playwright bootstrap now extracts artifacts without restoring runner ownership, so artifacts work in restricted containers.
 - `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 
