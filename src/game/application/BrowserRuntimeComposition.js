@@ -87,12 +87,7 @@ function snapshotDiagnostics(snapshot) {
   };
 }
 
-function installLiveDiagnostics(
-  target,
-  getRuntimeDiagnostics,
-  recordGoalForTesting,
-  advanceForTesting,
-) {
+function installLiveDiagnostics(target, getRuntimeDiagnostics) {
   const install = () => {
     const debug = target?.__TONY_DEBUG__;
     if (!debug || typeof debug.diagnostics !== "function") return false;
@@ -109,11 +104,6 @@ function installLiveDiagnostics(
     };
     diagnostics.liveRuntimeProjection = true;
     debug.diagnostics = diagnostics;
-    const params = new URLSearchParams(target.location?.search ?? "");
-    if (params.get("visualTest") === "1") {
-      debug.recordEngineGoal = recordGoalForTesting;
-      debug.advanceEngineTicks = advanceForTesting;
-    }
     return true;
   };
 
@@ -181,12 +171,7 @@ export class BrowserRuntimeComposition {
     if (!this.authoritative) return false;
     assertEventTarget(target);
     this.#target = target;
-    installLiveDiagnostics(
-      target,
-      () => ({ state: this.state, snapshot: this.snapshot }),
-      (team, options) => this.recordGoalForTesting(team, options),
-      (steps) => this.advanceForTesting(steps),
-    );
+    installLiveDiagnostics(target, () => ({ state: this.state, snapshot: this.snapshot }));
     return true;
   }
 
@@ -216,16 +201,6 @@ export class BrowserRuntimeComposition {
     }
     this.#runtime.dispatch(command);
     return true;
-  }
-
-  recordGoalForTesting(team, options = {}) {
-    if (!this.authoritative || !this.#runtime) return false;
-    return this.#runtime.recordGoalForTesting(team, options);
-  }
-
-  advanceForTesting(steps) {
-    if (!this.authoritative || !this.#runtime) return null;
-    return this.#runtime.advanceForTesting(steps);
   }
 
   advanceToSourceTick(sourceTick) {
