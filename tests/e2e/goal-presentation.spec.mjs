@@ -128,6 +128,30 @@ test("default engine goal drives browser score, replay, commentary, and coherent
   ).toBe("playing");
 
   const beforeGoal = await page.locator("#commentary").textContent();
+  await page.evaluate(() => {
+    const badge = document.querySelector("#replayBadge");
+    const commentary = document.querySelector("#commentary");
+    const homeScore = document.querySelector("#homeScore");
+    const awayScore = document.querySelector("#awayScore");
+    const evidence = {
+      badge: [{ className: badge.className, text: badge.textContent }],
+      commentary: [commentary.textContent],
+      scores: [[homeScore.textContent, awayScore.textContent]],
+    };
+    const capture = () => {
+      evidence.badge.push({ className: badge.className, text: badge.textContent });
+      evidence.commentary.push(commentary.textContent);
+      evidence.scores.push([homeScore.textContent, awayScore.textContent]);
+    };
+    new MutationObserver(capture).observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    window.__TONY_DEFAULT_GOAL_EVIDENCE__ = evidence;
+  });
   const triggered = await page.evaluate(() => {
     const diagnostics = window.__TONY_DEBUG__.diagnostics();
     if (diagnostics.runtimeMode !== "engine") return false;
@@ -137,9 +161,6 @@ test("default engine goal drives browser score, replay, commentary, and coherent
 
   await expect(page.locator("#homeScore")).toHaveText("1");
   await expect(page.locator("#awayScore")).toHaveText("0");
-  await expect(page.locator("#replayBadge")).toHaveClass(/show/);
-  await expect(page.locator("#commentary")).toHaveText("Đang xem lại bàn thắng.");
-  expect(await page.locator("#commentary").textContent()).not.toBe(beforeGoal);
 
   await page.waitForFunction(() => (
     window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
@@ -168,4 +189,18 @@ test("default engine goal drives browser score, replay, commentary, and coherent
   await expect(page.locator("#commentary")).toHaveText("Chuẩn bị giao bóng lại.");
   await expect(page.locator("#homeScore")).toHaveText("1");
   await expect(page.locator("#awayScore")).toHaveText("0");
+
+  const evidence = await page.evaluate(() => ({
+    ...window.__TONY_DEFAULT_GOAL_EVIDENCE__,
+    timeline: window.__TONY_GOAL_PRESENTATION__.diagnostics().timelineHistory,
+  }));
+  expect(evidence.commentary).toContain("Đang xem lại bàn thắng.");
+  expect(evidence.commentary).not.toEqual([beforeGoal]);
+  expect(evidence.badge.some(({ className, text }) => (
+    className.includes("show") && text.includes("INSTANT REPLAY")
+  ))).toBe(true);
+  expect(evidence.scores.some(([home, away]) => home === "1" && away === "0")).toBe(true);
+  expect(evidence.timeline.some(({ phase, visible }) => (
+    phase === "native-replay" && visible === false
+  ))).toBe(true);
 });
