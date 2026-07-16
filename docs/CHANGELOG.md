@@ -36,6 +36,8 @@
 - Browser HUD, camera, radar, WebGL, and Canvas snapshot consumers now default to live MatchEngine frames; compatibility gameplay remains a temporary shadow and the `?runtime=compatibility` fallback.
 
 ### Fixed
+- Live gameplay events once again update the radar-adjacent commentary for lifecycle, possession, passing, shooting, tackling, teammate runs, goals, and replay transitions.
+- Live score events now enter and exit deterministic MatchEngine replay state while projecting buffered snapshots into the browser replay controller before kickoff resumes.
 - Generated workspace, browser-cache, and staging targets are canonicalized before mutation; traversal, symlink boundaries, approved roots, and overlapping or nested destinations are rejected.
 - Local Playwright bootstrap now refuses existing Git or non-empty destinations even with `--force`, validates staged runtime/browser artifacts before publication, and directs existing workspaces to the safe sync flow.
 - Future gameplay commands no longer execute before their declared `targetTick`.
