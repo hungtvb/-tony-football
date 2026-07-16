@@ -76,3 +76,37 @@ export function createCompatibilityKickEventPayload({
     y: position.y
   });
 }
+
+export function createDeferredCompatibilityKickPublisher({
+  publish,
+  getBallState,
+  commandType,
+  playerId,
+  targetId = null,
+  power,
+  speed,
+  style,
+  aimY = null,
+  presentation = {}
+}) {
+  if (typeof publish !== "function") throw new TypeError("publish must be a function");
+  if (typeof getBallState !== "function") throw new TypeError("getBallState must be a function");
+
+  return () => {
+    const ballState = getBallState();
+    const payload = createCompatibilityKickEventPayload({
+      commandType,
+      playerId,
+      targetId,
+      power,
+      speed,
+      style,
+      aimY,
+      position: { x: ballState?.x, y: ballState?.y },
+      velocity: { x: ballState?.vx, y: ballState?.vy, z: ballState?.vz },
+      presentation
+    });
+    publish(payload);
+    return payload;
+  };
+}

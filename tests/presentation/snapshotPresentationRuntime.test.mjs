@@ -21,3 +21,19 @@ test("browser runtime delegates camera, replay, and gameplay feedback to present
   assert.match(goalBody, /scorerId: compatibilityPlayerId\(scorer\)/);
   assert.doesNotMatch(goalBody, /scorerId: possessionId\(scorer\)/);
 });
+
+
+test("compatibility kick events publish after action-specific ball mutations", () => {
+  const releaseBallBody = runtimeSource.slice(runtimeSource.indexOf("function releaseBall"), runtimeSource.indexOf("function passBall"));
+  const throughBallBody = runtimeSource.slice(runtimeSource.indexOf("function throughBall"), runtimeSource.indexOf("function loftBall"));
+  const loftBallBody = runtimeSource.slice(runtimeSource.indexOf("function loftBall"), runtimeSource.indexOf("function shootBall"));
+  const shootBallBody = runtimeSource.slice(runtimeSource.indexOf("function shootBall"), runtimeSource.indexOf("function tackle"));
+
+  assert.match(releaseBallBody, /return createDeferredCompatibilityKickPublisher/);
+  assert.equal(releaseBallBody.includes("publishKickEvent()"), false);
+
+  assert.ok(throughBallBody.indexOf("ball.vz=8.6+charge*4.2") < throughBallBody.indexOf("publishKickEvent()"));
+  assert.ok(loftBallBody.indexOf("ball.vz*=lerp(.82,1.14,charge)") < loftBallBody.indexOf("publishKickEvent()"));
+  assert.ok(shootBallBody.indexOf("ball.vz=10.5+power*4.5") < shootBallBody.indexOf("publishKickEvent()"));
+  assert.ok(shootBallBody.indexOf("ball.vz=2.6") < shootBallBody.indexOf("publishKickEvent()"));
+});

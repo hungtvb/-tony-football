@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { GameCommandType } from "../../src/game/engine/GameCommands.js";
 import { GameEventType, createGameEvent } from "../../src/game/engine/GameEvents.js";
-import { createCompatibilityKickEventPayload } from "../../src/game/presentation/CompatibilityKickEventPayload.js";
+import {
+  createCompatibilityKickEventPayload,
+  createDeferredCompatibilityKickPublisher
+} from "../../src/game/presentation/CompatibilityKickEventPayload.js";
 
 test("compatibility producer emits the canonical engine kick schema", () => {
   const compatibilityPayload = createCompatibilityKickEventPayload({
@@ -49,4 +52,39 @@ test("engine event creation freezes payloads without compatibility normalization
   assert.equal(event.payload.power, 920);
   assert.equal(event.payload.speed, undefined);
   assert.equal(event.payload.style, undefined);
+});
+
+
+test("deferred compatibility producer captures action-specific final ball velocity", () => {
+  const cases = [
+    { style: "chip", finalVz: 14.1 },
+    { style: "finesse", finalVz: 2.6 },
+    { style: "chipped-through", finalVz: 10.7 },
+    { style: "loft", finalVz: 11.9 }
+  ];
+
+  for (const scenario of cases) {
+    const ball = { x: 700, y: 320, vx: 840, vy: 20, vz: 1.8 };
+    const published = [];
+    const publishKickEvent = createDeferredCompatibilityKickPublisher({
+      publish: (payload) => published.push(payload),
+      getBallState: () => ball,
+      commandType: scenario.style === "chip" || scenario.style === "finesse"
+        ? GameCommandType.SHOOT
+        : scenario.style === "loft"
+          ? GameCommandType.LOFTED_PASS
+          : GameCommandType.THROUGH_BALL,
+      playerId: "home-4",
+      targetId: "away-0",
+      power: 0.8,
+      speed: 840,
+      style: scenario.style
+    });
+
+    ball.vz = scenario.finalVz;
+    const payload = publishKickEvent();
+
+    assert.equal(payload.velocity.z, scenario.finalVz);
+    assert.equal(published[0].velocity.z, scenario.finalVz);
+  }
 });
