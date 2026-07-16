@@ -16,6 +16,22 @@ Before planning or modifying code, read in this order:
 
 Do not scan every document by default.
 
+## Persistent session startup
+
+Repository documentation is the persistent memory across chat sessions. Do not rely on a previous conversation to reconstruct the workflow.
+
+At the beginning of every new coding session:
+
+1. Read the mandatory files above.
+2. Fetch the latest GitHub `main` SHA through the GitHub connector.
+3. Compare it with `.local-runtime-sha` in the generated workspace.
+4. If no verified local Git workspace exists, bootstrap the current runtime artifact.
+5. If `main` moved, commit the current sprint work and run `scripts/sync-local-main.sh` before editing further.
+6. When starting a new sprint, create the GitHub branch directly from the latest `main`, then create the same local branch with `scripts/start-local-sprint.sh`.
+7. When resuming an existing sprint, resume its existing branch instead of creating a replacement branch.
+
+Never implement sprint work directly on local or remote `main`. One sprint still equals one branch and one pull request.
+
 ## Scope rule
 
 Implement only the active sprint unless the user explicitly requests another task.

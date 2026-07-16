@@ -17,6 +17,9 @@
 - Compatibility snapshot adapter plus pure HUD and radar snapshot consumers.
 
 ### Changed
+- Restricted-container bootstrap now initializes a verified local Git `main` baseline.
+- New-session workflow now requires a GitHub and matching local sprint branch created from the latest `main`.
+- Local workspaces can import a newer verified `main` snapshot and rebase committed sprint work without `git pull`.
 - Active sprint moved from G1 to U1.
 - Roadmap now includes U2 Game Feel after U1.
 - U3.1, U3.2, and U3.3 are closed; R1 Engine and Presentation Boundary is active.
@@ -27,6 +30,7 @@
 - HUD match facts and radar markers now consume immutable fixed-tick snapshots in both WebGL and Canvas fallback paths.
 
 ### Fixed
+- Runtime and browser artifacts no longer try to restore the GitHub runner UID/GID or archived permissions when extracted in restricted containers.
 - Prevented the post-match observer from reacting to its own overlay mutations and locking the browser main thread.
 - Removed the narrow-landscape goal-presentation race around the short native-highlight stage.
 - Made local Playwright artifact bootstrap portable across runner/container user IDs.
