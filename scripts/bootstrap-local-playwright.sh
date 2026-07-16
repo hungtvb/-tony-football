@@ -8,14 +8,15 @@ Usage:
 
 Options:
   --expected-main-sha <sha>  Required current 40-character main commit SHA
-  --workspace <path>         Generated workspace (default: /mnt/data/tony-football-local)
-  --browser-root <path>      Generated browser root (default: /mnt/data/tony-playwright-browsers)
-  --force                    Replace existing generated output
+  --workspace <path>         New generated workspace (default: /mnt/data/tony-football-local)
+  --browser-root <path>      New generated browser root (default: /mnt/data/tony-playwright-browsers)
+  --force                    Deprecated compatibility flag; never replaces existing output
   --help                     Show this help
 
 The artifact ZIP files are downloaded from the Local Playwright Runtime workflow.
 The expected main SHA must be fetched immediately before bootstrap.
-The generated workspace is initialized as a local Git repository on branch main.
+Bootstrap creates a new workspace only. Existing Git workspaces must use
+scripts/sync-local-main.sh and are never replaced by this command.
 USAGE
 }
 
@@ -30,7 +31,7 @@ shift 2
 workspace=/mnt/data/tony-football-local
 browser_root=/mnt/data/tony-playwright-browsers
 expected_main_sha=
-force=false
+force_requested=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,7 +51,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --force)
-      force=true
+      force_requested=true
       shift
       ;;
     --help)
@@ -70,14 +71,6 @@ done
   exit 2
 }
 
-for archive in "$runtime_zip" "$browser_zip"; do
-  [[ -f "$archive" ]] || { echo "Artifact not found: $archive" >&2; exit 1; }
-done
-
-for command in unzip tar git node npm; do
-  command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
-done
-
 safe_generated_path() {
   case "$1" in
     /mnt/data/*|"$PWD"/.local-runtime/*) return 0 ;;
@@ -85,19 +78,57 @@ safe_generated_path() {
   esac
 }
 
-prepare_destination() {
+assert_new_destination() {
   local destination=$1
+  local label=$2
+
   safe_generated_path "$destination"
-  if [[ -d "$destination" && -n "$(find "$destination" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-    if [[ "$force" != true ]]; then
-      echo "Destination is not empty: $destination" >&2
-      echo "Re-run with --force to replace this generated directory." >&2
+
+  if [[ -e "$destination/.git" || -L "$destination/.git" ]]; then
+    echo "Refusing to bootstrap over an existing Git workspace: $destination" >&2
+    echo "Use scripts/sync-local-main.sh from the existing workspace instead." >&2
+    if [[ "$force_requested" == true ]]; then
+      echo "The deprecated --force flag cannot replace a destination containing .git." >&2
+    fi
+    exit 1
+  fi
+
+  if [[ -e "$destination" || -L "$destination" ]]; then
+    if [[ ! -d "$destination" || -L "$destination" ]]; then
+      echo "$label destination already exists and is not an empty directory: $destination" >&2
       exit 1
     fi
-    find "$destination" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    if [[ -n "$(find "$destination" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+      echo "$label destination is not empty: $destination" >&2
+      echo "Bootstrap creates new output only; choose a new path or use the existing-workspace sync flow." >&2
+      exit 1
+    fi
   fi
-  mkdir -p "$destination"
 }
+
+publish_new_destination() {
+  local staged=$1
+  local destination=$2
+
+  if [[ -d "$destination" ]]; then
+    rmdir "$destination"
+  fi
+  mkdir -p "$(dirname "$destination")"
+  mv "$staged" "$destination"
+}
+
+# Guard active workspaces before inspecting artifacts so stale, corrupt, incomplete,
+# or missing artifacts can never trigger mutation of an existing local repository.
+assert_new_destination "$workspace" "Workspace"
+assert_new_destination "$browser_root" "Browser"
+
+for archive in "$runtime_zip" "$browser_zip"; do
+  [[ -f "$archive" ]] || { echo "Artifact not found: $archive" >&2; exit 1; }
+done
+
+for command in unzip tar git node npm; do
+  command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
+done
 
 extract_portable_tgz() {
   local archive=$1
@@ -125,44 +156,55 @@ unzip -q "$browser_zip" -d "$temporary/browsers"
 browser_tgz=$(find "$temporary/browsers" -type f -name '*.tgz' -print -quit)
 [[ -n "$browser_tgz" ]] || { echo "Browser artifact does not contain a .tgz bundle" >&2; exit 1; }
 
-prepare_destination "$workspace"
-prepare_destination "$browser_root"
+mkdir -p "$temporary/next-workspace" "$temporary/next-browser-root"
+extract_portable_tgz "$runtime_tgz" "$temporary/next-workspace"
+extract_portable_tgz "$browser_tgz" "$temporary/next-browser-root"
 
-extract_portable_tgz "$runtime_tgz" "$workspace"
-extract_portable_tgz "$browser_tgz" "$browser_root"
+staged_browser_path="$temporary/next-browser-root/ms-playwright"
+[[ -d "$staged_browser_path" ]] || { echo "Expected Playwright cache missing from staged browser artifact" >&2; exit 1; }
+[[ -f "$temporary/next-workspace/package.json" ]] || { echo "Staged runtime workspace is missing package.json" >&2; exit 1; }
+staged_sha=$(tr -d '\r\n' < "$temporary/next-workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
+[[ "$staged_sha" == "$expected_main_sha" ]] || { echo "Extracted runtime SHA changed unexpectedly" >&2; exit 1; }
+[[ -f "$temporary/next-workspace/node_modules/@playwright/test/package.json" ]] || {
+  echo "Staged runtime is missing @playwright/test" >&2
+  exit 1
+}
 
 browser_path="$browser_root/ms-playwright"
-[[ -d "$browser_path" ]] || { echo "Expected Playwright cache missing: $browser_path" >&2; exit 1; }
-[[ -f "$workspace/package.json" ]] || { echo "Runtime workspace is missing package.json" >&2; exit 1; }
-extracted_sha=$(tr -d '\r\n' < "$workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
-[[ "$extracted_sha" == "$expected_main_sha" ]] || { echo "Extracted runtime SHA changed unexpectedly" >&2; exit 1; }
-
-git -C "$workspace" init --quiet
-if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$workspace"; then
-  git config --global --add safe.directory "$workspace"
-fi
-git -C "$workspace" symbolic-ref HEAD refs/heads/main
-mkdir -p "$workspace/.git/info"
-for generated in .local-playwright-env .local-home/; do
-  grep -Fxq "$generated" "$workspace/.git/info/exclude" 2>/dev/null || printf '%s\n' "$generated" >> "$workspace/.git/info/exclude"
-done
-
-cat > "$workspace/.local-playwright-env" <<ENV
+cat > "$temporary/next-workspace/.local-playwright-env" <<ENV
 export PLAYWRIGHT_BROWSERS_PATH="$browser_path"
 export TONY_LOCAL_WORKSPACE="$workspace"
 export TONY_LOCAL_HOME="$workspace/.local-home"
-export TONY_LOCAL_SOURCE_SHA="$extracted_sha"
+export TONY_LOCAL_SOURCE_SHA="$staged_sha"
 ENV
-mkdir -p "$workspace/.local-home"
+mkdir -p "$temporary/next-workspace/.local-home"
 
-git -C "$workspace" config user.name "Tony Football Workspace"
-git -C "$workspace" config user.email "tony-football-workspace@local.invalid"
-git -C "$workspace" add -A
-git -C "$workspace" commit --quiet -m "chore(workspace): snapshot main ${extracted_sha:0:12}"
+git -C "$temporary/next-workspace" init --quiet
+git -C "$temporary/next-workspace" symbolic-ref HEAD refs/heads/main
+mkdir -p "$temporary/next-workspace/.git/info"
+for generated in .local-playwright-env .local-home/; do
+  grep -Fxq "$generated" "$temporary/next-workspace/.git/info/exclude" 2>/dev/null || \
+    printf '%s\n' "$generated" >> "$temporary/next-workspace/.git/info/exclude"
+done
+git -C "$temporary/next-workspace" config user.name "Tony Football Workspace"
+git -C "$temporary/next-workspace" config user.email "tony-football-workspace@local.invalid"
+git -C "$temporary/next-workspace" add -A
+git -C "$temporary/next-workspace" commit --quiet -m "chore(workspace): snapshot main ${staged_sha:0:12}"
+playwright_version=$(node -p "require('$temporary/next-workspace/node_modules/@playwright/test/package.json').version")
+
+# Re-check immediately before publication. No existing non-empty destination is ever removed.
+assert_new_destination "$workspace" "Workspace"
+assert_new_destination "$browser_root" "Browser"
+publish_new_destination "$temporary/next-browser-root" "$browser_root"
+publish_new_destination "$temporary/next-workspace" "$workspace"
+
+if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$workspace"; then
+  git config --global --add safe.directory "$workspace"
+fi
 
 printf 'Workspace: %s\n' "$workspace"
 printf 'Browser cache: %s\n' "$browser_path"
-printf 'Source SHA: %s\n' "$extracted_sha"
+printf 'Source SHA: %s\n' "$staged_sha"
 printf 'Local branch: main\n'
-printf 'Playwright: %s\n' "$(node -p "require('$workspace/node_modules/@playwright/test/package.json').version")"
+printf 'Playwright: %s\n' "$playwright_version"
 printf '\nRun next:\n  cd %q\n  bash scripts/start-local-sprint.sh <branch-name>\n  bash scripts/run-local-preflight.sh smoke\n' "$workspace"
