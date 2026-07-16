@@ -137,6 +137,7 @@ test("default engine goal drives browser score, replay, commentary, and coherent
       badge: [{ className: badge.className, text: badge.textContent }],
       commentary: [commentary.textContent],
       scores: [[homeScore.textContent, awayScore.textContent]],
+      engine: [],
     };
     const capture = () => {
       evidence.badge.push({ className: badge.className, text: badge.textContent });
@@ -151,6 +152,12 @@ test("default engine goal drives browser score, replay, commentary, and coherent
       subtree: true,
     });
     window.__TONY_DEFAULT_GOAL_EVIDENCE__ = evidence;
+    const captureEngine = () => {
+      const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+      if (snapshot) evidence.engine.push(snapshot);
+      requestAnimationFrame(captureEngine);
+    };
+    requestAnimationFrame(captureEngine);
   });
   const triggered = await page.evaluate(() => {
     const diagnostics = window.__TONY_DEBUG__.diagnostics();
@@ -180,9 +187,7 @@ test("default engine goal drives browser score, replay, commentary, and coherent
     return snapshot
       && snapshot.score[0] === 1
       && snapshot.replayActive === false
-      && snapshot.goalSequence === null
-      && snapshot.kickoffTimer > 0
-      && snapshot.ballOwnerId === null;
+      && snapshot.goalSequence === null;
   }, null, { timeout: 12_000 });
 
   await expect(page.locator("#replayBadge")).not.toHaveClass(/show/);
@@ -200,6 +205,11 @@ test("default engine goal drives browser score, replay, commentary, and coherent
     className.includes("show") && text.includes("INSTANT REPLAY")
   ))).toBe(true);
   expect(evidence.scores.some(([home, away]) => home === "1" && away === "0")).toBe(true);
+  expect(evidence.engine.some(({ replayActive }) => replayActive === true)).toBe(true);
+  expect(evidence.engine.some(({ goalSequence }) => goalSequence?.team === 0)).toBe(true);
+  expect(evidence.engine.some(({ goalSequence, kickoffTimer, ballOwnerId }) => (
+    goalSequence === null && kickoffTimer > 0 && ballOwnerId === null
+  ))).toBe(true);
   expect(evidence.timeline.some(({ phase, visible }) => (
     phase === "native-replay" && visible === false
   ))).toBe(true);
