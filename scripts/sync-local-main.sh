@@ -67,6 +67,13 @@ for command in unzip tar git node npm; do
   command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 
+extract_portable_tgz() {
+  local archive=$1
+  local destination=$2
+  tar --extract --gzip --file "$archive" --directory "$destination" \
+    --no-same-owner --no-same-permissions
+}
+
 workspace=$(pwd -P)
 [[ -d "$workspace/.git" ]] || {
   echo "Run this command from the bootstrapped Tony Football workspace root." >&2
@@ -124,7 +131,7 @@ browser_tgz=$(find "$temporary/browsers" -type f -name '*.tgz' -print -quit)
 [[ -n "$browser_tgz" ]] || { echo "Browser artifact does not contain a .tgz bundle" >&2; exit 1; }
 
 mkdir -p "$temporary/next-workspace"
-tar -xzf "$runtime_tgz" -C "$temporary/next-workspace"
+extract_portable_tgz "$runtime_tgz" "$temporary/next-workspace"
 next_sha=$(tr -d '\r\n' < "$temporary/next-workspace/.local-runtime-sha" | tr '[:upper:]' '[:lower:]')
 [[ "$next_sha" == "$expected_main_sha" ]] || { echo "Extracted runtime SHA changed unexpectedly" >&2; exit 1; }
 
@@ -136,7 +143,7 @@ find "$workspace" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
   tar -cf - .
 ) | (
   cd "$workspace"
-  tar -xf -
+  tar --extract --file - --no-same-owner --no-same-permissions
 )
 
 mkdir -p "$workspace/.git/info"
@@ -146,7 +153,7 @@ done
 
 rm -rf "$browser_root"
 mkdir -p "$browser_root"
-tar -xzf "$browser_tgz" -C "$browser_root"
+extract_portable_tgz "$browser_tgz" "$browser_root"
 browser_path="$browser_root/ms-playwright"
 [[ -d "$browser_path" ]] || { echo "Expected Playwright cache missing: $browser_path" >&2; exit 1; }
 
