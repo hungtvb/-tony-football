@@ -4,8 +4,10 @@ import { chmodSync, chownSync, mkdirSync, mkdtempSync, readFileSync, rmSync, sta
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const repositoryRoot = path.resolve(import.meta.dirname, "../..");
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = path.resolve(testDirectory, "../..");
 const bootstrapPath = path.join(repositoryRoot, "scripts/bootstrap-local-playwright.sh");
 const syncPath = path.join(repositoryRoot, "scripts/sync-local-main.sh");
 
