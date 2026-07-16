@@ -172,7 +172,7 @@ prepare_staging_root() {
   staging_root=$(realpath -m -- "$staging_root_input")
 }
 
-workspace_input=${PWD}
+workspace_input=$(pwd -P)
 workspace=$(canonicalize_generated_target "$workspace_input" "Workspace")
 browser_root=$(canonicalize_generated_target "$browser_root" "Browser")
 assert_disjoint_paths "$workspace" "Workspace" "$browser_root" "Browser"
