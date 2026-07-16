@@ -142,10 +142,21 @@ test("bootstrap rejects approved roots and overlapping generated targets", () =>
     assert.match(rootResult.stderr, /generated root itself/i);
     assert.equal(existsSync(safeBrowser), false);
 
+    const identicalResult = run("bash", bootstrapArgs(workspace, workspace));
+    assert.notEqual(identicalResult.status, 0);
+    assert.match(identicalResult.stderr, /distinct and non-overlapping/i);
+
     const overlapResult = run("bash", bootstrapArgs(workspace, nestedBrowser));
     assert.notEqual(overlapResult.status, 0);
     assert.match(overlapResult.stderr, /distinct and non-overlapping/i);
     assert.equal(existsSync(workspace), false);
+
+    const parentBrowser = uniqueGeneratedPath("overlap-parent");
+    const nestedWorkspace = path.join(parentBrowser, "workspace");
+    const reverseOverlapResult = run("bash", bootstrapArgs(nestedWorkspace, parentBrowser));
+    assert.notEqual(reverseOverlapResult.status, 0);
+    assert.match(reverseOverlapResult.stderr, /distinct and non-overlapping/i);
+    assert.equal(existsSync(parentBrowser), false);
   } finally {
     rmSync(safeBrowser, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
