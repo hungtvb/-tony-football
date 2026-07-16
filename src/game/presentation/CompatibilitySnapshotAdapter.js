@@ -1,3 +1,8 @@
+import {
+  BrowserRuntimeMode,
+  browserRuntimeComposition,
+  resolveBrowserRuntimeMode
+} from "../application/BrowserRuntimeComposition.js";
 import { createMatchSnapshot, createSnapshotFrame } from "../engine/MatchSnapshot.js";
 
 const PLAYER_FIELDS = Object.freeze([
@@ -102,15 +107,69 @@ export function createCompatibilitySnapshot({
   });
 }
 
+function copyArray(target, values) {
+  if (!Array.isArray(target) || !Array.isArray(values)) return;
+  target.splice(0, target.length, ...values);
+}
+
+function projectLiveSnapshotToCompatibilitySource(source, snapshot) {
+  const legacyPlayers = new Map(
+    (source.players ?? []).map((player) => [compatibilityPlayerId(player), player])
+  );
+  for (const player of snapshot.players) {
+    const legacy = legacyPlayers.get(player.id);
+    if (legacy) Object.assign(legacy, copyDefined(player, PLAYER_FIELDS));
+  }
+
+  copyArray(source.score, snapshot.match.score);
+  copyArray(source.stats?.possession, snapshot.match.stats.possession);
+  copyArray(source.stats?.shots, snapshot.match.stats.shots);
+  if (source.stats) {
+    source.stats.passes = snapshot.match.stats.passes;
+    source.stats.completed = snapshot.match.stats.completed;
+  }
+
+  if (source.ball) {
+    Object.assign(source.ball, copyDefined(snapshot.ball, BALL_FIELDS));
+    source.ball.owner = legacyPlayers.get(snapshot.ball.ownerId) ?? null;
+    source.ball.lastTouch = legacyPlayers.get(snapshot.ball.lastTouchId) ?? null;
+    source.ball.trail = snapshot.ball.trail.map((point) => ({ ...point }));
+    source.ball.pendingPass = snapshot.ball.pendingPass ? { ...snapshot.ball.pendingPass } : null;
+    source.ball.possession = { ...snapshot.ball.possession };
+  }
+}
+
 export class CompatibilitySnapshotAdapter {
   #previous = null;
   #current = null;
+  #mode;
+  #runtimeComposition;
+
+  constructor({
+    mode = resolveBrowserRuntimeMode(),
+    runtimeComposition = browserRuntimeComposition
+  } = {}) {
+    this.#mode = mode;
+    this.#runtimeComposition = runtimeComposition;
+  }
+
+  get mode() {
+    return this.#mode;
+  }
 
   get snapshot() {
     return this.#current;
   }
 
   capture(source) {
+    if (this.#mode === BrowserRuntimeMode.ENGINE) {
+      this.#runtimeComposition.configure(source);
+      const snapshot = this.#runtimeComposition.advanceToSourceTick(source.tick);
+      projectLiveSnapshotToCompatibilitySource(source, snapshot);
+      this.#current = snapshot;
+      return snapshot;
+    }
+
     const snapshot = createCompatibilitySnapshot(source);
     if (this.#current && snapshot.tick < this.#current.tick) {
       throw new RangeError("compatibility snapshot tick cannot move backwards");
@@ -121,7 +180,10 @@ export class CompatibilitySnapshotAdapter {
   }
 
   createRenderFrame(alpha) {
-    if (!this.#current) throw new Error("capture a compatibility snapshot before rendering");
+    if (!this.#current) throw new Error("capture a snapshot before rendering");
+    if (this.#mode === BrowserRuntimeMode.ENGINE) {
+      return this.#runtimeComposition.createRenderFrame(alpha);
+    }
     return createSnapshotFrame(this.#previous, this.#current, alpha);
   }
 }
