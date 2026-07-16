@@ -88,7 +88,7 @@ flowchart LR
 - Slice C unit, static-build, desktop Playwright, narrow-landscape Playwright, and CI-gate validation passed in CI run #247.
 - Slice D1 adds `BrowserGameEventBridge` as the compatibility event projection from `game.js` to presentation modules.
 - Goal presentation now consumes score/replay events and post-match presentation consumes match-ended score/stat facts; both score/result `MutationObserver` integrations are removed.
-- Slice D1 unit validation passed 185 tests. Local Chromium validation passed 24 match-flow scenarios and 10 camera/HUD scenarios across desktop and narrow-landscape; Firefox software-WebGL remains pending CI because the local container has no `xvfb-run`.
+- Slice D1 unit validation passed 185 tests. Local Chromium validation passed 24 match-flow scenarios and 10 camera/HUD scenarios across desktop and narrow-landscape. The optional local Firefox software-WebGL mode was not run because this container has no `xvfb-run`; required Chromium desktop, narrow-landscape, and CI-gate jobs passed in CI run #251.
 - The persistent local Playwright bootstrap now extracts artifacts without restoring runner ownership, so artifacts work in restricted containers.
 - `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
