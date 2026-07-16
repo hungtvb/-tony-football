@@ -1,10 +1,12 @@
 import { GameEventType } from "../engine/GameEvents.js";
 import { subscribeToGameEvents } from "./BrowserGameEventBridge.js";
+import { projectPresentationFeedback } from "./PresentationFeedbackProjection.js";
 
 const noop = () => {};
 
 export function createBrowserPresentationFeedbackAdapter({
   target,
+  getSnapshot = () => null,
   onKick = noop,
   onWhistle = noop,
   onGoal = noop,
@@ -12,17 +14,17 @@ export function createBrowserPresentationFeedbackAdapter({
   onContextParticles = noop
 }) {
   const unsubscribe = subscribeToGameEvents(target, (event) => {
-    const payload = event.payload ?? {};
+    const feedback = projectPresentationFeedback(event, getSnapshot());
     if (event.type === GameEventType.BALL_KICKED) {
-      onKick(payload.audioPower ?? 0.55);
-      onParticles(payload);
-      if (payload.contextEnergy !== undefined) onContextParticles(payload);
+      onKick(feedback.audioPower);
+      onParticles(feedback.particles);
+      if (feedback.contextParticles) onContextParticles(feedback.contextParticles);
     } else if (event.type === GameEventType.TACKLE_RESOLVED) {
-      onContextParticles(payload);
-      if (payload.success) onKick(payload.audioPower ?? 0.3);
+      onContextParticles(feedback.contextParticles);
+      if (feedback.won) onKick(feedback.audioPower);
     } else if (event.type === GameEventType.SCORE_CHANGED) {
-      onGoal(payload);
-      onParticles(payload);
+      onGoal(feedback.goal);
+      onParticles(feedback.particles);
     } else if (event.type === GameEventType.MATCH_STARTED || event.type === GameEventType.MATCH_RESTARTED) {
       onWhistle(false);
     } else if (event.type === GameEventType.MATCH_ENDED) {
