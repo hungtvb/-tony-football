@@ -1,0 +1,182 @@
+name: Local Playwright Runtime
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: local-playwright-runtime
+  cancel-in-progress: false
+
+jobs:
+  package-runtime:
+    name: Package local Playwright runtime
+    if: >-
+      github.event.issue.number == 44 &&
+      github.event.issue.pull_request == null &&
+      github.event.comment.body == '/build-local-runtime' &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Acknowledge runtime request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⏳ Building the local Playwright runtime from \`main\`. Workflow run ID: \`${context.runId}\`.`,
+            });
+
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Capture runtime metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha=$(git rev-parse HEAD)
+          short_sha=${source_sha:0:12}
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$source_sha" > .local-runtime-sha
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies and Playwright browsers
+        run: |
+          set -euo pipefail
+          npm ci
+          npx playwright install chromium firefox
+
+      - name: Package source and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude=.git \
+            --exclude=playwright-report \
+            --exclude=test-results \
+            --exclude='*.log' \
+            -czf /tmp/tony-local-playwright-runtime.tgz .
+
+      - name: Package Playwright browser cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/tony-playwright-browsers.tgz -C "$HOME/.cache" ms-playwright
+
+      - name: Verify main did not move before upload
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin main
+          latest_main_sha=$(git rev-parse FETCH_HEAD)
+          if [[ "$latest_main_sha" != "$SOURCE_SHA" ]]; then
+            echo "main moved while packaging: artifact=$SOURCE_SHA latest=$latest_main_sha" >&2
+            exit 1
+          fi
+
+      - name: Stage local runtime artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tony-local-runtime-artifact
+          cp /tmp/tony-local-playwright-runtime.tgz /tmp/tony-local-runtime-artifact/
+          cp scripts/bootstrap-local-playwright.sh /tmp/tony-local-runtime-artifact/
+
+      - name: Upload local runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-local-runtime-${{ steps.metadata.outputs.short_sha }}
+          path: /tmp/tony-local-runtime-artifact
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+      - name: Upload Playwright browsers
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-playwright-browsers-${{ steps.metadata.outputs.short_sha }}
+          path: /tmp/tony-playwright-browsers.tgz
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+      - name: Verify main before publishing runtime
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+        with:
+          script: |
+            const sourceSha = process.env.SOURCE_SHA;
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+            });
+            const latestMainSha = branch.commit.sha;
+            if (latestMainSha !== sourceSha) {
+              core.setFailed(`main moved before publication: artifact=${sourceSha} latest=${latestMainSha}`);
+            }
+
+      - name: Report runtime artifacts
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          SHORT_SHA: ${{ steps.metadata.outputs.short_sha }}
+        with:
+          script: |
+            const sourceSha = process.env.SOURCE_SHA;
+            const shortSha = process.env.SHORT_SHA;
+            const expires = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+            const body = [
+              '✅ Local Playwright runtime ready.',
+              '',
+              `- Source SHA: \`${sourceSha}\``,
+              `- Workflow run ID: \`${context.runId}\``,
+              `- Runtime artifact: \`tony-local-runtime-${shortSha}\``,
+              `- Browser artifact: \`tony-playwright-browsers-${shortSha}\``,
+              `- Expires around: \`${expires}\``,
+              '',
+              'Before bootstrapping, fetch the current `main` SHA and pass it as `--expected-main-sha`.',
+              'Run `bash bootstrap-local-playwright.sh <runtime.zip> <browsers.zip> --expected-main-sha <current-main-sha> --force`.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Report runtime failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ Local Playwright runtime build failed or \`main\` changed during publication. Workflow run ID: \`${context.runId}\`.`,
+            });
