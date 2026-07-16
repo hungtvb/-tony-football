@@ -39,6 +39,7 @@
 - Start, restart, and post-goal kickoff frames no longer interpolate against pre-reset snapshots.
 - Custom formations without a number 10 retain a valid home selection, and compatibility score events use stable snapshot player IDs.
 - Compatibility kick producers now emit canonical command type, normalized power, world-unit speed, style, target, and velocity facts without engine-side legacy normalization.
+- Compatibility kick events now capture the final action-specific ball velocity after chip, finesse, chipped-through, and loft adjustments.
 - Presentation feedback skips particle callbacks when neither event data nor the active snapshot provides finite coordinates.
 - Runtime and browser artifacts no longer try to restore the GitHub runner UID/GID or archived permissions when extracted in restricted containers.
 - Prevented the post-match observer from reacting to its own overlay mutations and locking the browser main thread.
