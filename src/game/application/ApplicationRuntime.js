@@ -4,6 +4,7 @@ import {
   createGameCommand
 } from "../engine/GameCommands.js";
 import { ApplicationActionType, createApplicationAction } from "./ApplicationActions.js";
+import { browserRuntimeComposition } from "./BrowserRuntimeComposition.js";
 
 const gameCommandByAction = Object.freeze({
   [ApplicationActionType.START_MATCH]: GameCommandType.START_MATCH,
@@ -16,12 +17,14 @@ export class ApplicationRuntime {
   #dispatchGameCommand;
   #onNavigation;
   #getMatchState;
+  #runtimeComposition;
   #sequence = 0;
 
   constructor({
     dispatchGameCommand,
     onNavigation = () => {},
-    getMatchState = () => "menu"
+    getMatchState = () => "menu",
+    runtimeComposition = browserRuntimeComposition
   }) {
     if (typeof dispatchGameCommand !== "function") {
       throw new TypeError("ApplicationRuntime requires dispatchGameCommand");
@@ -29,13 +32,16 @@ export class ApplicationRuntime {
     this.#dispatchGameCommand = dispatchGameCommand;
     this.#onNavigation = onNavigation;
     this.#getMatchState = getMatchState;
+    this.#runtimeComposition = runtimeComposition;
   }
 
   request(type, payload = {}) {
     const action = createApplicationAction(type, payload);
     let resolvedType = action.type;
     if (resolvedType === ApplicationActionType.TOGGLE_PAUSE) {
-      const state = this.#getMatchState();
+      const state = this.#runtimeComposition.authoritative
+        ? this.#runtimeComposition.state
+        : this.#getMatchState();
       if (state !== "playing" && state !== "paused") return action;
       resolvedType = state === "playing"
         ? ApplicationActionType.PAUSE_MATCH
@@ -49,10 +55,13 @@ export class ApplicationRuntime {
         sequence: this.#sequence
       });
       this.#sequence += 1;
-      this.#dispatchGameCommand(command);
+      if (!this.#runtimeComposition.dispatch(command)) {
+        this.#dispatchGameCommand(command);
+      }
       return action;
     }
 
+    if (this.#runtimeComposition.authoritative) this.#runtimeComposition.reset();
     this.#onNavigation(action);
     return action;
   }

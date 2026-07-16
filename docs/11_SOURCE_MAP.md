@@ -2,159 +2,116 @@
 
 ## Purpose
 
-This document is the operational index for humans and AI agents navigating Tony Football. It maps a question or subsystem to its current source of truth, runtime owner, tests, and planned R1 destination.
+This document is the operational index for humans and AI agents navigating Tony Football. It maps each subsystem to its runtime owner, source, tests, and intended dependency direction.
 
 Keep this map stable and query-friendly:
 
-- describe ownership and contracts rather than implementation details
-- do not use line numbers
-- do not list every helper when a subsystem entry is enough
-- update the map in the same pull request when ownership, entry points, or dependency direction changes
+- describe ownership and contracts rather than mutable delivery status;
+- do not use line numbers;
+- do not list every helper when a subsystem entry is enough;
+- update this map in the same pull request when ownership, entry points, or dependency direction changes.
 
 ## Read path
 
 Before modifying code:
 
-1. Read `docs/00_PROJECT_CONTEXT.md` and `docs/01_ACTIVE_SPRINT.md`.
-2. Read the active sprint document.
+1. Read the assigned Linear issue and latest handoff.
+2. Read `AGENTS.md` and `docs/03_DEV_RULES.md`.
 3. Find the subsystem in this source map.
 4. Read its specification, ADR, implementation, and focused tests.
-5. Use `rg` on the exported symbol or runtime event before widening the search.
+5. Use the exported symbol or runtime event to narrow code search before widening scope.
 
 ## Runtime entry points
 
-| Entry point | Current responsibility | Notes |
+| Entry point | Responsibility | Ownership note |
 | --- | --- | --- |
-| `index.html` | Browser shell, import map, HUD and overlay DOM | Presentation projection; not gameplay authority |
-| `game.js` | Current composition root plus compatibility match state, simulation updates, command application, renderer/DOM wiring, and presentation callback implementations | Primary R1 extraction target |
-| `src/game/engine/` | R1 contracts, state, MatchEngine lifecycle, movement, ball simulation, player actions, goalkeeper behavior, and team AI | Headless only; no DOM, Three.js, Canvas, audio, or render-frame dependencies |
-| `src/game/input/` | FO4 keyboard mapping, browser key lifecycle, charge state, and immutable human commands | Browser adapter only; compatibility gameplay bridge remains in `game.js` |
-| `src/game/application/` | Explicit lifecycle and navigation requests plus browser button/event adapter | Match lifecycle becomes engine commands; setup/main-menu stay outside MatchEngine |
-| `src/game/presentation/BrowserGameEventBridge.js` | Projects immutable game events onto a browser `EventTarget` | Temporary compatibility bridge until `MatchEngine` is the live runtime owner |
-| `src/game/presentation/CompatibilitySnapshotAdapter.js` | Projects legacy runtime state into immutable previous/current `MatchSnapshot` frames | Temporary producer bridge; HUD/radar already consume it |
-| `src/game/presentation/SnapshotRenderState.js` | Interpolates immutable player/ball transforms between fixed snapshots with reset/teleport guards | Shared by WebGL and Canvas; presentation-only and never authoritative |
-| `src/game/presentation/SnapshotCameraController.js`, `SnapshotReplayController.js` | Own snapshot-driven camera framing and immutable replay sampling/playback | Presentation-only; camera and replay never mutate gameplay state |
-| `src/game/presentation/BrowserPresentationFeedbackAdapter.js` | Maps immutable kick, tackle, score, and lifecycle events to injected audio/particle callbacks | Browser presentation consumer; no gameplay ownership |
-| `src/game/presentation/HudSnapshotProjection.js`, `RadarSnapshotRenderer.js` | Pure HUD facts and radar drawing from match snapshots | Presentation-only snapshot consumers |
-| `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Uses `FixedClock`; exposes interpolation alpha |
-| `scripts/dev-server.mjs` | Local static development server | Development only; never the Vercel production entry point |
-| `scripts/build-static.mjs` | Produces the static `dist` bundle | Vercel publishes `dist` |
-| `vercel.json` | Vercel static build contract | Framework preset disabled intentionally |
+| `index.html` | Browser shell, import map, HUD, menus and overlays | Presentation projection; never gameplay authority |
+| `game.js` | Browser composition root, render implementations, DOM wiring and temporary compatibility shadow state | Compatibility update functions remain for parity and are removed only by TON-63 |
+| `src/game/application/BrowserRuntimeComposition.js` | Selects live-engine or explicit compatibility mode, owns browser runtime configuration, routes fixed source ticks, lifecycle/input state and browser event publication | Default browser authority; `?runtime=compatibility` is the temporary fallback |
+| `src/game/application/BrowserMatchRuntime.js` | Owns one `MatchEngine`, deterministic command scheduling, fixed steps, immutable snapshots, ordered events and action intents | Browser-facing authoritative runtime wrapper |
+| `src/game/engine/` | MatchEngine lifecycle, state, movement, ball simulation, player actions, goalkeeper behavior and AI | Headless authority; no DOM, Three.js, Canvas, audio or render-frame dependencies |
+| `src/game/input/BrowserInputAdapter.js` | FO4 key lifecycle and immutable human commands | Routes commands to live composition; legacy callback is compatibility-only |
+| `src/game/application/ApplicationRuntime.js` | Match lifecycle commands and navigation requests | Routes gameplay lifecycle to live composition; navigation remains outside MatchEngine |
+| `src/game/application/BrowserApplicationAdapter.js` | Browser buttons/events and immediate lifecycle UI projection | Attaches browser event target to live runtime composition |
+| `src/game/presentation/CompatibilitySnapshotAdapter.js` | Selects live engine snapshots in browser, mirrors immutable facts to legacy presentation objects, or produces explicit compatibility snapshots | Live engine is default in browser; Node contract tests and query fallback retain compatibility mode |
+| `src/game/presentation/SnapshotRenderState.js` | Interpolates immutable player/ball transforms between fixed snapshots | Shared by WebGL and Canvas; presentation-only |
+| `src/game/presentation/SnapshotCameraController.js`, `SnapshotReplayController.js` | Snapshot-driven camera and replay presentation | Never mutate gameplay state |
+| `src/game/presentation/HudSnapshotProjection.js`, `RadarSnapshotRenderer.js` | HUD facts and radar drawing from match snapshots | Presentation-only snapshot consumers |
+| `src/game/presentation/BrowserGameEventBridge.js` | Projects immutable ordered game events to browser consumers | Event transport only |
+| `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Fixed 60 Hz cadence with interpolation alpha |
+| `scripts/build-static.mjs`, `vercel.json` | Static build and deployment contract | Preserve Vercel and GitHub Pages compatibility |
 
-## Local workspace operational entry points
-
-| Entry point | Responsibility | Safety contract |
-| --- | --- | --- |
-| `scripts/bootstrap-local-playwright.sh` | Verifies a current-`main` runtime artifact, restores dependencies and browsers, and initializes local Git `main` | Refuses stale SHA and non-generated replacement paths |
-| `scripts/start-local-sprint.sh` | Creates one clean local sprint branch from the verified local `main` snapshot | Refuses dirty worktrees, invalid names, stale markers, and existing branches |
-| `scripts/sync-local-main.sh` | Imports a newer verified GitHub `main` snapshot into local `main` and rebases the active sprint branch | Requires committed work and exact SHA validation before replacement |
-| `scripts/run-local-preflight.sh` | Runs restricted-container unit, flow, and representative WebGL validation | Local feedback only; PR CI remains the merge gate |
-
-## Runtime data flow
-
-### Current compatibility flow
+## Browser runtime flow
 
 ```text
-FO4 keyboard → immutable commands → game.js compatibility state/update
-AI decisions ──────────────────────→ game.js compatibility state/update
-Application actions → lifecycle/navigation bridge
-Typed game events ─────────────────→ audio, particles, goal and result presentation
-Compatibility snapshots ──────────→ camera, replay, interpolated WebGL/Canvas transforms, HUD and radar
+FO4 keyboard ───────────────┐
+Application lifecycle ──────┼→ BrowserRuntimeComposition
+                            ├→ BrowserMatchRuntime → MatchEngine at fixed 60 Hz
+Engine AI decisions ────────┘                    ├→ immutable previous/current snapshots
+                                                  ├→ ordered gameplay events
+                                                  └→ action intents
+
+Snapshots → CompatibilitySnapshotAdapter live projection
+          → camera, replay, WebGL/Canvas transforms, HUD and radar
+Events    → BrowserGameEventBridge → audio, particles and overlays
+
+Compatibility game.js update/state remains a temporary shadow for parity evidence.
+It is not the default browser snapshot or command authority and is enabled as the
+full fallback only with `?runtime=compatibility` until TON-63 removes it.
 ```
 
-### R1 target
-
-```text
-Browser input → Commands ─┐
-AI decisions → Commands ──┼→ MatchEngine at fixed 60 Hz
-                          ├→ Read-only previous/current snapshots → renderers, radar and HUD
-                          └→ Ordered gameplay events → animation, audio and overlays
-```
-
-Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, CSS classes, animation mixers, audio, and replay badges never become gameplay inputs.
+Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, CSS classes, animation mixers, audio and replay badges never become gameplay inputs.
 
 ## Subsystem ownership
 
-| Question or subsystem | Current source | Current owner | Focused tests/specification | R1 direction |
-| --- | --- | --- | --- | --- |
-| Fixed timestep and render cadence | `src/game/core/FixedClock.js`, `src/game/core/SimulationLoop.js` | Core | `tests/simulation/`, `docs/gameplay/SIMULATION.md`, ADR-001 | Retain unchanged; `MatchEngine` consumes fixed ticks |
-| Commands, events and snapshots | `src/game/engine/`, `src/game/presentation/CompatibilitySnapshotAdapter.js`, `SnapshotRenderState.js` | Engine contracts plus temporary browser producer and pure render adapter | Engine/presentation snapshot tests, R1 sprint document, ADR-002 | WebGL, Canvas, HUD and radar consume the contract; replace the producer with live MatchEngine frames after remaining presentation parity |
-| Deterministic randomness | `src/game/core/Random.js` | Core | `tests/simulation/` | Engine-only service with no browser dependency |
-| Gameplay tuning | `src/game/config/gameplayConfig.js` | Config | Simulation and gameplay contracts | Inject into engine; never read from renderer |
-| Player movement, facing and stamina | `src/game/engine/PlayerMovementSystem.js`, `src/game/gameplay/PlayerLocomotion.js`, `src/game/config/locomotionConfig.js`; compatibility runtime remains in `game.js` | Headless engine system plus legacy runtime | `tests/engine/EngineSimulation.test.mjs`, `tests/gameplay/playerLocomotion.test.mjs`, `docs/gameplay/PLAYER_MOVEMENT.md` | Connect browser commands and snapshots, then remove duplicate runtime ownership |
-| Ball control and first touch | `src/game/engine/BallSimulationSystem.js`, `src/game/gameplay/BallControl.js`, `src/game/gameplay/PossessionLifecycle.js`, `src/game/config/ballControlConfig.js`; compatibility runtime remains in `game.js` | Headless engine system plus legacy runtime | `tests/engine/EngineSimulation.test.mjs`, focused gameplay tests, `docs/gameplay/BALL_CONTROL.md` | Connect browser commands and renderers to the engine snapshot |
-| Passing, shooting, tackling and teammate runs | `src/game/engine/KickActionSystem.js`, `src/game/engine/PlayerActionSystem.js`; compatibility runtime remains in `game.js` | Headless engine systems plus legacy runtime | `tests/engine/KickActionSystem.test.mjs`, `tests/engine/PlayerActionSystem.test.mjs`, MatchEngine integration tests | Connect the FO4 input adapter, then remove duplicate action ownership from `game.js` |
-| Match lifecycle, score, statistics and clock | `src/game/engine/MatchEngine.js`, `src/game/engine/MatchState.js`; compatibility runtime remains in `game.js` | Headless engine foundation plus legacy runtime | `tests/engine/MatchEngine.test.mjs`, `tests/engine/EngineSimulation.test.mjs`, presentation contracts and Playwright match flows | Migrate remaining gameplay systems incrementally, then remove duplicate ownership |
-| FO4 keyboard mapping and action buffering | `src/game/input/FO4Controls.js`, `src/game/input/BrowserInputAdapter.js`, `docs/ui/CONTROLS.md` | Browser input adapter | `tests/input/`, gameplay contracts and Playwright controls flow | Slice C complete; remove the temporary `game.js` command bridge after Slice D snapshot parity |
-| AI decisions and goalkeeper behavior | `src/game/engine/AIDecisionSystem.js`; compatibility runtime remains in `game.js` | Headless deterministic engine system plus legacy runtime | `tests/engine/AIDecisionSystem.test.mjs`, fixed-schedule MatchEngine parity, existing visual scenarios | Connect browser snapshots, verify parity, then remove duplicate AI ownership from `game.js` |
-| Replay recording and playback | `src/game/presentation/SnapshotReplayController.js`, `game.js` wiring | Snapshot-driven presentation controller | `tests/presentation/snapshotReplayController.test.mjs`, replay browser flows | Replace the compatibility snapshot producer with live MatchEngine snapshots during Slice E |
-| WebGL scene, assets and model animation | `SnapshotRenderState.js`, `game.js`, `assets/models/` | Presentation inside `game.js` with pure snapshot transforms | Snapshot renderer contracts, asset validation, desktop Playwright, `assets/models/README.md` | Entity position, facing and ball transforms are interpolated; extract the remaining Three.js adapter and event-driven animation ownership |
-| Canvas 2D fallback | `SnapshotRenderState.js`, `game.js` | Presentation inside `game.js` with the shared snapshot transforms | Snapshot renderer contracts plus Canvas browser smoke | Entity position, heading and ball transforms share WebGL render state; extract the remaining Canvas adapter |
-| Camera and radar | `SnapshotCameraController.js`, `CameraFraming.js`, `RadarSnapshotRenderer.js`, `src/game/config/cameraHudConfig.js`, `game.js` wiring | Snapshot-driven presentation | Camera/radar presentation tests, `docs/ui/CAMERA_HUD.md`, U3.1 sprint | Camera and radar consume snapshots; extract remaining renderer composition during Slice E |
-| HUD match facts | `src/game/presentation/HudSnapshotProjection.js`, `game.js` DOM binding | Presentation | `tests/presentation/hudSnapshotProjection.test.mjs`, HUD runtime contracts, camera/HUD Playwright | Snapshot-driven; retain DOM only as the output projection |
-| Game feel, particles, trails and audio | `BrowserPresentationFeedbackAdapter.js`, other `src/game/presentation/` policies, `game.js` callback wiring | Event/snapshot-driven presentation; particle lifetime storage remains in compatibility wiring | `tests/presentation/`, `docs/ui/GAME_FEEL.md` | Gameplay feedback triggers are event-driven; extract remaining browser implementations during Slice E |
-| Main menu, intro, goal and result flows | `src/game/application/`, `src/game/presentation/MainMenuFlow.js`, `MatchIntroFlow.js`, `GoalPresentationFlow.js`, `PostMatchHub.js`, `BrowserGameEventBridge.js` | Application lifecycle/navigation plus event-driven presentation | `tests/application/`, `tests/presentation/`, U3.2/U3.3 sprint docs, Playwright | Lifecycle/navigation and score/replay/match-ended facts are explicit; next connect the live MatchEngine event queue |
-| Presentation state machines | `src/game/state/` | Presentation state | `tests/presentation/` | Remain presentation-only and event-driven |
-| Static deployment | `package.json`, `scripts/build-static.mjs`, `vercel.json` | Build system | `tests/presentation/staticDeployment.test.mjs` | Preserve; add preview asset smoke validation |
+| Subsystem | Source and owner | Focused validation | Direction |
+| --- | --- | --- | --- |
+| Fixed timestep and render cadence | `src/game/core/FixedClock.js`, `SimulationLoop.js` | `tests/simulation/`, ADR-001 | Retain fixed 60 Hz and interpolation |
+| Browser runtime authority | `BrowserRuntimeComposition.js`, `BrowserMatchRuntime.js`, `MatchEngine.js` | `tests/application/browserMatchRuntime.test.mjs`, `browserRuntimeComposition.test.mjs` | One live MatchEngine owns browser commands/snapshots/events |
+| Commands, events and snapshots | `src/game/engine/` | Engine contract, ordering and immutability tests | Plain serializable immutable contracts |
+| Player movement and stamina | `PlayerMovementSystem.js`, gameplay/config modules | Engine simulation and locomotion tests | Engine authoritative; renderer consumes snapshots |
+| Ball, possession and first touch | `BallSimulationSystem.js`, `BallControl.js`, `PossessionLifecycle.js` | Engine/gameplay tests | Engine authoritative; no renderer mutation |
+| Passing, shooting, tackling and runs | `KickActionSystem.js`, `PlayerActionSystem.js` | Focused engine integration tests | Human/AI commands enter the same engine boundary |
+| Match lifecycle, score, stats and clock | `MatchEngine.js`, `MatchState.js` | MatchEngine/application/browser tests | Live snapshots supply browser facts |
+| FO4 keyboard mapping | `BrowserInputAdapter.js`, `FO4Controls.js` | `tests/input/`, browser controls flows | Immutable human commands only |
+| AI and goalkeeper behavior | `AIDecisionSystem.js`, engine systems | Deterministic AI/engine tests | Engine-only decisions |
+| WebGL and models | `game.js`, `SnapshotRenderState.js`, assets | Asset validation and desktop Playwright | Presentation consumes snapshot poses |
+| Canvas fallback | `game.js`, `SnapshotRenderState.js` | Canvas smoke and narrow Playwright | Same snapshot transforms as WebGL |
+| Camera, radar and HUD | presentation snapshot modules plus `game.js` DOM binding | presentation tests and browser flows | Read-only snapshot consumers |
+| Audio, particles and overlays | browser event/presentation adapters | presentation tests and event browser flows | Ordered event consumers |
+| Main menu and setup navigation | application adapters and `game.js` navigation callbacks | application and Playwright flows | Outside MatchEngine; match lifecycle remains engine commands |
+| Static deployment | `package.json`, `scripts/build-static.mjs`, `vercel.json` | build and deployment contracts | Preserve static hosting |
 
-## Current compatibility bridges
+## Current migration bridges
 
-These are known migration points, not patterns to copy:
+These are temporary migration points, not patterns to copy:
 
-- `game.js` contains both authoritative state and visual objects in one closure.
-- `game.js` temporarily projects compatibility score, replay, lifecycle, and match-ended facts through `BrowserGameEventBridge`.
-- `game.js` temporarily applies immutable input and application commands to the legacy mutable runtime.
-- presentation modules rely partly on import-time side effects.
-- Particle lifetime storage, Three.js/Canvas objects, and some presentation state still live in the compatibility closure; gameplay particle/audio triggers, camera framing, and replay playback now cross event/snapshot adapters.
-
-R1 removes each bridge only after an equivalent command, event, snapshot, and regression test exists.
+- `game.js` still contains compatibility mutable gameplay/update functions, but live browser commands and snapshots bypass them by default.
+- `CompatibilitySnapshotAdapter` mirrors immutable engine facts into legacy player/ball objects only where existing presentation implementations still read those objects.
+- `?runtime=compatibility` keeps an explicit fallback for parity diagnosis; it must not become the normal path.
+- Remaining compatibility ownership removal belongs to TON-63.
+- Browser presentation implementation extraction belongs to TON-64.
 
 ## Dependency rules
 
-### Engine-safe dependencies
+Engine and core modules may depend on pure JavaScript data/math, deterministic clocks/random sources, gameplay configuration and engine contracts. They must not depend on `window`, `document`, DOM, CSS, Three.js, Canvas, Web Audio, `requestAnimationFrame`, presentation modules or rendered values.
 
-Engine and core modules may depend on:
-
-- pure JavaScript data and math
-- gameplay/config modules
-- deterministic clocks and random sources
-- command, event and snapshot contracts
-
-They must not depend on:
-
-- `three` or GLTF loaders
-- `window`, `document`, DOM nodes or CSS classes
-- Canvas contexts
-- Web Audio
-- `requestAnimationFrame`
-- presentation modules or rendered DOM values
-
-### Presentation dependencies
-
-Presentation may depend on engine contracts and read-only snapshots. It may request application commands, but it may not mutate engine-owned players, ball, score, statistics, clock, possession, AI decisions, or match lifecycle.
+Browser composition may connect input, application, engine and presentation adapters. Presentation may consume engine contracts and read-only snapshots/events, but may not mutate engine-owned players, ball, score, statistics, clock, possession, AI decisions or match lifecycle.
 
 ## Test map
 
 | Change type | Minimum validation |
 | --- | --- |
-| Core clock or loop | `tests/simulation/` plus 30/60/120 FPS equivalence |
-| Movement, ball or possession | Focused `tests/gameplay/` plus deterministic reset coverage |
-| Command, event or snapshot contract | Headless contract tests plus event ordering and immutability |
-| Three.js or model animation | Asset validation, desktop Playwright and model fallback check |
-| Canvas fallback | Canvas smoke flow plus heading/coordinate parity |
-| HUD, camera or overlays | `tests/presentation/`, desktop and narrow-landscape Playwright |
-| Match lifecycle or replay | Headless lifecycle tests plus intro, pause, goal, replay and Full Time browser flows |
-| Static build or assets | Static deployment contract plus Vercel Preview HTTP smoke checks |
+| Browser runtime authority | composition/runtime tests, deterministic snapshot parity, full unit suite and desktop/narrow Playwright |
+| Core clock or loop | simulation tests plus 30/60/120 FPS equivalence |
+| Movement, ball or possession | focused gameplay/engine tests and deterministic reset coverage |
+| Command, event or snapshot contract | headless contracts, ordering and immutability |
+| Three.js or model animation | asset validation, desktop Playwright and model fallback |
+| Canvas fallback | Canvas smoke plus heading/coordinate parity |
+| HUD, camera or overlays | presentation tests, desktop and narrow landscape |
+| Match lifecycle or replay | headless lifecycle plus intro, pause, goal, replay and Full Time flows |
+| Static build or assets | static build contract and preview smoke |
 
 ## Update checklist
 
-Update this file when a pull request:
-
-- adds, removes, or renames a runtime entry point
-- moves authoritative state or subsystem ownership
-- introduces or removes a compatibility bridge
-- changes dependency direction
-- adds a command, event, snapshot, renderer, or application adapter
-- relocates focused tests or specifications
-
-The pull request documentation declaration must include `source map` when one of these conditions applies.
+Update this file when a pull request changes a runtime entry point, authoritative owner, compatibility bridge, dependency direction, command/event/snapshot contract, adapter location or focused validation path.
