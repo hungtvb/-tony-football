@@ -29,8 +29,8 @@ Before modifying code:
 | `game.js` | Browser composition root, render implementations, DOM wiring and temporary compatibility shadow state | Compatibility update functions remain for parity and are removed only by TON-63 |
 | `src/game/application/BrowserRuntimeComposition.js` | Selects live-engine or explicit compatibility mode, owns browser runtime configuration, routes fixed source ticks, lifecycle/input state and browser event publication | Default browser authority; `?runtime=compatibility` is the temporary fallback |
 | `src/game/application/BrowserMatchRuntime.js` | Owns one `MatchEngine`, deterministic command scheduling, fixed steps, immutable snapshots, ordered events and action intents | Browser-facing authoritative runtime wrapper |
-| `src/game/engine/` | MatchEngine lifecycle, state, movement, ball simulation, player actions, goalkeeper behavior and AI | Headless authority; no DOM, Three.js, Canvas, audio or render-frame dependencies |
-| `src/game/input/BrowserInputAdapter.js` | FO4 key lifecycle and immutable human commands | Routes commands to live composition; legacy callback is compatibility-only |
+| `src/game/engine/` | MatchEngine lifecycle, state, movement, ball simulation, player actions, goalkeeper behavior, AI and selected-owner takeover guard | Headless authority; owns active human attack intent and idle-owner assist; no DOM, Three.js, Canvas, audio or render-frame dependencies |
+| `src/game/input/BrowserInputAdapter.js` | FO4 key lifecycle, immutable human commands and transient attack-intent signaling | Sends paired `SET_ATTACK_INTENT` start/end commands across release and cancellation paths; legacy callback is compatibility-only |
 | `src/game/application/ApplicationRuntime.js` | Match lifecycle commands and navigation requests | Routes gameplay lifecycle to live composition; navigation remains outside MatchEngine |
 | `src/game/application/BrowserApplicationAdapter.js` | Browser buttons/events and immediate lifecycle UI projection | Attaches browser event target to live runtime composition |
 | `src/game/presentation/CompatibilitySnapshotAdapter.js` | Selects live engine snapshots in browser, mirrors immutable facts to legacy presentation objects, or produces explicit compatibility snapshots | Live engine is default in browser; Node contract tests and query fallback retain compatibility mode |
@@ -60,6 +60,15 @@ It is not the default browser snapshot or command authority and is enabled as th
 full fallback only with `?runtime=compatibility` until TON-63 removes it.
 ```
 
+`BrowserInputAdapter` expresses a charged pass or shot as a transient immutable
+`SET_ATTACK_INTENT` command pair. It sends `active: true` when charging starts and
+`active: false` on normal release, control-mode cancellation, reset, blur and
+detach. `MatchEngine` alone owns that intent and the selected-owner takeover
+guard: idle grace accrues only while the selected player owns the ball, controls
+are neutral and no human attack intent is active. Human commands reset the grace;
+AI owner action may resume only after the grace expires. Input never mutates the
+engine or AI systems directly.
+
 Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, CSS classes, animation mixers, audio and replay badges never become gameplay inputs.
 
 ## Subsystem ownership
@@ -68,13 +77,13 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | --- | --- | --- | --- |
 | Fixed timestep and render cadence | `src/game/core/FixedClock.js`, `SimulationLoop.js` | `tests/simulation/`, ADR-001 | Retain fixed 60 Hz and interpolation |
 | Browser runtime authority | `BrowserRuntimeComposition.js`, `BrowserMatchRuntime.js`, `MatchEngine.js` | `tests/application/browserMatchRuntime.test.mjs`, `browserRuntimeComposition.test.mjs` | One live MatchEngine owns browser commands/snapshots/events |
-| Commands, events and snapshots | `src/game/engine/` | Engine contract, ordering and immutability tests | Plain serializable immutable contracts |
+| Commands, events and snapshots | `src/game/engine/` | Engine contract, ordering and immutability tests | Plain serializable immutable contracts, including transient `SET_ATTACK_INTENT` |
 | Player movement and stamina | `PlayerMovementSystem.js`, gameplay/config modules | Engine simulation and locomotion tests | Engine authoritative; renderer consumes snapshots |
 | Ball, possession and first touch | `BallSimulationSystem.js`, `BallControl.js`, `PossessionLifecycle.js` | Engine/gameplay tests | Engine authoritative; no renderer mutation |
 | Passing, shooting, tackling and runs | `KickActionSystem.js`, `PlayerActionSystem.js` | Focused engine integration tests | Human/AI commands enter the same engine boundary |
 | Match lifecycle, score, stats and clock | `MatchEngine.js`, `MatchState.js` | MatchEngine/application/browser tests | Live snapshots supply browser facts |
-| FO4 keyboard mapping | `BrowserInputAdapter.js`, `FO4Controls.js` | `tests/input/`, browser controls flows | Immutable human commands only |
-| AI and goalkeeper behavior | `AIDecisionSystem.js`, engine systems | Deterministic AI/engine tests | Engine-only decisions |
+| FO4 keyboard mapping | `BrowserInputAdapter.js`, `FO4Controls.js` | `tests/input/`, browser controls flows | Immutable human commands; attack intent is always paired across release/cancellation paths |
+| AI and goalkeeper behavior | `AIDecisionSystem.js`, `MatchEngine.js`, engine systems | Deterministic AI/engine tests | Engine-only decisions; MatchEngine gates selected-owner takeover behind neutral controls, no attack intent and expired idle grace |
 | WebGL and models | `game.js`, `SnapshotRenderState.js`, assets | Asset validation and desktop Playwright | Presentation consumes snapshot poses |
 | Canvas fallback | `game.js`, `SnapshotRenderState.js` | Canvas smoke and narrow Playwright | Same snapshot transforms as WebGL |
 | Camera, radar and HUD | presentation snapshot modules plus `game.js` DOM binding | presentation tests and browser flows | Read-only snapshot consumers |
