@@ -18,3 +18,16 @@
 8. Code
 
 Do not read all documentation unless the task requires it.
+
+## Session and branch invariant
+
+Every new chat session must recover state from the repository rather than from chat history:
+
+1. read `AGENTS.md` and the mandatory docs;
+2. fetch the latest GitHub `main` SHA;
+3. bootstrap or sync the verified local workspace;
+4. create one GitHub branch and one matching local branch from `main` when a sprint starts;
+5. resume the existing sprint branch when continuing that sprint;
+6. never code directly on `main`.
+
+Restricted-container commands are documented in `docs/DEVELOPMENT_WORKFLOW.md`.

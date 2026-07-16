@@ -1,8 +1,12 @@
 # Development Rules
 
 ## Workflow
+- Repository docs are the persistent workflow memory across chat sessions.
 - One sprint equals one branch and one pull request.
-- Pull latest `main` before implementation.
+- At sprint start, fetch the latest GitHub `main` SHA and create the remote sprint branch directly from that SHA.
+- Create the matching local sprint branch from the verified local `main` snapshot before modifying files.
+- Never implement sprint work directly on `main`.
+- When GitHub `main` moves during a sprint, commit current work, import the new verified runtime snapshot into local `main`, then rebase the sprint branch.
 - Do not merge unless explicitly requested.
 - Keep the game playable after every sprint.
 

@@ -12,10 +12,25 @@ A coding task is not complete when code is pushed. It is complete only when:
 
 ## Required sequence
 
-### 1. Work on a dedicated branch
+### 1. Recover the session and work on a dedicated branch
 
-- Start from the latest `main`.
-- Use one branch per feature or hotfix.
+Repository docs are the persistent memory across chat sessions. At the start of each coding session, read `AGENTS.md`, fetch the latest GitHub `main` SHA, and compare it with the local `.local-runtime-sha` before modifying code.
+
+When a new sprint starts:
+
+1. Create the GitHub sprint branch directly from the latest `main` SHA.
+2. Bootstrap or sync the local workspace to that same `main` SHA.
+3. Create the matching local branch from local `main`:
+
+```bash
+cd /mnt/data/tony-football-local
+bash scripts/start-local-sprint.sh feat/<sprint-name>
+```
+
+When resuming the same sprint, switch to the existing branch instead of creating another branch.
+
+- One sprint equals one branch and one pull request.
+- Never implement sprint work directly on local or remote `main`.
 - Keep the PR in Draft while implementation or CI repair is active.
 
 ### 2. Run focused validation first
@@ -59,12 +74,20 @@ bash bootstrap-local-playwright.sh \
   --force
 ```
 
-The bootstrap refuses the artifact before replacing existing generated output when its `.local-runtime-sha` differs from the supplied current `main` SHA. The generated workspace contains that exact `main` source, `node_modules`, Chromium, Firefox, and `.local-playwright-env`.
+The bootstrap refuses the artifact before replacing existing generated output when its `.local-runtime-sha` differs from the supplied current `main` SHA. The generated workspace contains that exact `main` source, `node_modules`, Chromium, Firefox, and `.local-playwright-env`. It also initializes a local Git repository whose `main` branch is the verified runtime snapshot.
 
-Use the repository scripts in this order:
+Artifact archives contain the UID/GID and permission metadata of the GitHub runner that created them. Bootstrap and sync must always extract with `--no-same-owner --no-same-permissions` so files belong to the current container user while executable bits are still restored according to the current umask. Never remove those flags from a disk-writing tar extraction path.
+
+Before implementing a new sprint, create the matching GitHub branch from the same SHA and then create the local sprint branch:
 
 ```bash
 cd /mnt/data/tony-football-local
+bash scripts/start-local-sprint.sh feat/<sprint-name>
+```
+
+Use the repository validation scripts in this order:
+
+```bash
 bash scripts/run-local-preflight.sh unit
 bash scripts/run-local-preflight.sh flow
 bash scripts/run-local-preflight.sh webgl-desktop
@@ -75,6 +98,27 @@ bash scripts/run-local-preflight.sh webgl-narrow
 
 The local runtime is an early feedback mechanism, not the final merge signal. The regular PR CI still owns the complete Chromium desktop/narrow suites, including all camera/HUD scenarios, and the exact-head `CI gate` remains mandatory.
 
+### 3b. Sync local work when GitHub `main` moves
+
+The generated workspace has no Git remote, so do not use `git pull`. Preserve the sprint history with the verified snapshot import flow instead:
+
+1. Commit the current local sprint work.
+2. Trigger `/build-local-runtime` again and download artifacts for the new `main`.
+3. Fetch the latest 40-character GitHub `main` SHA immediately before syncing.
+4. Run:
+
+```bash
+cd /mnt/data/tony-football-local
+bash scripts/sync-local-main.sh \
+  /mnt/data/tony-local-runtime.zip \
+  /mnt/data/tony-playwright-browsers.zip \
+  --expected-main-sha <current-main-sha>
+```
+
+The sync script verifies the artifact before replacing generated files, commits the imported snapshot on local `main`, switches back to the current sprint branch, and rebases it onto the updated local `main`. Resolve any reported conflicts, continue the rebase, and rerun focused plus full validation.
+
+Do not bootstrap with `--force` over an active sprint workspace; use `sync-local-main.sh` so committed sprint work remains recoverable.
+
 Runtime safety rules:
 
 - Only repository owner/member/collaborator comments are accepted.
@@ -83,6 +127,9 @@ Runtime safety rules:
 - The bootstrap requires the current 40-character `main` SHA and refuses stale artifacts before deleting generated workspace contents.
 - Artifacts expire after three days.
 - The bootstrap script only replaces generated paths under `/mnt/data` or `.local-runtime`, and requires `--force` for non-empty output.
+- Every disk-writing tar extraction ignores archived owner and permission metadata from the GitHub runner.
+- The bootstrap creates a local `main` baseline; sprint work must begin on a separate local and GitHub branch.
+- The sync script requires a clean committed worktree, imports only a verified current-`main` artifact, and rebases the existing sprint branch.
 - No gameplay, deployment, or production HTML is modified to support offline testing.
 
 ### 4. Open or update a Draft PR
