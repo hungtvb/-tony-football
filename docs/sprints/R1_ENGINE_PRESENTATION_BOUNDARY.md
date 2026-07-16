@@ -1,6 +1,6 @@
 # R1 — Engine and Presentation Boundary
 
-Status: In Progress — Slice C adapters implemented; browser CI pending
+Status: In Progress — Slice C input/application adapters complete
 
 ## Objective
 
@@ -85,7 +85,7 @@ flowchart LR
 - Slice C centralizes the FO4 mapping and keyboard lifecycle in `BrowserInputAdapter`; normalized movement, charge/release actions, defensive holds, standing/slide tackles, Shift-direction switching, blur cleanup, and camera requests preserve the desktop map.
 - Slice C centralizes start, pause, resume, restart, Match Setup, and Main Menu requests in `ApplicationRuntime` and `BrowserApplicationAdapter`.
 - Match intro and post-match presentation now emit explicit application actions; synthetic `.click()` navigation bridges are removed.
-- Slice C unit and static-build validation is complete. Desktop Playwright execution remains delegated to CI because the local container has no Chromium executable.
+- Slice C unit, static-build, desktop Playwright, narrow-landscape Playwright, and CI-gate validation passed in CI run #247. The local container has no Chromium executable, so browser evidence comes from CI.
 - `game.js` remains the live compatibility gameplay owner until Slice D render adapters consume MatchEngine snapshots and browser parity is proven.
 - The browser runtime still uses the compatibility simulation in `game.js`; renderer ownership has not moved yet.
 

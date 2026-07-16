@@ -3,7 +3,7 @@
 ```yaml
 Sprint: R1
 Title: Engine and Presentation Boundary
-Status: In Progress — Slice C adapters implemented; browser CI pending
+Status: In Progress — Slice C input/application adapters complete
 Owner: Codex or Antigravity agent
 Sprint document: docs/sprints/R1_ENGINE_PRESENTATION_BOUNDARY.md
 Primary goals:
