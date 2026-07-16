@@ -76,6 +76,8 @@ bash bootstrap-local-playwright.sh \
 
 The bootstrap refuses the artifact before replacing existing generated output when its `.local-runtime-sha` differs from the supplied current `main` SHA. The generated workspace contains that exact `main` source, `node_modules`, Chromium, Firefox, and `.local-playwright-env`. It also initializes a local Git repository whose `main` branch is the verified runtime snapshot.
 
+Artifact archives contain the UID/GID and permission metadata of the GitHub runner that created them. Bootstrap and sync must always extract with `--no-same-owner --no-same-permissions` so files belong to the current container user while executable bits are still restored according to the current umask. Never remove those flags from a disk-writing tar extraction path.
+
 Before implementing a new sprint, create the matching GitHub branch from the same SHA and then create the local sprint branch:
 
 ```bash
@@ -125,6 +127,7 @@ Runtime safety rules:
 - The bootstrap requires the current 40-character `main` SHA and refuses stale artifacts before deleting generated workspace contents.
 - Artifacts expire after three days.
 - The bootstrap script only replaces generated paths under `/mnt/data` or `.local-runtime`, and requires `--force` for non-empty output.
+- Every disk-writing tar extraction ignores archived owner and permission metadata from the GitHub runner.
 - The bootstrap creates a local `main` baseline; sprint work must begin on a separate local and GitHub branch.
 - The sync script requires a clean committed worktree, imports only a verified current-`main` artifact, and rebases the existing sprint branch.
 - No gameplay, deployment, or production HTML is modified to support offline testing.
