@@ -45,6 +45,22 @@ jobs:
           path: unit-test.log
           if-no-files-found: ignore
           retention-days: 14
+      - name: Upload local workspace source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-workspace-${{ github.sha }}
+          path: |
+            game.js
+            index.html
+            package.json
+            package-lock.json
+            playwright.config.mjs
+            scripts
+            src
+            tests
+          if-no-files-found: error
+          retention-days: 1
 
   playwright-desktop:
     name: Playwright desktop
