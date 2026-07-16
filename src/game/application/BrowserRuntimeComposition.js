@@ -1,4 +1,5 @@
 import { GameCommandType } from "../engine/GameCommands.js";
+import { GameEventType } from "../engine/GameEvents.js";
 import { publishGameEvent } from "../presentation/BrowserGameEventBridge.js";
 import { BrowserMatchRuntime } from "./BrowserMatchRuntime.js";
 
@@ -67,6 +68,44 @@ function assertSourceTick(tick) {
 function assertEventTarget(target) {
   if (!target || typeof target.dispatchEvent !== "function") {
     throw new TypeError("browser runtime composition requires an event target");
+  }
+}
+
+function toggleVisible(element, visible) {
+  element?.classList?.toggle("show", visible);
+}
+
+function projectLifecycleEvent(target, event) {
+  const document = target?.document;
+  if (!document || typeof document.getElementById !== "function") return;
+
+  const start = document.getElementById("startOverlay");
+  const pause = document.getElementById("pauseOverlay");
+  const result = document.getElementById("resultOverlay");
+  const matchState = document.getElementById("matchState");
+
+  switch (event.type) {
+    case GameEventType.MATCH_STARTED:
+    case GameEventType.MATCH_RESTARTED:
+      toggleVisible(start, false);
+      toggleVisible(pause, false);
+      toggleVisible(result, false);
+      if (matchState) matchState.textContent = "LIVE";
+      break;
+    case GameEventType.MATCH_PAUSED:
+      toggleVisible(pause, true);
+      if (matchState) matchState.textContent = "TẠM DỪNG";
+      break;
+    case GameEventType.MATCH_RESUMED:
+      toggleVisible(pause, false);
+      if (matchState) matchState.textContent = "LIVE";
+      break;
+    case GameEventType.MATCH_ENDED:
+      toggleVisible(pause, false);
+      if (matchState) matchState.textContent = "FULL TIME";
+      break;
+    default:
+      break;
   }
 }
 
@@ -195,7 +234,9 @@ export class BrowserRuntimeComposition {
     this.#runtime = this.#runtimeFactory({
       engineOptions: options,
       publishEvent: (event) => {
-        if (this.#target) publishGameEvent(this.#target, event);
+        if (!this.#target) return;
+        projectLifecycleEvent(this.#target, event);
+        publishGameEvent(this.#target, event);
       },
     });
   }
