@@ -47,11 +47,13 @@ function applicationRuntime(runtimeComposition, compatibilityCommands = []) {
   });
 }
 
-test("browser runtime mode defaults to engine only in an actual browser search context", () => {
+test("browser runtime mode defaults to engine while retaining explicit compatibility paths", () => {
   assert.equal(resolveBrowserRuntimeMode(null), BrowserRuntimeMode.COMPATIBILITY);
   assert.equal(resolveBrowserRuntimeMode(""), BrowserRuntimeMode.ENGINE);
   assert.equal(resolveBrowserRuntimeMode("?runtime=engine"), BrowserRuntimeMode.ENGINE);
   assert.equal(resolveBrowserRuntimeMode("?runtime=compatibility"), BrowserRuntimeMode.COMPATIBILITY);
+  assert.equal(resolveBrowserRuntimeMode("?debugScenario=low-stamina"), BrowserRuntimeMode.COMPATIBILITY);
+  assert.equal(resolveBrowserRuntimeMode("?runtime=engine&debugScenario=low-stamina"), BrowserRuntimeMode.ENGINE);
 });
 
 test("live browser composition owns lifecycle commands and authoritative snapshots", () => {
