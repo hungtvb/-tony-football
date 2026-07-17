@@ -29,6 +29,7 @@ test("browser wiring presents score and replay for a command-driven goal", async
 
   await page.locator("#playButton").click();
   await expect(page.locator("#matchState")).toHaveText("LIVE");
+  await page.keyboard.down("ArrowRight");
   await page.keyboard.down("KeyD");
   await expect.poll(
     () => page.evaluate(() => (
@@ -38,6 +39,7 @@ test("browser wiring presents score and replay for a command-driven goal", async
     )),
     { timeout: 10_000 },
   ).toBe(true);
+  await page.keyboard.up("ArrowRight");
   await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG");
   await expect(page.locator("#playerName")).toHaveText("TONY");
   await page.keyboard.up("KeyD");
