@@ -45,9 +45,15 @@ export async function installNaturalGoalRuntimeHarness(page) {
       [360, 80, "DF", "NOVA", 1, 87], [390, 80, "DF", "VEX", 3, 88], [420, 80, "DF", "ZERO", 5, 87],
       [360, 620, "MF", "ECHO", 8, 91], [390, 620, "FW", "BLAZE", 9, 92], [420, 620, "FW", "RUSH", 11, 90]
     ]`;
-    const patched = source.replace(originalAwayFormation, deterministicAwayFormation);
+    const patched = source
+      .replace(
+        '[690, 205, "FW", "TONY", 10, 92]',
+        '[574, 350, "FW", "TONY", 10, 92]',
+      )
+      .replace(originalAwayFormation, deterministicAwayFormation);
     if (
       patched === source
+      || !patched.includes('[574, 350, "FW", "TONY"')
       || !patched.includes('[360, 80, "DF", "NOVA"')
       || patched.includes(originalAwayFormation)
     ) {

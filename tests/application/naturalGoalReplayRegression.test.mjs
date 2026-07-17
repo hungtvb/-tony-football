@@ -18,7 +18,7 @@ const formations = Object.freeze({
     { x: 260, y: 120, role: "DF", name: "MINH", number: 4, rating: 87 },
     { x: 260, y: 580, role: "DF", name: "NAM", number: 5, rating: 86 },
     { x: 520, y: 120, role: "MF", name: "HUNG", number: 8, rating: 90 },
-    { x: 690, y: 205, role: "FW", name: "TONY", number: 10, rating: 92 },
+    { x: 574, y: 350, role: "FW", name: "TONY", number: 10, rating: 92 },
     { x: 520, y: 580, role: "FW", name: "PHUC", number: 11, rating: 89 },
   ]),
   away: Object.freeze([
@@ -56,13 +56,16 @@ test("declared commands drive kickoff possession, a natural goal, replay, and co
   runtime.step(STEP);
   assert.equal(runtime.snapshot.match.state, "playing");
 
+  dispatch(GameCommandType.MOVE, { x: 1, y: 0 });
+  for (let index = 0; index < 4; index += 1) runtime.step(STEP);
+  dispatch(GameCommandType.MOVE, { x: 0, y: 0 });
   for (let index = 0; index < 120 && runtime.snapshot.ball.ownerId !== "home-4"; index += 1) {
     runtime.step(STEP);
   }
   assert.equal(
     runtime.snapshot.ball.ownerId,
     "home-4",
-    "the kickoff taker must gain possession through normal ball simulation"
+    "the kickoff taker must gain possession through declared movement and normal capture rules"
   );
   assert.ok(published.some((event) => (
     event.type === GameEventType.POSSESSION_CHANGED
