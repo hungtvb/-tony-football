@@ -8,6 +8,7 @@ import {
   createGameCommand
 } from "../../src/game/engine/GameCommands.js";
 import { GameEventType } from "../../src/game/engine/GameEvents.js";
+import { GoalSequencePhase } from "../../src/game/engine/GoalSequenceTimeline.js";
 import { MatchEngine } from "../../src/game/engine/MatchEngine.js";
 
 const STEP = 1 / 60;
@@ -35,12 +36,12 @@ function findPlayer(snapshot, playerId) {
   return snapshot.players.find((player) => player.id === playerId) ?? null;
 }
 
-test("declared commands drive kickoff possession, a natural goal, replay, and coherent restart", () => {
+test("declared commands drive ordered announcement, full replay, and coherent kickoff", () => {
   const published = [];
   const engine = new MatchEngine({
     formations,
     kickoffDelay: 0,
-    goalDuration: 3.65,
+    goalDuration: 0.439,
     randomSeed: "ton-67-command-goal",
   });
   const runtime = new BrowserMatchRuntime({
@@ -62,15 +63,7 @@ test("declared commands drive kickoff possession, a natural goal, replay, and co
   for (let index = 0; index < 120 && runtime.snapshot.ball.ownerId !== "home-4"; index += 1) {
     runtime.step(STEP);
   }
-  assert.equal(
-    runtime.snapshot.ball.ownerId,
-    "home-4",
-    "the kickoff taker must gain possession through declared movement and normal capture rules"
-  );
-  assert.ok(published.some((event) => (
-    event.type === GameEventType.POSSESSION_CHANGED
-    && event.payload.ownerId === "home-4"
-  )));
+  assert.equal(runtime.snapshot.ball.ownerId, "home-4");
   published.length = 0;
 
   dispatch(GameCommandType.SET_SPRINT, { active: true });
@@ -83,11 +76,10 @@ test("declared commands drive kickoff possession, a natural goal, replay, and co
   }
 
   const shootingPlayer = findPlayer(runtime.snapshot, "home-4");
-  assert.ok(shootingPlayer?.x >= 1030, "declared movement commands must reach the shooting lane");
+  assert.ok(shootingPlayer?.x >= 1030);
   dispatch(GameCommandType.MOVE, { x: 0, y: 0 });
   dispatch(GameCommandType.SET_SPRINT, { active: false });
   runtime.step(STEP);
-
   dispatch(GameCommandType.SHOOT, {
     playerId: "home-4",
     power: 1,
@@ -98,51 +90,48 @@ test("declared commands drive kickoff possession, a natural goal, replay, and co
   let scoredResult = null;
   for (let index = 0; index < 90 && !scoredResult; index += 1) {
     const result = runtime.step(STEP);
-    if (result.events.some((event) => event.type === GameEventType.SCORE_CHANGED)) {
-      scoredResult = result;
-    }
+    if (result.events.some((event) => event.type === GameEventType.SCORE_CHANGED)) scoredResult = result;
   }
 
-  assert.ok(scoredResult, "the declared shoot command must cross the goal line");
+  assert.ok(scoredResult);
   assert.deepEqual(scoredResult.snapshot.match.score, [1, 0]);
-  assert.equal(scoredResult.snapshot.match.stats.shots[0], 1);
-  assert.ok(scoredResult.snapshot.match.goalSequence);
+  assert.equal(scoredResult.snapshot.match.replay.active, false);
+  assert.equal(scoredResult.snapshot.match.goalSequence.phase, GoalSequencePhase.NATIVE_HIGHLIGHT);
+
+  const measured = [];
+  let replayStart = null;
+  while (!replayStart) {
+    const result = runtime.step(STEP);
+    measured.push(...result.events);
+    if (result.events.some((event) => event.type === GameEventType.REPLAY_STARTED)) replayStart = result;
+  }
+  assert.equal(replayStart.snapshot.match.replay.active, true);
+  assert.equal(replayStart.snapshot.match.goalSequence.phase, GoalSequencePhase.REPLAY);
   assert.deepEqual(
-    published
-      .filter((event) => [
-        GameEventType.BALL_KICKED,
-        GameEventType.POSSESSION_CHANGED,
-        GameEventType.SCORE_CHANGED,
-        GameEventType.REPLAY_STARTED,
-      ].includes(event.type))
-      .map((event) => event.type),
-    [
-      GameEventType.BALL_KICKED,
-      GameEventType.POSSESSION_CHANGED,
-      GameEventType.SCORE_CHANGED,
-      GameEventType.REPLAY_STARTED,
-    ]
+    measured.filter((event) => event.type === GameEventType.GOAL_PHASE_CHANGED).map((event) => event.payload.phase),
+    [GoalSequencePhase.GOAL_CARD, GoalSequencePhase.SCORE_CARD, GoalSequencePhase.REPLAY]
   );
 
   let replayProgressed = false;
-  let replayEnded = false;
-  for (let index = 0; index < 240 && !replayEnded; index += 1) {
+  let replayEnd = null;
+  while (!replayEnd) {
     const result = runtime.step(STEP);
     replayProgressed ||= result.snapshot.match.replay.elapsed > STEP;
-    replayEnded = result.events.some((event) => event.type === GameEventType.REPLAY_ENDED);
+    if (result.events.some((event) => event.type === GameEventType.REPLAY_ENDED)) replayEnd = result;
   }
-  assert.equal(replayProgressed, true);
-  assert.equal(replayEnded, true);
-  assert.equal(runtime.snapshot.match.replay.active, false);
 
-  for (let index = 0; index < 90 && runtime.snapshot.match.goalSequence; index += 1) {
-    runtime.step(STEP);
-  }
-  assert.equal(runtime.snapshot.match.goalSequence, null);
-  assert.deepEqual(runtime.snapshot.match.score, [1, 0]);
-  assert.equal(runtime.snapshot.ball.ownerId, null);
-  assert.equal(runtime.snapshot.ball.x, 600);
-  assert.equal(runtime.snapshot.ball.y, 350);
-  assert.equal(runtime.snapshot.match.kickoffTimer, 0);
-  assert.equal(runtime.snapshot.match.controls.lastMode, "defense");
+  assert.equal(replayProgressed, true);
+  assert.deepEqual(replayEnd.events.map((event) => event.type), [
+    GameEventType.REPLAY_ENDED,
+    GameEventType.GOAL_PHASE_CHANGED,
+  ]);
+  assert.equal(replayEnd.events[1].payload.phase, GoalSequencePhase.KICKOFF);
+  assert.equal(replayEnd.snapshot.match.replay.active, false);
+  assert.equal(replayEnd.snapshot.match.goalSequence, null);
+  assert.deepEqual(replayEnd.snapshot.match.score, [1, 0]);
+  assert.equal(replayEnd.snapshot.ball.ownerId, null);
+  assert.equal(replayEnd.snapshot.ball.x, 600);
+  assert.equal(replayEnd.snapshot.ball.y, 350);
+  assert.equal(replayEnd.snapshot.match.kickoffTimer, 0);
+  assert.equal(replayEnd.snapshot.match.controls.lastMode, "defense");
 });

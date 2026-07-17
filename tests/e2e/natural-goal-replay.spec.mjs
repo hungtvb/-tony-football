@@ -12,21 +12,26 @@ async function openNaturalGoalTest(page) {
   ));
 }
 
-test("browser wiring presents score and replay for a command-driven goal", async ({ page }) => {
+test("natural browser goal shows announcement before a full progressing replay and kickoff", async ({ page }) => {
   await openNaturalGoalTest(page);
 
   await page.locator("#quickMatchButton").click();
   await page.locator('[data-weather="rain"]').click();
   await expect(page.locator('[data-weather="rain"]')).toHaveClass(/active/);
   await page.evaluate(() => {
-    const evidence = { events: [], shotReleased: false };
+    const evidence = { events: [], snapshots: [], shotReleased: false };
     const key = (type, code, value) => window.dispatchEvent(new KeyboardEvent(type, {
       code,
       key: value,
       bubbles: true,
     }));
     window.addEventListener("tony:game-event", ({ detail }) => {
-      evidence.events.push({ type: detail.type, payload: detail.payload });
+      evidence.events.push({
+        type: detail.type,
+        payload: detail.payload,
+        tick: detail.tick,
+        sequence: detail.sequence,
+      });
       if (detail.type === "match:started") key("keydown", "KeyD", "d");
       if (
         !evidence.shotReleased
@@ -37,6 +42,21 @@ test("browser wiring presents score and replay for a command-driven goal", async
         key("keyup", "KeyD", "d");
       }
     });
+    const capture = () => {
+      const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+      if (snapshot) {
+        evidence.snapshots.push({
+          at: performance.now(),
+          replayActive: snapshot.replayActive,
+          replayElapsed: snapshot.replayElapsed,
+          replayDuration: snapshot.replayDuration,
+          goalPhase: snapshot.goalPhase,
+          kickoffTimer: snapshot.kickoffTimer,
+        });
+      }
+      requestAnimationFrame(capture);
+    };
+    requestAnimationFrame(capture);
     window.__TONY_NATURAL_GOAL_EVIDENCE__ = evidence;
   });
 
@@ -49,16 +69,75 @@ test("browser wiring presents score and replay for a command-driven goal", async
 
   await expect(page.locator("#homeScore")).toHaveText("1");
   await expect(page.locator("#awayScore")).toHaveText("0");
+
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "goal-card"
+  ));
+  await expect(page.locator("#goalPresentationOverlay")).toHaveClass(/show/);
+  await expect(page.locator("#replayBadge")).not.toHaveClass(/show/);
+
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "score-card"
+  ));
+  await expect(page.locator("#goalPresentationOverlay")).toHaveClass(/show/);
+  await expect(page.locator("#replayBadge")).not.toHaveClass(/show/);
+
+  await page.waitForFunction(() => (
+    window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "replay"
+  ));
+  await expect(page.locator("#goalPresentationOverlay")).not.toHaveClass(/show/);
   await expect(page.locator("#replayBadge")).toHaveClass(/show/);
   await expect(page.locator("#replayBadge")).toContainText("INSTANT REPLAY");
 
+  await page.waitForFunction(() => {
+    const progressing = window.__TONY_NATURAL_GOAL_EVIDENCE__.snapshots
+      .filter((snapshot) => snapshot.replayActive)
+      .map((snapshot) => snapshot.replayElapsed);
+    return progressing.length >= 2 && Math.max(...progressing) > Math.min(...progressing);
+  });
+
   await expect(page.locator("#replayBadge")).not.toHaveClass(/show/, { timeout: 12_000 });
   await expect(page.locator("#homeScore")).toHaveText("1");
-  const eventTypes = await page.evaluate(() => (
-    window.__TONY_NATURAL_GOAL_EVIDENCE__.events.map((event) => event.type)
+  await page.waitForFunction(() => {
+    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+    return snapshot?.goalPhase === null && snapshot?.kickoffTimer > 0;
+  });
+
+  const evidence = await page.evaluate(() => window.__TONY_NATURAL_GOAL_EVIDENCE__);
+  const indexOf = (type, phase = null) => evidence.events.findIndex((event) => (
+    event.type === type && (phase === null || event.payload?.phase === phase)
   ));
-  expect(eventTypes).toContain("possession:changed");
-  expect(eventTypes).toContain("ball:kicked");
-  expect(eventTypes).toContain("score:changed");
-  expect(eventTypes).toContain("replay:started");
+  const scoreIndex = indexOf("score:changed");
+  const goalCardIndex = indexOf("goal:phase-changed", "goal-card");
+  const scoreCardIndex = indexOf("goal:phase-changed", "score-card");
+  const replayPhaseIndex = indexOf("goal:phase-changed", "replay");
+  const replayStartIndex = indexOf("replay:started");
+  const replayEndIndex = indexOf("replay:ended");
+  const kickoffIndex = indexOf("goal:phase-changed", "kickoff");
+
+  expect([scoreIndex, goalCardIndex, scoreCardIndex, replayPhaseIndex, replayStartIndex, replayEndIndex, kickoffIndex])
+    .toEqual([...new Set([scoreIndex, goalCardIndex, scoreCardIndex, replayPhaseIndex, replayStartIndex, replayEndIndex, kickoffIndex])]);
+  expect(scoreIndex).toBeGreaterThanOrEqual(0);
+  expect(goalCardIndex).toBeGreaterThan(scoreIndex);
+  expect(scoreCardIndex).toBeGreaterThan(goalCardIndex);
+  expect(replayPhaseIndex).toBeGreaterThan(scoreCardIndex);
+  expect(replayStartIndex).toBeGreaterThan(replayPhaseIndex);
+  expect(replayEndIndex).toBeGreaterThan(replayStartIndex);
+  expect(kickoffIndex).toBeGreaterThan(replayEndIndex);
+
+  const scoreEvent = evidence.events[scoreIndex];
+  const replayPhaseEvent = evidence.events[replayPhaseIndex];
+  const replayStartEvent = evidence.events[replayStartIndex];
+  const replayEndEvent = evidence.events[replayEndIndex];
+  const kickoffEvent = evidence.events[kickoffIndex];
+
+  expect(replayPhaseEvent.tick - scoreEvent.tick).toBeGreaterThanOrEqual(80);
+  expect(replayPhaseEvent.tick - scoreEvent.tick).toBeLessThanOrEqual(82);
+  expect(replayPhaseEvent.payload.phaseDuration).toBeCloseTo(3.05, 2);
+  expect(replayStartEvent.tick).toBe(replayPhaseEvent.tick);
+  expect(replayStartEvent.sequence).toBeGreaterThan(replayPhaseEvent.sequence);
+  expect(replayEndEvent.tick - replayStartEvent.tick).toBeGreaterThanOrEqual(182);
+  expect(replayEndEvent.tick - replayStartEvent.tick).toBeLessThanOrEqual(184);
+  expect(kickoffEvent.tick).toBe(replayEndEvent.tick);
+  expect(kickoffEvent.sequence).toBeGreaterThan(replayEndEvent.sequence);
 });
