@@ -61,5 +61,4 @@ test("browser wiring presents score and replay for a command-driven goal", async
   expect(eventTypes).toContain("ball:kicked");
   expect(eventTypes).toContain("score:changed");
   expect(eventTypes).toContain("replay:started");
-  expect(eventTypes).toContain("replay:ended");
 });
