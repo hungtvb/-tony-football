@@ -57,11 +57,19 @@ export async function installNaturalGoalRuntimeHarness(page) {
       "  return Object.freeze({",
       "  const controller = Object.freeze({",
     );
-    const patched = withController.replace(
-      "  });\n}",
-      "  });\n  globalThis.__TONY_E2E_REPLAY_CONTROLLER__ = controller;\n  return controller;\n}",
+    const withRenderEvidence = withController.replace(
+      "    currentSnapshot() {\n      if (!active",
+      "    currentSnapshot() {\n      if (active) globalThis.__TONY_E2E_REPLAY_RENDER_READS__ = (globalThis.__TONY_E2E_REPLAY_RENDER_READS__ ?? 0) + 1;\n      if (!active",
     );
-    if (patched === source || !patched.includes("__TONY_E2E_REPLAY_CONTROLLER__")) {
+    const patched = withRenderEvidence.replace(
+      "  });\n}",
+      "  });\n  globalThis.__TONY_E2E_REPLAY_CONTROLLER__ = controller;\n  globalThis.__TONY_E2E_REPLAY_RENDER_READS__ = 0;\n  return controller;\n}",
+    );
+    if (
+      patched === source
+      || !patched.includes("__TONY_E2E_REPLAY_CONTROLLER__")
+      || !patched.includes("__TONY_E2E_REPLAY_RENDER_READS__")
+    ) {
       throw new Error("Could not expose the isolated replay controller diagnostics");
     }
     await route.fulfill({ response, body: patched });
