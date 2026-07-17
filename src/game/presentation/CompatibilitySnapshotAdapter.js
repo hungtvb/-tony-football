@@ -162,15 +162,18 @@ function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapsh
   );
   if (freshMatch && typeof replay.reset === "function") replay.reset();
 
-  recordLiveReplayHistory(replay, snapshot, previousSnapshot);
-
   const active = Boolean(snapshot.match.replay?.active);
   const wasActive = Boolean(previousSnapshot?.match?.replay?.active);
   if (active && !wasActive && typeof replay.start === "function") {
     replay.start(snapshot);
-  } else if (!active && wasActive && typeof replay.stop === "function") {
-    replay.stop();
+    return;
   }
+  if (!active && wasActive && typeof replay.stop === "function") {
+    replay.stop();
+    return;
+  }
+
+  recordLiveReplayHistory(replay, snapshot, previousSnapshot);
 }
 
 export class CompatibilitySnapshotAdapter {
