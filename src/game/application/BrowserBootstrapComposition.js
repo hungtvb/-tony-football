@@ -79,6 +79,7 @@ export class BrowserBootstrapComposition {
       onNavigation,
       getMatchState: getCompatibilityMatchState,
       runtimeComposition,
+      resetRuntime: () => this.reset(),
     });
     this.#inputAdapter = new BrowserInputAdapter({
       target,
