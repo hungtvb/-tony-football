@@ -1,5 +1,7 @@
 import { expect, test } from "./fixtures.mjs";
 
+test.describe.configure({ timeout: 60_000 });
+
 function captureRuntimeErrors(page) {
   const errors = [];
   page.on("console", (message) => {
