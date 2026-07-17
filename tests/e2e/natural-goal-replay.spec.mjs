@@ -19,7 +19,7 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await page.locator('[data-weather="rain"]').click();
   await expect(page.locator('[data-weather="rain"]')).toHaveClass(/active/);
   await page.evaluate(() => {
-    const evidence = { events: [], shotReleased: false };
+    const evidence = { events: [], shotReleased: false, captureTimer: null };
     const key = (type, code, value) => window.dispatchEvent(new KeyboardEvent(type, {
       code,
       key: value,
@@ -28,8 +28,10 @@ test("browser wiring presents score and replay for a command-driven goal", async
     window.addEventListener("tony:game-event", ({ detail }) => {
       evidence.events.push({ type: detail.type, payload: detail.payload });
       if (detail.type === "match:started") {
-        key("keydown", "ArrowRight", "ArrowRight");
         key("keydown", "KeyD", "d");
+        evidence.captureTimer = window.setTimeout(() => {
+          if (!evidence.shotReleased) key("keydown", "ArrowRight", "ArrowRight");
+        }, 1_900);
       }
       if (
         !evidence.shotReleased
@@ -37,6 +39,7 @@ test("browser wiring presents score and replay for a command-driven goal", async
         && detail.payload?.ownerId === "home-4"
       ) {
         evidence.shotReleased = true;
+        if (evidence.captureTimer !== null) window.clearTimeout(evidence.captureTimer);
         key("keyup", "ArrowRight", "ArrowRight");
         key("keyup", "KeyD", "d");
       }
