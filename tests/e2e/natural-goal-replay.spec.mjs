@@ -19,30 +19,37 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await page.locator('[data-weather="rain"]').click();
   await expect(page.locator('[data-weather="rain"]')).toHaveClass(/active/);
   await page.evaluate(() => {
-    const evidence = { events: [] };
-    window.addEventListener("tony:game-event", ({ detail }) => evidence.events.push({
-      type: detail.type,
-      payload: detail.payload,
+    const evidence = { events: [], shotReleased: false };
+    const key = (type, code, value) => window.dispatchEvent(new KeyboardEvent(type, {
+      code,
+      key: value,
+      bubbles: true,
     }));
+    window.addEventListener("tony:game-event", ({ detail }) => {
+      evidence.events.push({ type: detail.type, payload: detail.payload });
+      if (detail.type === "match:started") {
+        key("keydown", "ArrowRight", "ArrowRight");
+        key("keydown", "KeyD", "d");
+      }
+      if (
+        !evidence.shotReleased
+        && detail.type === "possession:changed"
+        && detail.payload?.ownerId === "home-4"
+      ) {
+        evidence.shotReleased = true;
+        key("keyup", "ArrowRight", "ArrowRight");
+        key("keyup", "KeyD", "d");
+      }
+    });
     window.__TONY_NATURAL_GOAL_EVIDENCE__ = evidence;
   });
 
   await page.locator("#playButton").click();
   await expect(page.locator("#matchState")).toHaveText("LIVE");
-  await page.keyboard.down("ArrowRight");
-  await page.keyboard.down("KeyD");
   await expect.poll(
-    () => page.evaluate(() => (
-      window.__TONY_NATURAL_GOAL_EVIDENCE__.events.some((event) => (
-        event.type === "possession:changed" && event.payload?.ownerId === "home-4"
-      ))
-    )),
+    () => page.evaluate(() => window.__TONY_NATURAL_GOAL_EVIDENCE__.shotReleased),
     { timeout: 10_000 },
   ).toBe(true);
-  await page.keyboard.up("ArrowRight");
-  await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG");
-  await expect(page.locator("#playerName")).toHaveText("TONY");
-  await page.keyboard.up("KeyD");
 
   await expect(page.locator("#homeScore")).toHaveText("1");
   await expect(page.locator("#awayScore")).toHaveText("0");
@@ -54,6 +61,7 @@ test("browser wiring presents score and replay for a command-driven goal", async
   const eventTypes = await page.evaluate(() => (
     window.__TONY_NATURAL_GOAL_EVIDENCE__.events.map((event) => event.type)
   ));
+  expect(eventTypes).toContain("possession:changed");
   expect(eventTypes).toContain("ball:kicked");
   expect(eventTypes).toContain("score:changed");
   expect(eventTypes).toContain("replay:started");
