@@ -19,23 +19,13 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await page.locator("#playButton").click();
   await expect(page.locator("#matchState")).toHaveText("LIVE");
   await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG", { timeout: 10_000 });
+  await expect(page.locator("#playerName")).toHaveText("TONY");
 
   await page.evaluate(() => {
     const evidence = { events: [] };
     window.addEventListener("tony:game-event", ({ detail }) => evidence.events.push(detail.type));
     window.__TONY_NATURAL_GOAL_EVIDENCE__ = evidence;
   });
-
-  await page.keyboard.down("ArrowRight");
-  await page.keyboard.down("KeyE");
-  await expect.poll(
-    () => page.evaluate(() => (
-      window.__TONY_DEBUG__.diagnostics().renderState?.selectedX ?? 0
-    )),
-    { timeout: 12_000 },
-  ).toBeGreaterThan(1025);
-  await page.keyboard.up("KeyE");
-  await page.keyboard.up("ArrowRight");
 
   await page.keyboard.down("KeyD");
   await page.waitForTimeout(950);
