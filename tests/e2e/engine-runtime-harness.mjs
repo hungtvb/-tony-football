@@ -42,9 +42,13 @@ export async function installNaturalGoalRuntimeHarness(page) {
       )
       .replace(
         '[1110, 350, "GK", "NOVA", 1, 87]',
-        '[1110, 230, "GK", "NOVA", 1, 87]',
+        '[1010, 230, "GK", "NOVA", 1, 87]',
       );
-    if (patched === source || !patched.includes('[1050, 350, "FW", "TONY"')) {
+    if (
+      patched === source
+      || !patched.includes('[1050, 350, "FW", "TONY"')
+      || !patched.includes('[1010, 230, "GK", "NOVA"')
+    ) {
       throw new Error("Could not install deterministic natural-goal formations");
     }
     await route.fulfill({ response, body: patched });
