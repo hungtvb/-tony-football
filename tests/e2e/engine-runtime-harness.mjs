@@ -60,6 +60,33 @@ export async function installNaturalGoalRuntimeHarness(page) {
     await route.fulfill({ response, body: patched });
   });
 
+  await page.route("**/src/game/engine/MatchEngine.js", async (route) => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const patched = source.replace(
+      "  recordGoal(team, { scorerId = null } = {}) {",
+      `  placePlayerForE2E(playerId, x, y) {
+    const player = findPlayer(this.#state, playerId);
+    if (!player || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+    player.x = x;
+    player.y = y;
+    player.baseX = x;
+    player.baseY = y;
+    player.vx = 0;
+    player.vy = 0;
+    player.dirX = player.team === HOME_TEAM ? 1 : -1;
+    player.dirY = 0;
+    return true;
+  }
+
+  recordGoal(team, { scorerId = null } = {}) {`,
+    );
+    if (patched === source || !patched.includes("placePlayerForE2E")) {
+      throw new Error("Could not install isolated natural-shot positioning");
+    }
+    await route.fulfill({ response, body: patched });
+  });
+
   await page.route("**/src/game/presentation/SnapshotReplayController.js", async (route) => {
     const response = await route.fetch();
     const source = await response.text();
@@ -86,6 +113,7 @@ export async function installNaturalGoalRuntimeHarness(page) {
   });
 
   await exposeBrowserRuntime(page, `  shootNaturalGoalForE2E(playerId = "home-4") {
+    if (!this.#engine.placePlayerForE2E(playerId, 1100, 350)) return false;
     const ownerChanged = this.#engine.setPossession(playerId, { reason: "e2e-natural-shot" });
     if (!ownerChanged && this.snapshot.ball.ownerId !== playerId) return false;
     this.dispatch({
