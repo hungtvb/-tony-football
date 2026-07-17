@@ -81,6 +81,10 @@ test("direct-goal harness remains presentation-only projection evidence", async 
   await page.locator("#quickMatchButton").click();
   await page.locator("#playButton").click();
   await expect.poll(() => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state)).toBe("playing");
+  await expect.poll(() => page.evaluate(() => {
+    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
+    return Boolean(snapshot && snapshot.kickoffTimer === 0 && snapshot.tick >= 150);
+  })).toBe(true);
 
   const triggered = await page.evaluate(() => (
     window.__TONY_E2E_BROWSER_RUNTIME__?.recordGoalForE2E(0) ?? false
