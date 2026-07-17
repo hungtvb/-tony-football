@@ -81,10 +81,15 @@ test("direct-goal harness remains presentation-only projection evidence", async 
   await page.locator("#quickMatchButton").click();
   await page.locator("#playButton").click();
   await expect.poll(() => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state)).toBe("playing");
-  await expect.poll(() => page.evaluate(() => {
-    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    return Boolean(snapshot && snapshot.kickoffTimer === 0 && snapshot.tick >= 150);
-  })).toBe(true);
+  const prepared = await page.evaluate(() => {
+    const snapshot = window.__TONY_E2E_BROWSER_RUNTIME__?.advanceForE2E(150);
+    return {
+      tick: snapshot?.tick ?? null,
+      kickoffTimer: snapshot?.match?.kickoffTimer ?? null,
+    };
+  });
+  expect(prepared.tick).toBeGreaterThanOrEqual(150);
+  expect(prepared.kickoffTimer).toBe(0);
 
   const triggered = await page.evaluate(() => (
     window.__TONY_E2E_BROWSER_RUNTIME__?.recordGoalForE2E(0) ?? false
@@ -102,7 +107,10 @@ test("direct-goal harness remains presentation-only projection evidence", async 
     window.__TONY_GOAL_PRESENTATION__.diagnostics().timelinePhase === "replay"
   ));
   await expect(page.locator("#goalPresentationOverlay")).not.toHaveClass(/show/);
-  await expect(page.locator("#replayBadge")).toHaveClass(/show/);
+  await expect(page.locator("#goalPresentationReplayFlag")).toHaveText("REPLAY AVAILABLE");
+  await expect.poll(() => page.evaluate(() => (
+    window.__TONY_DEBUG__.diagnostics().engineSnapshot?.replayActive ?? false
+  ))).toBe(true);
 
   for (let chunk = 0; chunk < 5; chunk += 1) {
     await page.evaluate(() => window.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(60));
