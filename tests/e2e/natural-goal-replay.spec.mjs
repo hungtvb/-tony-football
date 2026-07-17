@@ -30,6 +30,10 @@ test("browser wiring presents score and replay for a command-driven goal", async
       key: value,
       bubbles: true,
     }));
+    const displayedClockSeconds = () => {
+      const [minutes = "0", seconds = "0"] = document.querySelector("#gameClock")?.textContent?.split(":") ?? [];
+      return Number(minutes) * 60 + Number(seconds);
+    };
     const pulseCapture = () => {
       if (evidence.shotReleased) return;
       key("keydown", "ArrowRight", "ArrowRight");
@@ -40,15 +44,15 @@ test("browser wiring presents score and replay for a command-driven goal", async
     };
     const startCaptureAfterKickoff = () => {
       const clock = document.querySelector("#gameClock");
-      const startWhenClockAdvances = () => {
-        if (evidence.captureStarted || clock?.textContent === "00:00") return;
+      const startWhenBallUnlocks = () => {
+        if (evidence.captureStarted || displayedClockSeconds() < 30) return;
         evidence.captureStarted = true;
         evidence.clockObserver?.disconnect();
         pulseCapture();
       };
-      evidence.clockObserver = new MutationObserver(startWhenClockAdvances);
+      evidence.clockObserver = new MutationObserver(startWhenBallUnlocks);
       evidence.clockObserver.observe(clock, { childList: true, characterData: true, subtree: true });
-      startWhenClockAdvances();
+      startWhenBallUnlocks();
     };
     window.addEventListener("tony:game-event", ({ detail }) => {
       evidence.events.push({ type: detail.type, payload: detail.payload });
