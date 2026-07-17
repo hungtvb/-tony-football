@@ -14,6 +14,7 @@ export const GameEventType = Object.freeze({
   TACKLE_RESOLVED: "player:tackle-resolved",
   TEAMMATE_RUN_TRIGGERED: "team:run-triggered",
   SCORE_CHANGED: "score:changed",
+  GOAL_PHASE_CHANGED: "goal:phase-changed",
   REPLAY_STARTED: "replay:started",
   REPLAY_ENDED: "replay:ended",
   MATCH_ENDED: "match:ended"

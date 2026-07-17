@@ -4,6 +4,7 @@ import test from "node:test";
 
 const menuFlow = await readFile(new URL("../../src/game/presentation/MainMenuFlow.js", import.meta.url), "utf8");
 const goalFlow = await readFile(new URL("../../src/game/presentation/GoalPresentationFlow.js", import.meta.url), "utf8");
+const goalProjection = await readFile(new URL("../../src/game/presentation/GoalPresentationPhaseProjection.js", import.meta.url), "utf8");
 const goalState = await readFile(new URL("../../src/game/state/GoalPresentationState.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../../u3-goal-presentation.css", import.meta.url), "utf8");
 
@@ -14,11 +15,13 @@ test("main menu loads goal presentation beside match intro", () => {
 });
 
 
-test("goal presentation consumes explicit game events without owning gameplay", () => {
+test("goal presentation consumes explicit phase events without owning gameplay", () => {
   assert.match(goalFlow, /subscribeToGameEvents\(window/);
   assert.match(goalFlow, /GameEventType\.SCORE_CHANGED/);
+  assert.match(goalFlow, /GameEventType\.GOAL_PHASE_CHANGED/);
   assert.match(goalFlow, /GameEventType\.REPLAY_STARTED/);
   assert.match(goalFlow, /GameEventType\.REPLAY_ENDED/);
+  assert.match(goalFlow, /applyAuthoritativePhase\(event\.payload\)/);
   assert.doesNotMatch(goalFlow, /MutationObserver/);
   assert.doesNotMatch(goalFlow, /homeScore|awayScore|replayBadge/);
   assert.doesNotMatch(goalFlow, /game\.score/);
@@ -36,22 +39,27 @@ test("goal presentation exposes goal score replay and completion stages", () => 
 });
 
 
-test("goal card starts after native highlight and clears before native replay", () => {
-  assert.match(goalFlow, /leadIn: 460, goal: 500, score: 380, replayMax: 1800/);
-  assert.match(goalFlow, /setTimelinePhase\("native-highlight"\)/);
-  assert.match(goalFlow, /await wait\(timings\.leadIn, token\)/);
-  assert.match(goalFlow, /setVisible\(false\);\n    const shouldReplay = replaySeenForGoal;\n    if \(shouldReplay\)/);
-  assert.match(goalFlow, /waitForReplayEnd/);
-  assert.match(goalFlow, /setTimelinePhase\("native-replay"\)/);
+test("authoritative phases decide card visibility and replay exposure", () => {
+  assert.match(goalFlow, /projectGoalPresentationPhase\(payload\.phase\)/);
+  assert.match(goalFlow, /case GoalSequencePhase\.GOAL_CARD/);
+  assert.match(goalFlow, /case GoalSequencePhase\.SCORE_CARD/);
+  assert.match(goalFlow, /case GoalSequencePhase\.REPLAY/);
+  assert.match(goalFlow, /case GoalSequencePhase\.KICKOFF/);
+  assert.match(goalProjection, /NATIVE_HIGHLIGHT/);
+  assert.match(goalProjection, /visible: true,\n    state: "goal"/);
+  assert.match(goalProjection, /visible: false,\n    state: "replay"/);
   assert.match(goalFlow, /timelineHistory: timelineHistory\.map/);
 });
 
 
-test("goal presentation has deterministic visual test controls", () => {
+test("goal presentation preview controls stay isolated from authoritative event flow", () => {
   assert.match(goalFlow, /params\.has\("visualTest"\)/);
   assert.match(goalFlow, /params\.has\("goalTest"\)/);
+  assert.match(goalFlow, /startPreview/);
   assert.match(goalFlow, /releaseTestHold/);
   assert.match(goalFlow, /window\.__TONY_GOAL_PRESENTATION__/);
+  assert.match(goalFlow, /Object\.hasOwn\(event\.payload, "replayAvailable"\)/);
+  assert.match(goalFlow, /beginAuthoritativeGoal\(\{ team: activeTeam, score: latestScore \}\)/);
 });
 
 

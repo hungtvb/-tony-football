@@ -1,5 +1,12 @@
 import { GameCommandBuffer, GameCommandSource, GameCommandType } from "./GameCommands.js";
 import { GameEventQueue, GameEventType } from "./GameEvents.js";
+import {
+  DEFAULT_GOAL_SEQUENCE_DURATION,
+  GoalSequencePhase,
+  advanceGoalSequence,
+  createGoalSequence,
+  createGoalSequenceTimeline
+} from "./GoalSequenceTimeline.js";
 import { createMatchSnapshot, createSnapshotFrame } from "./MatchSnapshot.js";
 import { createSeededRandom } from "../core/Random.js";
 import { advanceAIDecisions } from "./AIDecisionSystem.js";
@@ -59,7 +66,7 @@ export class MatchEngine {
     formations = DEFAULT_FORMATIONS,
     matchSeconds = DEFAULT_MATCH_SECONDS,
     kickoffDelay = DEFAULT_KICKOFF_DELAY,
-    goalDuration = 3.65,
+    goalDuration = DEFAULT_GOAL_SEQUENCE_DURATION,
     difficulty = "pro",
     pitchStyle = "classic",
     ballStyle = "classic",
@@ -76,6 +83,7 @@ export class MatchEngine {
       matchSeconds,
       kickoffDelay,
       goalDuration,
+      goalTimeline: createGoalSequenceTimeline(goalDuration),
       difficulty,
       pitchStyle,
       ballStyle,
@@ -87,6 +95,7 @@ export class MatchEngine {
     this.#config.field = createFieldBounds(width, height);
     this.#random = createSeededRandom(randomSeed);
     this.#state = createMatchState(this.#config);
+    this.#state.replay.duration = this.#config.goalTimeline.replayDuration;
     this.#currentSnapshot = this.#captureSnapshot();
     this.#previousSnapshot = this.#currentSnapshot;
   }
@@ -145,13 +154,12 @@ export class MatchEngine {
     }
 
     this.#state.match.score[team] += 1;
-    this.#state.match.goalSequence = {
+    this.#state.match.goalSequence = createGoalSequence({
       team,
       nextTeam: team === HOME_TEAM ? AWAY_TEAM : HOME_TEAM,
       scorerId,
-      timer: this.#config.goalDuration,
-      duration: this.#config.goalDuration
-    };
+      timeline: this.#config.goalTimeline
+    });
     this.#state.ball.ownerId = null;
     this.#state.ball.possession = releasePossession(
       this.#state.ball.possession,
@@ -322,29 +330,73 @@ export class MatchEngine {
     }
   }
 
-  #advanceLifecycle(deltaSeconds) {
-    if (this.#state.replay.active) {
-      this.#state.replay.elapsed += deltaSeconds;
-      if (this.#state.replay.elapsed >= this.#state.replay.duration) this.endReplay();
-    }
+  #emitGoalPhase(previousPhase, phase) {
+    const sequence = this.#state.match.goalSequence;
+    if (!sequence) return;
+    const phaseEntry = sequence.phases.find((entry) => entry.phase === phase) ?? null;
+    this.#events.emit(GameEventType.GOAL_PHASE_CHANGED, {
+      previousPhase,
+      phase,
+      team: sequence.team,
+      scorerId: sequence.scorerId,
+      score: this.#state.match.score.slice(),
+      elapsed: sequence.elapsed,
+      duration: sequence.duration,
+      phaseDuration: phaseEntry?.duration ?? 0
+    }, { tick: this.#tick });
+  }
 
-    if (this.#state.match.state !== "playing") return false;
-    if (this.#state.match.goalSequence) {
-      this.#state.match.goalSequence.timer = Math.max(
-        0,
-        this.#state.match.goalSequence.timer - deltaSeconds
-      );
-      if (this.#state.match.goalSequence.timer === 0) {
-        const nextTeam = this.#state.match.goalSequence.nextTeam;
+  #advanceGoalLifecycle(deltaSeconds) {
+    const sequence = this.#state.match.goalSequence;
+    const result = advanceGoalSequence(sequence, deltaSeconds);
+
+    for (const action of result.actions) {
+      if (action.type === "advance") {
+        if (action.phase === GoalSequencePhase.REPLAY && this.#state.replay.active) {
+          this.#state.replay.elapsed = Math.min(
+            this.#state.replay.duration,
+            this.#state.replay.elapsed + action.deltaSeconds
+          );
+        }
+        continue;
+      }
+
+      if (action.phase === GoalSequencePhase.REPLAY) {
+        this.#emitGoalPhase(action.previousPhase, action.phase);
+        this.startReplay();
+        continue;
+      }
+
+      if (action.phase === GoalSequencePhase.KICKOFF) {
+        if (this.#state.replay.active) this.endReplay();
+        this.#emitGoalPhase(action.previousPhase, action.phase);
+        const nextTeam = sequence.nextTeam;
         resetForKickoff(this.#state, nextTeam, {
           kickoffDelay: this.#config.kickoffDelay,
           width: this.#config.width,
           height: this.#config.height
         });
         this.#snapshotDiscontinuity = true;
+        continue;
       }
+
+      this.#emitGoalPhase(action.previousPhase, action.phase);
+    }
+  }
+
+  #advanceLifecycle(deltaSeconds) {
+    if (this.#state.match.state !== "playing") return false;
+
+    if (this.#state.match.goalSequence) {
+      this.#advanceGoalLifecycle(deltaSeconds);
       return false;
     }
+
+    if (this.#state.replay.active) {
+      this.#state.replay.elapsed += deltaSeconds;
+      if (this.#state.replay.elapsed >= this.#state.replay.duration) this.endReplay();
+    }
+
     if (this.#state.match.kickoffTimer > 0) {
       this.#state.match.kickoffTimer = Math.max(0, this.#state.match.kickoffTimer - deltaSeconds);
       return false;
@@ -448,6 +500,7 @@ export class MatchEngine {
       weather: this.#state.settings.weather,
       runtimeState
     });
+    this.#state.replay.duration = this.#config.goalTimeline.replayDuration;
     this.#random = createSeededRandom(this.#config.randomSeed);
     this.#actionIntents.length = 0;
     this.#humanIdleSeconds = 0;
