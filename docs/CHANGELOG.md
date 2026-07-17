@@ -36,6 +36,7 @@
 - Browser HUD, camera, radar, WebGL, and Canvas snapshot consumers now default to live MatchEngine frames; compatibility gameplay remains a temporary shadow and the `?runtime=compatibility` fallback.
 
 ### Fixed
+- Default-engine replay history is now recorded from authoritative live snapshots instead of the inactive compatibility match state, so naturally scored goals produce playable browser replay frames and exit coherently.
 - Default-engine matches no longer stall when the selected home player holds possession without input; a delayed deterministic idle-owner assist resumes AI passes and shots while active human controls retain authority.
 - Live gameplay events once again update the radar-adjacent commentary for lifecycle, possession, passing, shooting, tackling, teammate runs, goals, and replay transitions.
 - Live score events now enter and exit deterministic MatchEngine replay state while projecting buffered snapshots into the browser replay controller before kickoff resumes.
