@@ -19,55 +19,21 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await page.locator('[data-weather="rain"]').click();
   await expect(page.locator('[data-weather="rain"]')).toHaveClass(/active/);
   await page.evaluate(() => {
-    const evidence = {
-      events: [],
-      shotReleased: false,
-      captureStarted: false,
-      clockObserver: null,
-    };
+    const evidence = { events: [], shotReleased: false };
     const key = (type, code, value) => window.dispatchEvent(new KeyboardEvent(type, {
       code,
       key: value,
       bubbles: true,
     }));
-    const displayedClockSeconds = () => {
-      const [minutes = "0", seconds = "0"] = document.querySelector("#gameClock")?.textContent?.split(":") ?? [];
-      return Number(minutes) * 60 + Number(seconds);
-    };
-    const pulseCapture = () => {
-      if (evidence.shotReleased) return;
-      key("keydown", "ArrowRight", "ArrowRight");
-      window.requestAnimationFrame(() => {
-        key("keyup", "ArrowRight", "ArrowRight");
-        if (!evidence.shotReleased) window.requestAnimationFrame(pulseCapture);
-      });
-    };
-    const startCaptureAfterKickoff = () => {
-      const clock = document.querySelector("#gameClock");
-      const startWhenBallUnlocks = () => {
-        if (evidence.captureStarted || displayedClockSeconds() < 30) return;
-        evidence.captureStarted = true;
-        evidence.clockObserver?.disconnect();
-        pulseCapture();
-      };
-      evidence.clockObserver = new MutationObserver(startWhenBallUnlocks);
-      evidence.clockObserver.observe(clock, { childList: true, characterData: true, subtree: true });
-      startWhenBallUnlocks();
-    };
     window.addEventListener("tony:game-event", ({ detail }) => {
       evidence.events.push({ type: detail.type, payload: detail.payload });
-      if (detail.type === "match:started") {
-        key("keydown", "KeyD", "d");
-        startCaptureAfterKickoff();
-      }
+      if (detail.type === "match:started") key("keydown", "KeyD", "d");
       if (
         !evidence.shotReleased
         && detail.type === "possession:changed"
         && detail.payload?.ownerId === "home-4"
       ) {
         evidence.shotReleased = true;
-        evidence.clockObserver?.disconnect();
-        key("keyup", "ArrowRight", "ArrowRight");
         key("keyup", "KeyD", "d");
       }
     });

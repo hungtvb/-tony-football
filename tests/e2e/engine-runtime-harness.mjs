@@ -34,7 +34,7 @@ export async function installEngineRuntimeHarness(page) {
 }
 
 export async function installNaturalGoalRuntimeHarness(page) {
-  await page.route("**/game.js", async (route) => {
+  await page.route("**/game.js*", async (route) => {
     const response = await route.fetch();
     const source = await response.text();
     const originalAwayFormation = `    away: [
