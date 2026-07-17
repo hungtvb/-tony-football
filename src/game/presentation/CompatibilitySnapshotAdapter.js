@@ -139,6 +139,18 @@ function projectLiveSnapshotToCompatibilitySource(source, snapshot) {
   }
 }
 
+function recordLiveReplayHistory(replay, snapshot, previousSnapshot) {
+  if (typeof replay?.record !== "function") return false;
+  if (snapshot.match.state !== "playing") return false;
+  if (snapshot.match.replay?.active || snapshot.match.goalSequence) return false;
+
+  const elapsed = snapshot.match.elapsed ?? 0;
+  const previousElapsed = previousSnapshot?.match?.elapsed ?? elapsed;
+  const deltaSeconds = Math.max(0, elapsed - previousElapsed);
+  if (deltaSeconds <= 0) return false;
+  return replay.record(snapshot, deltaSeconds);
+}
+
 function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapshot) {
   const replay = source?.replay;
   if (!replay) return;
@@ -149,6 +161,8 @@ function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapsh
     previousSnapshot?.match?.state !== "playing" || elapsed < previousElapsed
   );
   if (freshMatch && typeof replay.reset === "function") replay.reset();
+
+  recordLiveReplayHistory(replay, snapshot, previousSnapshot);
 
   const active = Boolean(snapshot.match.replay?.active);
   const wasActive = Boolean(previousSnapshot?.match?.replay?.active);
