@@ -5,7 +5,15 @@ import { BrowserRuntimeMode } from "../../src/game/application/BrowserRuntimeCom
 import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
 import { CompatibilitySnapshotAdapter } from "../../src/game/presentation/CompatibilitySnapshotAdapter.js";
 
-function snapshot({ tick, state = "playing", elapsed = tick / 60, replayActive = false }) {
+const STEP = 1 / 60;
+
+function snapshot({
+  tick,
+  state = "playing",
+  elapsed = tick / 60,
+  replayActive = false,
+  goalSequence = replayActive ? { team: 0, nextTeam: 1, timer: 3.5, duration: 3.65 } : null,
+}) {
   return createMatchSnapshot({
     tick,
     match: {
@@ -20,7 +28,7 @@ function snapshot({ tick, state = "playing", elapsed = tick / 60, replayActive =
       settings: { pitchStyle: "classic", ballStyle: "classic", weather: "clear" },
       controls: { lastMode: "attack" },
       replay: { active: replayActive, elapsed: 0, duration: 3.05 },
-      goalSequence: replayActive ? { team: 0, nextTeam: 1, timer: 3.5, duration: 3.65 } : null,
+      goalSequence,
       kickoffTimer: 0,
     },
     players: [
@@ -43,12 +51,33 @@ function snapshot({ tick, state = "playing", elapsed = tick / 60, replayActive =
   });
 }
 
-test("live replay state starts and stops the temporary browser replay controller", () => {
+function createSource(calls) {
+  return {
+    tick: 0,
+    players: [{ team: 0, index: 0 }, { team: 1, index: 0 }],
+    score: [0, 0],
+    stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
+    ball: { trail: [], possession: {} },
+    replay: {
+      reset() { calls.push("reset"); },
+      record(value, deltaSeconds) {
+        calls.push(["record", value.tick, deltaSeconds]);
+        return true;
+      },
+      start(value) { calls.push(["start", value.tick]); return true; },
+      stop() { calls.push("stop"); },
+    },
+  };
+}
+
+test("live engine snapshots fill replay history before replay starts and stops", () => {
   const snapshots = [
     snapshot({ tick: 0, state: "menu", elapsed: 0 }),
     snapshot({ tick: 1, state: "playing", elapsed: 0 }),
-    snapshot({ tick: 2, state: "playing", elapsed: STEP, replayActive: true }),
-    snapshot({ tick: 3, state: "playing", elapsed: STEP * 2, replayActive: false }),
+    snapshot({ tick: 2, state: "playing", elapsed: STEP }),
+    snapshot({ tick: 3, state: "playing", elapsed: STEP * 2 }),
+    snapshot({ tick: 4, state: "playing", elapsed: STEP * 3, replayActive: true }),
+    snapshot({ tick: 5, state: "playing", elapsed: STEP * 3, replayActive: false, goalSequence: null }),
   ];
   const runtimeComposition = {
     configure() {},
@@ -60,33 +89,55 @@ test("live replay state starts and stops the temporary browser replay controller
     },
   };
   const calls = [];
-  const source = {
-    tick: 0,
-    players: [{ team: 0, index: 0 }, { team: 1, index: 0 }],
-    score: [0, 0],
-    stats: { possession: [0, 0], shots: [0, 0], passes: 0, completed: 0 },
-    ball: { trail: [], possession: {} },
-    replay: {
-      reset() { calls.push("reset"); },
-      start(value) { calls.push(["start", value.tick]); return true; },
-      stop() { calls.push("stop"); },
-    },
-  };
+  const source = createSource(calls);
   const adapter = new CompatibilitySnapshotAdapter({
     mode: BrowserRuntimeMode.ENGINE,
     runtimeComposition,
   });
 
-  adapter.capture(source);
-  source.tick = 1;
-  adapter.capture(source);
-  source.tick = 2;
-  adapter.capture(source);
-  source.tick = 3;
-  adapter.capture(source);
+  for (let tick = 0; tick <= 5; tick += 1) {
+    source.tick = tick;
+    adapter.capture(source);
+  }
 
-  assert.deepEqual(calls, ["reset", ["start", 2], "stop"]);
+  assert.deepEqual(calls, [
+    "reset",
+    ["record", 2, STEP],
+    ["record", 3, STEP],
+    ["start", 4],
+    ["record", 5, STEP],
+    "stop",
+  ]);
   assert.deepEqual(source.score, [0, 0]);
 });
 
-const STEP = 1 / 60;
+test("goal-sequence snapshots do not contaminate the next replay history", () => {
+  const snapshots = [
+    snapshot({ tick: 10, state: "playing", elapsed: 1 }),
+    snapshot({
+      tick: 11,
+      state: "playing",
+      elapsed: 1 + STEP,
+      replayActive: false,
+      goalSequence: { team: 0, nextTeam: 1, timer: 3.6, duration: 3.65 },
+    }),
+  ];
+  const runtimeComposition = {
+    configure() {},
+    advanceToSourceTick() { return snapshots.shift(); },
+    createRenderFrame() { throw new Error("not used"); },
+  };
+  const calls = [];
+  const source = createSource(calls);
+  const adapter = new CompatibilitySnapshotAdapter({
+    mode: BrowserRuntimeMode.ENGINE,
+    runtimeComposition,
+  });
+
+  source.tick = 10;
+  adapter.capture(source);
+  source.tick = 11;
+  adapter.capture(source);
+
+  assert.deepEqual(calls, []);
+});
