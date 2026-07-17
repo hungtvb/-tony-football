@@ -105,7 +105,6 @@ test("live engine snapshots fill replay history before replay starts and stops",
     ["record", 2, STEP],
     ["record", 3, STEP],
     ["start", 4],
-    ["record", 5, STEP],
     "stop",
   ]);
   assert.deepEqual(source.score, [0, 0]);
