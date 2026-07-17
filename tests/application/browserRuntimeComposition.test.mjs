@@ -169,3 +169,49 @@ test("browser runtime teardown releases target and configured engine ownership",
   assert.equal(composition.state, "menu");
   assert.equal(composition.detachTarget(target), false);
 });
+
+test("browser runtime teardown restores diagnostics before a new composition attaches", () => {
+  const target = new EventTarget();
+  const legacyDiagnostics = () => ({ legacy: true });
+  target.__TONY_DEBUG__ = { diagnostics: legacyDiagnostics };
+
+  const first = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
+  first.attachTarget(target);
+  first.configure(createSource(0));
+  const firstProjection = target.__TONY_DEBUG__.diagnostics;
+
+  assert.notEqual(firstProjection, legacyDiagnostics);
+  assert.equal(firstProjection.liveRuntimeProjection, true);
+  assert.equal(firstProjection().runtimeMode, BrowserRuntimeMode.ENGINE);
+  assert.equal(first.teardown(), true);
+  assert.equal(target.__TONY_DEBUG__.diagnostics, legacyDiagnostics);
+
+  const second = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
+  second.attachTarget(target);
+  second.configure(createSource(1));
+  const secondProjection = target.__TONY_DEBUG__.diagnostics;
+
+  assert.notEqual(secondProjection, legacyDiagnostics);
+  assert.notEqual(secondProjection, firstProjection);
+  assert.equal(secondProjection().engineSnapshot.tick, second.snapshot.tick);
+  second.teardown();
+  assert.equal(target.__TONY_DEBUG__.diagnostics, legacyDiagnostics);
+});
+
+test("deferred diagnostics installation is invalidated when runtime tears down first", () => {
+  const queuedMicrotasks = [];
+  const target = new EventTarget();
+  target.queueMicrotask = (callback) => queuedMicrotasks.push(callback);
+  const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
+
+  composition.attachTarget(target);
+  assert.equal(queuedMicrotasks.length, 1);
+  composition.teardown();
+
+  const legacyDiagnostics = () => ({ legacy: true });
+  target.__TONY_DEBUG__ = { diagnostics: legacyDiagnostics };
+  queuedMicrotasks.shift()();
+
+  assert.equal(target.__TONY_DEBUG__.diagnostics, legacyDiagnostics);
+  assert.equal(target.__TONY_DEBUG__.diagnostics.liveRuntimeProjection, undefined);
+});
