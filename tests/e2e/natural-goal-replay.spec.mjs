@@ -22,6 +22,7 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await expect(page.locator("#matchState")).toHaveText("LIVE");
   await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG", { timeout: 10_000 });
   await expect(page.locator("#playerName")).toHaveText("TONY");
+  await expect(page.locator("#commentary")).toContainText("TONY FC kiểm soát bóng", { timeout: 10_000 });
 
   await page.evaluate(() => {
     const evidence = { events: [] };
