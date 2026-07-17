@@ -35,19 +35,25 @@ export async function installNaturalGoalRuntimeHarness(page) {
   await page.route("**/game.js", async (route) => {
     const response = await route.fetch();
     const source = await response.text();
+    const originalAwayFormation = `    away: [
+      [1110, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
+      [700, 350, "MF", "ECHO", 8, 91], [520, 205, "FW", "BLAZE", 9, 92], [520, 495, "FW", "RUSH", 11, 90]
+    ]`;
+    const deterministicAwayFormation = `    away: [
+      [400, 80, "DF", "NOVA", 1, 87], [420, 80, "DF", "VEX", 3, 88], [440, 80, "DF", "ZERO", 5, 87],
+      [400, 620, "MF", "ECHO", 8, 91], [420, 620, "FW", "BLAZE", 9, 92], [440, 620, "FW", "RUSH", 11, 90]
+    ]`;
     const patched = source
       .replace(
         '[690, 205, "FW", "TONY", 10, 92]',
         '[1050, 350, "FW", "TONY", 10, 92]',
       )
-      .replace(
-        '[1110, 350, "GK", "NOVA", 1, 87]',
-        '[1010, 230, "DF", "NOVA", 1, 87]',
-      );
+      .replace(originalAwayFormation, deterministicAwayFormation);
     if (
       patched === source
       || !patched.includes('[1050, 350, "FW", "TONY"')
-      || !patched.includes('[1010, 230, "DF", "NOVA"')
+      || !patched.includes('[400, 80, "DF", "NOVA"')
+      || patched.includes(originalAwayFormation)
     ) {
       throw new Error("Could not install deterministic natural-goal formations");
     }
@@ -87,7 +93,7 @@ export async function installNaturalGoalRuntimeHarness(page) {
       payload: {
         playerId,
         power: 1,
-        direction: { x: 1, y: 1 },
+        direction: { x: 1, y: 0 },
         modifiers: {},
       },
       source: "human",
