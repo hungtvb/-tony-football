@@ -16,6 +16,8 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await openNaturalGoalTest(page);
 
   await page.locator("#quickMatchButton").click();
+  await page.locator('[data-weather="rain"]').click();
+  await expect(page.locator('[data-weather="rain"]')).toHaveClass(/active/);
   await page.locator("#playButton").click();
   await expect(page.locator("#matchState")).toHaveText("LIVE");
   await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG", { timeout: 10_000 });
