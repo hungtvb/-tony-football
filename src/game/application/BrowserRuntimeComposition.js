@@ -94,30 +94,52 @@ function snapshotDiagnostics(snapshot) {
 }
 
 function installLiveDiagnostics(target, getRuntimeDiagnostics) {
+  let active = true;
+  let installedDebug = null;
+  let legacyDiagnostics = null;
+  let projectedDiagnostics = null;
+
   const install = () => {
+    if (!active) return false;
     const debug = target?.__TONY_DEBUG__;
     if (!debug || typeof debug.diagnostics !== "function") return false;
-    if (debug.diagnostics.liveRuntimeProjection === true) return true;
-    const legacyDiagnostics = debug.diagnostics.bind(debug);
-    const diagnostics = () => {
+    if (debug.diagnostics === projectedDiagnostics) return true;
+    if (debug.diagnostics.liveRuntimeProjection === true) return false;
+
+    installedDebug = debug;
+    legacyDiagnostics = debug.diagnostics;
+    projectedDiagnostics = () => {
       const runtime = getRuntimeDiagnostics();
       return {
-        ...legacyDiagnostics(),
+        ...legacyDiagnostics.call(installedDebug),
         state: runtime.state,
         runtimeMode: BrowserRuntimeMode.ENGINE,
         engineSnapshot: snapshotDiagnostics(runtime.snapshot),
       };
     };
-    diagnostics.liveRuntimeProjection = true;
-    debug.diagnostics = diagnostics;
+    projectedDiagnostics.liveRuntimeProjection = true;
+    debug.diagnostics = projectedDiagnostics;
     return true;
   };
 
-  if (install()) return;
-  const enqueue = typeof target?.queueMicrotask === "function"
-    ? target.queueMicrotask.bind(target)
-    : globalThis.queueMicrotask;
-  enqueue?.(install);
+  if (!install()) {
+    const enqueue = typeof target?.queueMicrotask === "function"
+      ? target.queueMicrotask.bind(target)
+      : globalThis.queueMicrotask;
+    enqueue?.(install);
+  }
+
+  return () => {
+    if (!active) return false;
+    active = false;
+    if (installedDebug?.diagnostics === projectedDiagnostics) {
+      installedDebug.diagnostics = legacyDiagnostics;
+    }
+    installedDebug = null;
+    legacyDiagnostics = null;
+    projectedDiagnostics = null;
+    return true;
+  };
 }
 
 export class BrowserRuntimeComposition {
@@ -126,6 +148,7 @@ export class BrowserRuntimeComposition {
   #runtimeFactory;
   #runtime = null;
   #target = null;
+  #diagnosticsDisposer = null;
   #engineOptions = null;
   #optionsKey = null;
   #sourceTick = null;
@@ -176,13 +199,20 @@ export class BrowserRuntimeComposition {
   attachTarget(target) {
     if (!this.authoritative) return false;
     assertEventTarget(target);
+    if (this.#target === target) return true;
+    if (this.#target) this.detachTarget(this.#target);
     this.#target = target;
-    installLiveDiagnostics(target, () => ({ state: this.state, snapshot: this.snapshot }));
+    this.#diagnosticsDisposer = installLiveDiagnostics(
+      target,
+      () => ({ state: this.state, snapshot: this.snapshot }),
+    );
     return true;
   }
 
   detachTarget(target = this.#target) {
     if (!this.authoritative || target !== this.#target) return false;
+    this.#diagnosticsDisposer?.();
+    this.#diagnosticsDisposer = null;
     this.#target = null;
     return true;
   }
@@ -246,7 +276,7 @@ export class BrowserRuntimeComposition {
   }
 
   teardown() {
-    this.#target = null;
+    this.detachTarget();
     this.#runtime = null;
     this.#engineOptions = null;
     this.#optionsKey = null;
