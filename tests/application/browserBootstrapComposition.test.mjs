@@ -5,8 +5,8 @@ import { ApplicationActionType } from "../../src/game/application/ApplicationAct
 import { BrowserBootstrapComposition } from "../../src/game/application/BrowserBootstrapComposition.js";
 import { GameCommandType } from "../../src/game/engine/GameCommands.js";
 
-function createDocument() {
-  return { getElementById: () => null };
+function createDocument(buttons = {}) {
+  return { getElementById: (id) => buttons[id] ?? null };
 }
 
 function createSimulationLoop(calls) {
@@ -46,10 +46,16 @@ function createComposition({ authoritative = true } = {}) {
   const calls = [];
   const commands = [];
   const compatibilityCommands = [];
+  const navigationActions = [];
+  const target = new EventTarget();
+  const buttons = {
+    setupButton: new EventTarget(),
+    mainMenuButton: new EventTarget(),
+  };
   const runtimeComposition = createRuntimeComposition({ authoritative, calls, commands });
   const composition = new BrowserBootstrapComposition({
-    target: new EventTarget(),
-    document: createDocument(),
+    target,
+    document: createDocument(buttons),
     runtimeComposition,
     simulationLoop: createSimulationLoop(calls),
     snapshotAdapter: {
@@ -57,13 +63,21 @@ function createComposition({ authoritative = true } = {}) {
       reset: () => calls.push("snapshot:reset"),
     },
     dispatchCompatibilityCommand: (command) => compatibilityCommands.push(command),
+    onNavigation: (action) => navigationActions.push(action.type),
     getCompatibilityMatchState: () => "playing",
     createPresentationFeedback: () => {
       calls.push("feedback:subscribe");
       return { unsubscribe: () => calls.push("feedback:unsubscribe") };
     },
   });
-  return { composition, calls, commands, compatibilityCommands };
+  return {
+    composition,
+    calls,
+    commands,
+    compatibilityCommands,
+    navigationActions,
+    buttons,
+  };
 }
 
 test("browser bootstrap starts and tears down owned browser services deterministically", () => {
@@ -105,6 +119,27 @@ test("browser bootstrap routes explicit lifecycle operations through one runtime
   assert.ok(calls.includes("runtime:reset"));
   assert.ok(calls.includes("snapshot:reset"));
   assert.deepEqual(calls.find((entry) => Array.isArray(entry)), ["loop:reset", 1250]);
+});
+
+test("browser application navigation uses the bootstrap-owned reset boundary", () => {
+  const { composition, calls, navigationActions, buttons } = createComposition();
+  composition.start();
+
+  const cases = [
+    ["setupButton", ApplicationActionType.OPEN_MATCH_SETUP],
+    ["mainMenuButton", ApplicationActionType.OPEN_MAIN_MENU],
+  ];
+
+  for (const [buttonId, expectedAction] of cases) {
+    const startIndex = calls.length;
+    buttons[buttonId].dispatchEvent(new Event("click"));
+    assert.deepEqual(calls.slice(startIndex), [
+      "runtime:reset",
+      "snapshot:reset",
+      ["loop:reset", null],
+    ]);
+    assert.equal(navigationActions.at(-1), expectedAction);
+  }
 });
 
 test("browser bootstrap preserves the explicit compatibility command fallback", () => {
