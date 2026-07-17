@@ -29,7 +29,8 @@ test("natural browser goal shows announcement before a full progressing replay a
       evidence.events.push({
         type: detail.type,
         payload: detail.payload,
-        at: performance.now(),
+        tick: detail.tick,
+        sequence: detail.sequence,
       });
       if (detail.type === "match:started") key("keydown", "KeyD", "d");
       if (
@@ -124,11 +125,19 @@ test("natural browser goal shows announcement before a full progressing replay a
   expect(replayEndIndex).toBeGreaterThan(replayStartIndex);
   expect(kickoffIndex).toBeGreaterThan(replayEndIndex);
 
-  const scoreAt = evidence.events[scoreIndex].at;
-  const replayStartAt = evidence.events[replayStartIndex].at;
-  const replayEndAt = evidence.events[replayEndIndex].at;
-  expect(replayStartAt - scoreAt).toBeGreaterThanOrEqual(1_100);
-  expect(replayStartAt - scoreAt).toBeLessThan(2_200);
-  expect(replayEndAt - replayStartAt).toBeGreaterThanOrEqual(2_700);
-  expect(replayEndAt - replayStartAt).toBeLessThan(4_200);
+  const scoreEvent = evidence.events[scoreIndex];
+  const replayPhaseEvent = evidence.events[replayPhaseIndex];
+  const replayStartEvent = evidence.events[replayStartIndex];
+  const replayEndEvent = evidence.events[replayEndIndex];
+  const kickoffEvent = evidence.events[kickoffIndex];
+
+  expect(replayPhaseEvent.tick - scoreEvent.tick).toBeGreaterThanOrEqual(80);
+  expect(replayPhaseEvent.tick - scoreEvent.tick).toBeLessThanOrEqual(82);
+  expect(replayPhaseEvent.payload.phaseDuration).toBeCloseTo(3.05, 2);
+  expect(replayStartEvent.tick).toBe(replayPhaseEvent.tick);
+  expect(replayStartEvent.sequence).toBeGreaterThan(replayPhaseEvent.sequence);
+  expect(replayEndEvent.tick - replayStartEvent.tick).toBeGreaterThanOrEqual(182);
+  expect(replayEndEvent.tick - replayStartEvent.tick).toBeLessThanOrEqual(184);
+  expect(kickoffEvent.tick).toBe(replayEndEvent.tick);
+  expect(kickoffEvent.sequence).toBeGreaterThan(replayEndEvent.sequence);
 });
