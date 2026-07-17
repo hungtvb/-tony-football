@@ -138,5 +138,5 @@ test("goal-sequence snapshots do not contaminate the next replay history", () =>
   source.tick = 11;
   adapter.capture(source);
 
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ["reset"]);
 });
