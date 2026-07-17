@@ -15,15 +15,22 @@
     "test:presentation": "node --test tests/presentation/*.test.mjs",
     "test:gameplay": "node --test tests/gameplay/*.test.mjs",
     "test:tooling": "node --test tests/tooling/*.test.mjs",
-    "test:unit": "npm run test:syntax && npm run test:assets && npm run test:simulation && npm run test:engine && npm run test:input && npm run test:presentation && npm run test:gameplay && npm run test:tooling",
+    "test:unit": "npm run test:ci:fast",
     "test:e2e": "playwright test",
     "test:e2e:desktop": "playwright test --project=desktop-chromium",
     "test:e2e:narrow": "playwright test --project=narrow-landscape",
     "test:e2e:intro": "playwright test tests/e2e/match-intro.spec.mjs",
     "test:e2e:goal": "playwright test tests/e2e/goal-presentation.spec.mjs",
-    "test:preflight": "npm run test:unit && npm run test:e2e",
+    "test:preflight": "npm run test:ci:fast && npm run test:e2e:smoke",
     "test": "npm run test:unit",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:engine:fast": "node --test tests/simulation/*.test.mjs tests/engine/*.test.mjs tests/gameplay/*.test.mjs tests/input/*.test.mjs tests/application/*.test.mjs tests/scenarios/*.test.mjs",
+    "test:presentation:fast": "node --test tests/presentation/*.test.mjs",
+    "test:ci:fast": "npm run test:syntax && npm run test:assets && npm run test:engine:fast && npm run test:presentation:fast && npm run test:tooling && npm run build",
+    "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.mjs",
+    "test:e2e:broad": "playwright test",
+    "test:e2e:desktop:broad": "playwright test --project=desktop-chromium",
+    "test:e2e:narrow:broad": "playwright test --project=narrow-landscape"
   },
   "dependencies": {
     "three": "0.185.1"

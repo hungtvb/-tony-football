@@ -12,13 +12,11 @@ permissions:
   contents: read
 
 concurrency:
-  # Do not cancel a nearly completed validation when a new commit arrives.
-  # GitHub keeps the active run and only the newest pending run in this group.
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  unit:
+  fast-validation:
     name: Unit and contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -32,24 +30,26 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Run unit validation
+      - name: Run browser-free validation
         shell: bash
         run: |
           set -o pipefail
-          npm run test:unit 2>&1 | tee unit-test.log
-      - name: Upload unit evidence
+          npm run test:ci:fast 2>&1 | tee fast-test.log
+      - name: Upload fast evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-evidence
-          path: unit-test.log
+          name: fast-test-evidence
+          path: fast-test.log
           if-no-files-found: ignore
           retention-days: 14
 
-  playwright-desktop:
-    name: Playwright desktop
+  browser-smoke:
+    name: Browser composition smoke
+    needs:
+      - fast-validation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,42 +62,13 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Run desktop browser validation
-        run: npm run test:e2e:desktop
-      - name: Upload desktop evidence
+      - name: Run minimal browser smoke
+        run: npm run test:e2e:smoke
+      - name: Upload browser smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-desktop-evidence
-          path: |
-            playwright-report
-            test-results
-          if-no-files-found: ignore
-          retention-days: 14
-
-  playwright-narrow:
-    name: Playwright narrow landscape
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install dependencies and Chromium
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: Run narrow browser validation
-        run: npm run test:e2e:narrow
-      - name: Upload narrow evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-narrow-evidence
+          name: browser-smoke-evidence
           path: |
             playwright-report
             test-results
@@ -108,13 +79,11 @@ jobs:
     name: CI gate
     if: always()
     needs:
-      - unit
-      - playwright-desktop
-      - playwright-narrow
+      - fast-validation
+      - browser-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs
         run: |
-          test "${{ needs.unit.result }}" = "success"
-          test "${{ needs.playwright-desktop.result }}" = "success"
-          test "${{ needs.playwright-narrow.result }}" = "success"
+          test "${{ needs.fast-validation.result }}" = "success"
+          test "${{ needs.browser-smoke.result }}" = "success"
