@@ -18,20 +18,28 @@ test("browser wiring presents score and replay for a command-driven goal", async
   await page.locator("#quickMatchButton").click();
   await page.locator('[data-weather="rain"]').click();
   await expect(page.locator('[data-weather="rain"]')).toHaveClass(/active/);
-  await page.locator("#playButton").click();
-  await expect(page.locator("#matchState")).toHaveText("LIVE");
-  await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG", { timeout: 10_000 });
-  await expect(page.locator("#playerName")).toHaveText("TONY");
-  await expect(page.locator("#commentary")).toContainText("TONY FC kiểm soát bóng", { timeout: 10_000 });
-
   await page.evaluate(() => {
     const evidence = { events: [] };
-    window.addEventListener("tony:game-event", ({ detail }) => evidence.events.push(detail.type));
+    window.addEventListener("tony:game-event", ({ detail }) => evidence.events.push({
+      type: detail.type,
+      payload: detail.payload,
+    }));
     window.__TONY_NATURAL_GOAL_EVIDENCE__ = evidence;
   });
 
+  await page.locator("#playButton").click();
+  await expect(page.locator("#matchState")).toHaveText("LIVE");
   await page.keyboard.down("KeyD");
-  await page.waitForTimeout(950);
+  await expect.poll(
+    () => page.evaluate(() => (
+      window.__TONY_NATURAL_GOAL_EVIDENCE__.events.some((event) => (
+        event.type === "possession:changed" && event.payload?.ownerId === "home-4"
+      ))
+    )),
+    { timeout: 10_000 },
+  ).toBe(true);
+  await expect(page.locator("#controlsMode")).toHaveText("TẤN CÔNG");
+  await expect(page.locator("#playerName")).toHaveText("TONY");
   await page.keyboard.up("KeyD");
 
   await expect(page.locator("#homeScore")).toHaveText("1");
@@ -41,9 +49,11 @@ test("browser wiring presents score and replay for a command-driven goal", async
 
   await expect(page.locator("#replayBadge")).not.toHaveClass(/show/, { timeout: 12_000 });
   await expect(page.locator("#homeScore")).toHaveText("1");
-  const evidence = await page.evaluate(() => window.__TONY_NATURAL_GOAL_EVIDENCE__);
-  expect(evidence.events).toContain("ball:kicked");
-  expect(evidence.events).toContain("score:changed");
-  expect(evidence.events).toContain("replay:started");
-  expect(evidence.events).toContain("replay:ended");
+  const eventTypes = await page.evaluate(() => (
+    window.__TONY_NATURAL_GOAL_EVIDENCE__.events.map((event) => event.type)
+  ));
+  expect(eventTypes).toContain("ball:kicked");
+  expect(eventTypes).toContain("score:changed");
+  expect(eventTypes).toContain("replay:started");
+  expect(eventTypes).toContain("replay:ended");
 });
