@@ -12,6 +12,7 @@ function snapshot({
   state = "playing",
   elapsed = tick / 60,
   replayActive = false,
+  replayElapsed = 0,
   goalSequence = replayActive ? { team: 0, nextTeam: 1, timer: 3.5, duration: 3.65 } : null,
 }) {
   return createMatchSnapshot({
@@ -27,7 +28,7 @@ function snapshot({
       selectedPlayerId: "home-0",
       settings: { pitchStyle: "classic", ballStyle: "classic", weather: "clear" },
       controls: { lastMode: "attack" },
-      replay: { active: replayActive, elapsed: 0, duration: 3.05 },
+      replay: { active: replayActive, elapsed: replayElapsed, duration: 3.05 },
       goalSequence,
       kickoffTimer: 0,
     },
@@ -65,19 +66,21 @@ function createSource(calls) {
         return true;
       },
       start(value) { calls.push(["start", value.tick]); return true; },
+      update(deltaSeconds) { calls.push(["update", deltaSeconds]); return false; },
       stop() { calls.push("stop"); },
     },
   };
 }
 
-test("live engine snapshots fill replay history before replay starts and stops", () => {
+test("live engine snapshots fill history, advance playback, and stop from engine replay clock", () => {
   const snapshots = [
     snapshot({ tick: 0, state: "menu", elapsed: 0 }),
     snapshot({ tick: 1, state: "playing", elapsed: 0 }),
     snapshot({ tick: 2, state: "playing", elapsed: STEP }),
     snapshot({ tick: 3, state: "playing", elapsed: STEP * 2 }),
-    snapshot({ tick: 4, state: "playing", elapsed: STEP * 3, replayActive: true }),
-    snapshot({ tick: 5, state: "playing", elapsed: STEP * 3, replayActive: false, goalSequence: null }),
+    snapshot({ tick: 4, state: "playing", elapsed: STEP * 3, replayActive: true, replayElapsed: 0 }),
+    snapshot({ tick: 5, state: "playing", elapsed: STEP * 3, replayActive: true, replayElapsed: STEP }),
+    snapshot({ tick: 6, state: "playing", elapsed: STEP * 3, replayActive: false, replayElapsed: STEP * 2, goalSequence: null }),
   ];
   const runtimeComposition = {
     configure() {},
@@ -95,7 +98,7 @@ test("live engine snapshots fill replay history before replay starts and stops",
     runtimeComposition,
   });
 
-  for (let tick = 0; tick <= 5; tick += 1) {
+  for (let tick = 0; tick <= 6; tick += 1) {
     source.tick = tick;
     adapter.capture(source);
   }
@@ -105,6 +108,8 @@ test("live engine snapshots fill replay history before replay starts and stops",
     ["record", 2, STEP],
     ["record", 3, STEP],
     ["start", 4],
+    ["update", STEP],
+    ["update", STEP],
     "stop",
   ]);
   assert.deepEqual(source.score, [0, 0]);
