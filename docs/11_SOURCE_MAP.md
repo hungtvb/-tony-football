@@ -41,12 +41,14 @@ Before modifying code:
 | `src/game/presentation/HudSnapshotProjection.js`, `RadarSnapshotRenderer.js` | HUD facts and radar drawing from match snapshots | Presentation-only snapshot consumers |
 | `src/game/presentation/BrowserGameEventBridge.js` | Projects immutable ordered game events to browser consumers | Event transport only |
 | `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Fixed 60 Hz cadence with interpolation alpha |
+| `tests/scenarios/ScenarioRunner.mjs` | Public-contract deterministic scenario execution, explicit target-tick scheduling, immutable capture and compact failure traces | Test infrastructure only; never reaches private engine state |
+| `.github/workflows/ci.yml`, `.github/workflows/playwright-regression.yml` | Required fast validation/smoke gate and retained scheduled/manual broad browser evidence | Fast lane owns per-commit correctness; broad browser suite remains available outside the commit gate |
 | `scripts/build-static.mjs`, `vercel.json` | Static build and deployment contract | Preserve Vercel and GitHub Pages compatibility |
 
 ## Browser runtime flow
 
 ```text
-FO4 keyboard ───────────────┐
+FO4 keyboard ──────────────┐
 Application lifecycle ──────┼→ BrowserRuntimeComposition
                             ├→ BrowserMatchRuntime → MatchEngine at fixed 60 Hz
 Engine AI decisions ────────┘                    ├→ immutable previous/current snapshots
@@ -88,7 +90,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Player movement and stamina | `PlayerMovementSystem.js`, gameplay/config modules | Engine simulation and locomotion tests | Engine authoritative; renderer consumes snapshots |
 | Ball, possession and first touch | `BallSimulationSystem.js`, `BallControl.js`, `PossessionLifecycle.js` | Engine/gameplay tests | Engine authoritative; no renderer mutation |
 | Passing, shooting, tackling and runs | `KickActionSystem.js`, `PlayerActionSystem.js` | Focused engine integration tests | Human/AI commands enter the same engine boundary |
-| Match lifecycle, score, stats and clock | `MatchEngine.js`, `MatchState.js` | MatchEngine/application/browser tests | Live snapshots supply browser facts |
+| Match lifecycle, score, stats and clock | `MatchEngine.js`, `MatchState.js` | MatchEngine/application tests plus `tests/scenarios/` | Live snapshots supply browser facts; lifecycle correctness is browser-independent |
 | FO4 keyboard mapping | `BrowserInputAdapter.js`, `FO4Controls.js` | `tests/input/`, browser controls flows | Immutable human commands; attack intent is always paired across release/cancellation paths |
 | AI and goalkeeper behavior | `AIDecisionSystem.js`, `MatchEngine.js`, engine systems | Deterministic AI/engine tests | Engine-only decisions; MatchEngine gates selected-owner takeover behind neutral controls, no attack intent and expired idle grace |
 | WebGL and models | `game.js`, `SnapshotRenderState.js`, assets | Asset validation and desktop Playwright | Presentation consumes snapshot poses |
@@ -115,19 +117,29 @@ Engine and core modules may depend on pure JavaScript data/math, deterministic c
 
 Browser composition may connect input, application, engine and presentation adapters. Presentation may consume engine contracts and read-only snapshots/events, but may not mutate engine-owned players, ball, score, statistics, clock, possession, AI decisions, goal phases, replay lifecycle or match lifecycle.
 
+## Validation pyramid
+
+- `npm run test:engine:fast` owns simulation, engine, gameplay, input/application contracts and deterministic scenarios.
+- `npm run test:presentation:fast` owns pure snapshot/event/phase projection and presentation state.
+- `npm run test:ci:fast` adds syntax, assets, tooling and static build without installing a browser.
+- `npm run test:e2e:smoke` proves WebGL/Canvas boot, live composition, input/application routing, snapshot/HUD projection and representative desktop/narrow wiring.
+- `npm run test:e2e:broad` and the `Playwright Regression` workflow retain the full visual regression inventory for manual, scheduled, focused and release evidence.
+
+Gameplay correctness never depends on Playwright. Browser tests never inject score/replay facts to prove engine rules. PO sampling is asynchronous and non-blocking unless an explicit `PO Gate Required` delivery decision exists.
+
 ## Test map
 
 | Change type | Minimum validation |
 | --- | --- |
-| Browser runtime authority | composition/runtime tests, deterministic snapshot parity, full unit suite and desktop/narrow Playwright |
+| Browser runtime authority | composition/runtime tests, deterministic snapshot parity, `test:ci:fast`, and minimal desktop/narrow smoke |
 | Core clock or loop | simulation tests plus 30/60/120 FPS equivalence |
 | Movement, ball or possession | focused gameplay/engine tests and deterministic reset coverage |
 | Command, event or snapshot contract | headless contracts, ordering and immutability |
-| Goal/replay timing contract | measured engine ticks, same-step event/snapshot agreement, synthetic phase projection, natural desktop/narrow visible-order smoke and PO preview acceptance |
-| Three.js or model animation | asset validation, desktop Playwright and model fallback |
-| Canvas fallback | Canvas smoke plus heading/coordinate parity |
-| HUD, camera or overlays | presentation tests, desktop and narrow landscape |
-| Match lifecycle or replay | headless lifecycle plus intro, pause, goal, replay and Full Time flows |
+| Goal/replay timing contract | deterministic natural-goal engine scenario evidence, measured ticks, same-step snapshot/event agreement and synthetic presentation projection; browser visual evidence is focused/optional projection evidence |
+| Three.js or model animation | asset validation, required WebGL/Canvas smoke, plus focused broad Playwright evidence |
+| Canvas fallback | required Canvas boot smoke plus heading/coordinate parity |
+| HUD, camera or overlays | pure presentation tests; broad desktop/narrow Playwright for visual changes |
+| Match lifecycle or replay | deterministic `tests/scenarios/` lifecycle/goal/replay/Full Time coverage; browser smoke proves only composition |
 | Static build or assets | static build contract and preview smoke |
 
 ## Update checklist
