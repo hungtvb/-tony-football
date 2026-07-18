@@ -68,3 +68,22 @@ test("Canvas fallback boots engine snapshot-backed HUD without runtime errors", 
   await expect(page.locator("#staminaText")).toHaveText(/^\d+%$/);
   expect(runtimeErrors).toEqual([]);
 });
+
+test("legacy runtime and debug query seams are removed before browser gameplay boots", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one representative entry guard is sufficient");
+  const runtimeErrors = captureRuntimeErrors(page);
+  await page.goto("/?runtime=compatibility&debugScenario=low-stamina&visualTest=1&skipIntro=1", {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
+
+  const result = await page.evaluate(() => ({
+    search: window.location.search,
+    diagnostics: window.__TONY_DEBUG__.diagnostics(),
+  }));
+  expect(result.search).not.toContain("runtime=");
+  expect(result.search).not.toContain("debugScenario=");
+  expect(result.diagnostics.runtimeMode).toBe("engine");
+  expect(result.diagnostics.state).toBe("menu");
+  expect(runtimeErrors).toEqual([]);
+});
