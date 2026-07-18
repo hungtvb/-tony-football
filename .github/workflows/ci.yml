@@ -33,14 +33,26 @@ jobs:
           node-version: 20
           cache: npm
       - name: Apply and validate correction
+        shell: bash
         run: |
-          python scripts/ton63-replay-fix.py
-          npm ci
-          node --check game.js
-          node --check src/game/presentation/CompatibilitySnapshotAdapter.js
-          node --check src/game/presentation/SnapshotReplayController.js
-          node --test tests/presentation/snapshotReplayController.test.mjs tests/presentation/liveReplayProjection.test.mjs tests/tooling/engineModeNoLegacyProgression.test.mjs
-          npm run test:ci:fast
+          set -o pipefail
+          {
+            python scripts/ton63-replay-fix.py
+            npm ci
+            node --check game.js
+            node --check src/game/presentation/CompatibilitySnapshotAdapter.js
+            node --check src/game/presentation/SnapshotReplayController.js
+            node --test tests/presentation/snapshotReplayController.test.mjs tests/presentation/liveReplayProjection.test.mjs tests/tooling/engineModeNoLegacyProgression.test.mjs
+            npm run test:ci:fast
+          } 2>&1 | tee ton63-correction.log
+      - name: Upload correction diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ton63-correction-diagnostics
+          path: ton63-correction.log
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Commit corrected exact head
         run: |
           git config user.name github-actions[bot]
