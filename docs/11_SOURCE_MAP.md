@@ -125,7 +125,7 @@ Browser composition may connect input, application, engine and presentation adap
 - `npm run test:e2e:smoke` proves WebGL/Canvas boot, live composition, input/application routing, snapshot/HUD projection and representative desktop/narrow wiring.
 - `npm run test:e2e:broad` and the `Playwright Regression` workflow retain the full visual regression inventory for manual, scheduled, focused and release evidence.
 
-Gameplay correctness never depends on Playwright. Browser tests never inject score/replay facts to prove engine rules.
+Gameplay correctness never depends on Playwright. Browser tests never inject score/replay facts to prove engine rules. PO sampling is asynchronous and non-blocking unless an explicit `PO Gate Required` delivery decision exists.
 
 ## Test map
 
@@ -135,7 +135,7 @@ Gameplay correctness never depends on Playwright. Browser tests never inject sco
 | Core clock or loop | simulation tests plus 30/60/120 FPS equivalence |
 | Movement, ball or possession | focused gameplay/engine tests and deterministic reset coverage |
 | Command, event or snapshot contract | headless contracts, ordering and immutability |
-| Goal/replay timing contract | measured engine ticks, same-step event/snapshot agreement, synthetic phase projection, natural desktop/narrow visible-order smoke and PO preview acceptance |
+| Goal/replay timing contract | deterministic natural-goal engine scenario evidence, measured ticks, same-step snapshot/event agreement and synthetic presentation projection; browser visual evidence is focused/optional projection evidence |
 | Three.js or model animation | asset validation, required WebGL/Canvas smoke, plus focused broad Playwright evidence |
 | Canvas fallback | required Canvas boot smoke plus heading/coordinate parity |
 | HUD, camera or overlays | pure presentation tests; broad desktop/narrow Playwright for visual changes |
