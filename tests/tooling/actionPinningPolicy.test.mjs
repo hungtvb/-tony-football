@@ -43,6 +43,11 @@ test("quoted uses values are inspected", () => {
   assert.deepEqual(codes("jobs:\n  test:\n    steps:\n      - uses: \"actions/setup-node@main\""), [ACTION_PIN_RULE_ID]);
 });
 
+test("multiline uses values fail closed", () => {
+  const source = "jobs:\n  test:\n    steps:\n      - uses: >-\n          actions/setup-node@main";
+  assert.deepEqual(codes(source), [ACTION_PIN_RULE_ID]);
+});
+
 test("checkout requires persist-credentials false", () => {
   const source = `jobs:\n  test:\n    steps:\n      - name: Checkout\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2`;
   assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
