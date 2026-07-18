@@ -71,6 +71,40 @@ test("jobs inherit workflow-level contents write", () => {
   assert.equal(inspect(source)[0]?.code, WRITE_GITHUB_SCRIPT_RULE_ID);
 });
 
+test("workflow-level permissions are detected even when declared after jobs", () => {
+  const source = yaml(
+    "on: [workflow_dispatch]",
+    "jobs:",
+    "  publish:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/github-script@v7",
+    "permissions:",
+    "  contents: write",
+  );
+
+  assert.equal(inspect(source)[0]?.code, WRITE_GITHUB_SCRIPT_RULE_ID);
+});
+
+test("nested action inputs cannot hide a later job-level write grant", () => {
+  const source = yaml(
+    "on: [workflow_dispatch]",
+    "jobs:",
+    "  publish:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: acme/configure@v1",
+    "        with:",
+    "          permissions:",
+    "            contents: read",
+    "      - uses: actions/github-script@v7",
+    "    permissions:",
+    "      contents: write",
+  );
+
+  assert.equal(inspect(source)[0]?.code, WRITE_GITHUB_SCRIPT_RULE_ID);
+});
+
 test("job-level read permissions override workflow-level write permissions", () => {
   const source = yaml(
     "on: [workflow_dispatch]",
