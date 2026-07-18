@@ -40,11 +40,8 @@ function createSource(tick = 0) {
   };
 }
 
-function applicationRuntime(runtimeComposition, compatibilityCommands = []) {
-  return new ApplicationRuntime({
-    dispatchGameCommand: (command) => compatibilityCommands.push(command),
-    runtimeComposition,
-  });
+function applicationRuntime(runtimeComposition) {
+  return new ApplicationRuntime({ runtimeComposition });
 }
 
 test("deployed browser runtime always resolves to engine authority", () => {
@@ -62,8 +59,7 @@ test("live browser composition owns lifecycle commands and authoritative snapsho
     mode: BrowserRuntimeMode.ENGINE,
     runtimeComposition: composition,
   });
-  const compatibilityCommands = [];
-  const runtime = applicationRuntime(composition, compatibilityCommands);
+  const runtime = applicationRuntime(composition);
   const source = createSource(0);
 
   const initial = adapter.capture(source);
@@ -75,7 +71,6 @@ test("live browser composition owns lifecycle commands and authoritative snapsho
 
   assert.equal(playing.match.state, "playing");
   assert.equal(composition.state, "playing");
-  assert.deepEqual(compatibilityCommands, []);
   assert.equal(adapter.snapshot, composition.snapshot);
   assert.equal(adapter.createRenderFrame(0.5).current, composition.snapshot);
 });
@@ -146,15 +141,14 @@ test("engine snapshots are mirrored only into legacy presentation objects", () =
   assert.deepEqual(source.stats.possession, snapshot.match.stats.possession);
 });
 
-test("compatibility mode remains explicit for isolated contract tests", () => {
+test("application lifecycle commands cannot progress compatibility gameplay", () => {
   const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.COMPATIBILITY });
-  const compatibilityCommands = [];
-  const runtime = applicationRuntime(composition, compatibilityCommands);
+  const runtime = applicationRuntime(composition);
 
-  runtime.request(ApplicationActionType.START_MATCH);
-
-  assert.equal(compatibilityCommands.length, 1);
-  assert.equal(compatibilityCommands[0].type, GameCommandType.START_MATCH);
+  assert.throws(
+    () => runtime.request(ApplicationActionType.START_MATCH),
+    /require live engine authority/,
+  );
 });
 
 test("browser runtime teardown releases target and configured engine ownership", () => {
