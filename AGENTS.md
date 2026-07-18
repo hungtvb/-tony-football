@@ -57,6 +57,10 @@ Do not:
 
 If the GitHub connector cannot safely publish an atomic multi-file change, report the publishing blocker on the related Linear/GitHub item. Do not invent a write-enabled transport workflow as a workaround.
 
+`npm run test:workflow-policy` enforces the repository workflow boundary defined in `docs/12_WORKFLOW_SECURITY_POLICY.md`. Write exceptions must be exact-path entries in `.github/workflow-policy-allowlist.json`; they never permit direct pushes, repository commits, patch application, encoded patch transport, rewrite-and-publish behavior, or self-deletion.
+
+If prohibited transport commits temporarily enter a delivery branch, later deletion does not clear merge history. Cleanly rewrite the branch or squash-merge only the independently reviewed final tree. Do not merge-commit or rebase-merge rejected transport history into `main`.
+
 ## Scope rule
 
 Implement only the assigned Linear issue unless the Product Owner explicitly changes scope.

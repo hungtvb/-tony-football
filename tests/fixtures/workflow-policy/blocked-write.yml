@@ -1,0 +1,10 @@
+name: Unsafe PR writer
+on:
+  pull_request:
+permissions:
+  contents: write
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo unsafe

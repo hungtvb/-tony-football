@@ -45,7 +45,8 @@ Before modifying code:
 | `src/game/core/SimulationLoop.js` | Connects fixed simulation updates to browser rendering | Fixed 60 Hz cadence with interpolation alpha |
 | `tests/scenarios/ScenarioRunner.mjs` | Public-contract deterministic scenario execution, explicit target-tick scheduling, immutable capture and compact failure traces | Test infrastructure only; never reaches private engine state |
 | `tests/tooling/browserGameplayAuthorityGuard.test.mjs` | Static deployed-entry and required-smoke authority guard | Fails if direct `game.js` loading, URL compatibility routing or required debug mutation fixtures return |
-| `.github/workflows/ci.yml`, `.github/workflows/playwright-regression.yml` | Required fast validation/smoke gate and retained scheduled/manual broad browser evidence | Fast lane owns per-commit correctness; broad browser suite remains available outside the commit gate |
+| `scripts/check-workflow-policy.mjs`, `.github/workflow-policy-allowlist.json`, `tests/tooling/workflowPolicy.test.mjs` | Required GitHub Actions security scanner, exact-path exception registry and positive/negative policy fixtures | Rejects unreviewed workflow write permission, direct repository publication, patch transport and stale/broadened exceptions |
+| `.github/workflows/ci.yml`, `.github/workflows/playwright-regression.yml` | Required fast validation/smoke gate and retained scheduled/manual broad browser evidence | Workflows remain read-only by default; fast lane runs the workflow policy through `test:tooling` on every required commit |
 | `scripts/build-static.mjs`, `vercel.json` | Static build and deployment contract | Preserve Vercel and GitHub Pages compatibility |
 
 ## Browser runtime flow
@@ -109,6 +110,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Audio, particles and overlays | browser event/presentation adapters | presentation tests and event browser flows | Ordered event/phase consumers |
 | Main menu and setup navigation | application adapters and `BrowserBootstrapComposition` navigation callbacks | application and Playwright flows | Bootstrap reset boundary owns navigation cleanup; match lifecycle remains engine commands |
 | Static deployment | `package.json`, `scripts/build-static.mjs`, `vercel.json` | build and deployment contracts | Preserve static hosting |
+| Workflow safety | `scripts/check-workflow-policy.mjs`, `.github/workflow-policy-allowlist.json`, `docs/12_WORKFLOW_SECURITY_POLICY.md` | actual repository scan plus positive/negative tooling fixtures | CI validates reviewed source; workflows cannot become a source-publishing transport |
 
 ## Current migration bridges
 
@@ -125,10 +127,14 @@ Engine and core modules may depend on pure JavaScript data/math, deterministic c
 
 Browser composition may connect input, application, engine and presentation adapters. Presentation may consume engine contracts and read-only snapshots/events, but may not mutate engine-owned players, ball, score, statistics, clock, possession, AI decisions, goal phases, replay lifecycle or match lifecycle.
 
+Workflow validation may read repository workflow YAML and the exact exception registry. It must not modify workflows, source, branches or refs.
+
 ## Validation pyramid
 
 - `npm run test:engine:fast` owns simulation, engine, gameplay, input/application contracts and deterministic scenarios.
 - `npm run test:presentation:fast` owns pure snapshot/event/phase projection and presentation state.
+- `npm run test:workflow-policy` scans the actual workflow directory against the exact path-scoped exception registry.
+- `npm run test:tooling` runs the actual workflow scan plus tooling fixtures and authority guards.
 - `npm run test:ci:fast` adds syntax, assets, tooling, authority guards and static build without installing a browser.
 - `npm run test:e2e:smoke` proves WebGL/Canvas boot, live composition, input/application routing, snapshot/HUD projection and representative desktop/narrow wiring.
 - `npm run test:e2e:broad` and the `Playwright Regression` workflow retain the full visual regression inventory for manual, scheduled, focused and release evidence.
@@ -150,7 +156,8 @@ Gameplay correctness never depends on Playwright. Browser tests never inject sco
 | HUD, camera or overlays | pure presentation tests; broad desktop/narrow Playwright for visual changes |
 | Match lifecycle or replay | deterministic `tests/scenarios/` lifecycle/goal/replay/Full Time coverage; browser smoke proves only composition |
 | Static build or assets | static build contract and preview smoke |
+| Workflow or CI permission change | actual workflow policy scan, positive/negative fixtures, exact allowlist review, `test:tooling`, and required CI gate |
 
 ## Update checklist
 
-Update this file when a pull request changes a runtime entry point, authoritative owner, compatibility bridge, dependency direction, command/event/snapshot contract, adapter location or focused validation path.
+Update this file when a pull request changes a runtime entry point, authoritative owner, compatibility bridge, dependency direction, command/event/snapshot contract, adapter location, workflow-security boundary or focused validation path.
