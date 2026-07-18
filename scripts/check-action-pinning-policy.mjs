@@ -2,6 +2,8 @@ import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { inspectLocalActionYamlSafety } from "./check-local-action-yaml-safety.mjs";
+
 const WORKFLOW_DIRECTORY = ".github/workflows";
 const WORKFLOW_EXTENSION = /\.ya?ml$/i;
 const ACTION_MANIFEST_NAMES = ["action.yml", "action.yaml"];
@@ -372,6 +374,13 @@ export async function scanActionPinningPolicy({ rootDir = process.cwd() } = {}) 
         unsupportedStructure.reason,
         reference,
       ));
+      visitedLocalActions.add(manifestPath);
+      return;
+    }
+
+    const yamlSafetyFindings = inspectLocalActionYamlSafety({ manifestPath, source });
+    if (yamlSafetyFindings.length > 0) {
+      violations.push(...yamlSafetyFindings.map((item) => ({ ...item, action: reference })));
       visitedLocalActions.add(manifestPath);
       return;
     }
