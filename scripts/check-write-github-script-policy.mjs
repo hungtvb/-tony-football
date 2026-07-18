@@ -58,16 +58,21 @@ function parseInlinePermissions(value) {
   return match[1].split(",").some((entry) => /^\s*["']?contents["']?\s*:\s*["']?write["']?\s*$/.test(entry));
 }
 
-function jobRequestsContentsWrite(lines) {
+function permissionState(lines, requiredIndent = null) {
   for (let index = 0; index < lines.length; index += 1) {
+    if (requiredIndent !== null && indentation(lines[index].line) !== requiredIndent) continue;
     const match = lines[index].line.match(/^\s*permissions\s*:\s*(.*?)\s*$/);
     if (!match) continue;
-    if (/^write-all$/.test(match[1].trim()) || parseInlinePermissions(match[1])) return true;
-    for (const child of collectBlock(lines, index, indentation(lines[index].line))) {
-      if (/^\s*contents\s*:\s*write\s*$/.test(child.line)) return true;
+    if (/^write-all$/.test(match[1].trim()) || parseInlinePermissions(match[1])) {
+      return { declared: true, contentsWrite: true };
     }
+    const block = collectBlock(lines, index, indentation(lines[index].line));
+    return {
+      declared: true,
+      contentsWrite: block.some(({ line }) => /^\s*contents\s*:\s*write\s*$/.test(line)),
+    };
   }
-  return false;
+  return { declared: false, contentsWrite: false };
 }
 
 function githubScriptUse(lines) {
@@ -84,6 +89,7 @@ export function inspectWriteGithubScriptPolicy({ workflowPath, source }) {
   const jobsIndex = lines.findIndex(({ line }) => /^\s*jobs\s*:\s*$/.test(line));
   if (jobsIndex === -1) return findings;
 
+  const workflowPermissions = permissionState(lines.slice(0, jobsIndex), 0);
   const jobsBlock = collectBlock(lines, jobsIndex, indentation(lines[jobsIndex].line));
   let jobIndent = null;
   const starts = [];
@@ -98,7 +104,11 @@ export function inspectWriteGithubScriptPolicy({ workflowPath, source }) {
   for (let index = 0; index < starts.length; index += 1) {
     const start = starts[index];
     const jobLines = jobsBlock.slice(start.index + 1, starts[index + 1]?.index ?? jobsBlock.length);
-    if (!jobRequestsContentsWrite(jobLines)) continue;
+    const jobPermissions = permissionState(jobLines);
+    const contentsWrite = jobPermissions.declared
+      ? jobPermissions.contentsWrite
+      : workflowPermissions.contentsWrite;
+    if (!contentsWrite) continue;
     const use = githubScriptUse(jobLines);
     if (!use) continue;
     findings.push({

@@ -56,6 +56,36 @@ test("quoted GitHub Script action values are also rejected in write jobs", () =>
   assert.equal(inspect(source)[0]?.code, WRITE_GITHUB_SCRIPT_RULE_ID);
 });
 
+test("jobs inherit workflow-level contents write", () => {
+  const source = yaml(
+    "on: [workflow_dispatch]",
+    "permissions:",
+    "  contents: write",
+    "jobs:",
+    "  publish:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/github-script@v7",
+  );
+
+  assert.equal(inspect(source)[0]?.code, WRITE_GITHUB_SCRIPT_RULE_ID);
+});
+
+test("job-level read permissions override workflow-level write permissions", () => {
+  const source = yaml(
+    "on: [workflow_dispatch]",
+    "permissions: { contents: write }",
+    "jobs:",
+    "  inspect:",
+    "    permissions: { contents: read }",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/github-script@v7",
+  );
+
+  assert.deepEqual(inspect(source), []);
+});
+
 test("GitHub Script remains allowed in a separate read-only job", () => {
   const source = yaml(
     "on: [workflow_dispatch]",
