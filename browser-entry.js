@@ -17,6 +17,13 @@ export function sanitizeBrowserRuntimeSearch(search = "") {
   };
 }
 
+export function removeBrowserGameplayDebugMutators(debug = null) {
+  if (!debug || typeof debug !== "object") return false;
+  const removed = Object.prototype.hasOwnProperty.call(debug, "applyScenario");
+  if (removed) delete debug.applyScenario;
+  return removed;
+}
+
 if (typeof globalThis.window !== "undefined") {
   const sanitized = sanitizeBrowserRuntimeSearch(globalThis.location.search);
   if (sanitized.changed) {
@@ -27,4 +34,5 @@ if (typeof globalThis.window !== "undefined") {
     );
   }
   await import("./game.js?v=20.0.0");
+  removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
 }
