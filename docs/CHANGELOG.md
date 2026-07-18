@@ -47,6 +47,7 @@
 - Browser HUD, camera, radar, WebGL, and Canvas consumers now use live MatchEngine frames with no deployed compatibility runtime switch.
 
 ### Fixed
+- Browser replay playback now synchronizes start, elapsed progress, and stop exclusively from authoritative engine snapshots; the presentation fixed step no longer double-advances or ends replay early.
 - Goal announcement no longer hides the first `1.34s` of replay; authoritative replay starts only after announcement phases finish, visibly advances for its full duration, ends once, and resets directly to kickoff without the former `0.60s` dead gap.
 - Replay events now agree with the immutable snapshot returned from the same runtime step.
 - Default-engine replay history is now recorded from authoritative live snapshots instead of the inactive compatibility match state, so naturally scored goals produce playable browser replay frames and exit coherently.
@@ -78,4 +79,3 @@
 - Gameplay updates are now independent from browser render FPS.
 
 ### Documentation
-- Added AI Workspace v5 structure for Codex and Antigravity.
