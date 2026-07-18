@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Deterministic engine-owned goal timeline phases for native highlight, goal card, score card, replay, and kickoff.
+- Typed `goal:phase-changed` events plus read-only replay elapsed/duration diagnostics for measured browser evidence.
+- Pure goal-phase presentation projection and measured-tick/event-snapshot regression coverage.
 - U1 Match Experience and HUD Hierarchy specifications.
 - HUD, pre-match, radar, controls, pause, and settings source-of-truth documents.
 - R1 immutable game-command, ordered event, and read-only snapshot contracts.
@@ -22,6 +25,9 @@
 - Named browser bootstrap composition with explicit runtime target, input/application listener, simulation-loop, snapshot-adapter and presentation-feedback lifecycle ownership.
 
 ### Changed
+- Goal presentation now projects authoritative engine phases; wall-clock waits remain isolated to preview/compatibility fixtures and no longer decide live-engine replay start/end.
+- BrowserMatchRuntime now publishes the engine's same-step events/snapshot without reacting to `score:changed` to mutate replay state after snapshot capture.
+- The default goal sequence total is `4.39s`: `0.46s` native highlight, `0.50s` goal card, `0.38s` score card, then the complete `3.05s` replay before immediate kickoff reset.
 - Linear now owns mutable roadmap, backlog, priority, dependency, ownership, delivery status, acceptance, and cross-role handoffs; repository planning documents are stable pointers and technical records only.
 - AI workspace startup now begins from the assigned Linear `TON-x` handoff, correlates exact GitHub implementation evidence, and records durable updates after material events.
 - Restricted-container bootstrap now initializes a verified local Git `main` baseline.
@@ -37,6 +43,9 @@
 - Browser HUD, camera, radar, WebGL, and Canvas snapshot consumers now default to live MatchEngine frames; compatibility gameplay remains a temporary shadow and the `?runtime=compatibility` fallback.
 
 ### Fixed
+- Goal announcement no longer hides the first `1.34s` of replay; authoritative replay starts only after announcement phases finish, visibly advances for its full duration, ends once, and resets directly to kickoff without the former `0.60s` dead gap.
+- Replay events now agree with the immutable snapshot returned from the same runtime step.
+- Default-engine replay history is now recorded from authoritative live snapshots instead of the inactive compatibility match state, so naturally scored goals produce playable browser replay frames and exit coherently.
 - Default-engine matches no longer stall when the selected home player holds possession without input; a delayed deterministic idle-owner assist resumes AI passes and shots while active human controls retain authority.
 - Live gameplay events once again update the radar-adjacent commentary for lifecycle, possession, passing, shooting, tackling, teammate runs, goals, and replay transitions.
 - Live score events now enter and exit deterministic MatchEngine replay state while projecting buffered snapshots into the browser replay controller before kickoff resumes.
