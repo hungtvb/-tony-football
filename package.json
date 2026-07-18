@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node scripts/dev-server.mjs",
     "build": "node scripts/build-static.mjs",
-    "test:syntax": "node --check game.js && node --check scripts/dev-server.mjs",
+    "test:syntax": "node --check browser-entry.js && node --check game.js && node --check scripts/dev-server.mjs",
     "test:assets": "node scripts/validate-assets.mjs",
     "test:simulation": "node --test tests/simulation/*.test.mjs",
     "test:engine": "node --test tests/engine/*.test.mjs",

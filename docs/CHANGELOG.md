@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Engine-only browser entry guard that removes compatibility/debug gameplay switches before loading the deployed game.
+- Static authority checks and direct-mirror-mutation tests that prevent browser values from becoming MatchEngine inputs.
 - Deterministic engine-owned goal timeline phases for native highlight, goal card, score card, replay, and kickoff.
 - Typed `goal:phase-changed` events plus read-only replay elapsed/duration diagnostics for measured browser evidence.
 - Pure goal-phase presentation projection and measured-tick/event-snapshot regression coverage.
@@ -21,11 +23,13 @@
 - Pure snapshot render-state interpolation shared by WebGL and Canvas entity transforms.
 - Snapshot-driven camera framing and immutable 15 FPS replay playback controllers.
 - Browser presentation feedback adapter for event-driven kick, tackle, goal, and match lifecycle audio/particle effects.
-- Live browser MatchEngine composition with deterministic input/lifecycle routing, immutable engine snapshots and ordered events, plus an explicit compatibility fallback.
+- Live browser MatchEngine composition with deterministic input/lifecycle routing, immutable engine snapshots and ordered events.
 - Named browser bootstrap composition with explicit runtime target, input/application listener, simulation-loop, snapshot-adapter and presentation-feedback lifecycle ownership.
 
 ### Changed
-- Goal presentation now projects authoritative engine phases; wall-clock waits remain isolated to preview/compatibility fixtures and no longer decide live-engine replay start/end.
+- Deployed browser lifecycle commands now require live engine dispatch; compatibility construction remains read-only/test-isolated and cannot start, restart, pause or resume gameplay.
+- Required Canvas smoke now validates engine snapshots instead of a mutable low-stamina compatibility scenario.
+- Goal presentation now projects authoritative engine phases; wall-clock waits remain isolated to preview fixtures and no longer decide live-engine replay start/end.
 - BrowserMatchRuntime now publishes the engine's same-step events/snapshot without reacting to `score:changed` to mutate replay state after snapshot capture.
 - The default goal sequence total is `4.39s`: `0.46s` native highlight, `0.50s` goal card, `0.38s` score card, then the complete `3.05s` replay before immediate kickoff reset.
 - Linear now owns mutable roadmap, backlog, priority, dependency, ownership, delivery status, acceptance, and cross-role handoffs; repository planning documents are stable pointers and technical records only.
@@ -40,9 +44,10 @@
 - HUD match facts and radar markers now consume immutable fixed-tick snapshots in both WebGL and Canvas fallback paths.
 - WebGL and Canvas player position, facing, locomotion pose, ball position, height, and rotation now consume one interpolated snapshot render state with reset/teleport guards.
 - Camera framing and replay playback now consume immutable match snapshots; gameplay actions publish feedback events instead of calling audio or particle implementations directly.
-- Browser HUD, camera, radar, WebGL, and Canvas snapshot consumers now default to live MatchEngine frames; compatibility gameplay remains a temporary shadow and the `?runtime=compatibility` fallback.
+- Browser HUD, camera, radar, WebGL, and Canvas consumers now use live MatchEngine frames with no deployed compatibility runtime switch.
 
 ### Fixed
+- Browser replay playback now synchronizes start, elapsed progress, and stop exclusively from authoritative engine snapshots; the presentation fixed step no longer double-advances or ends replay early.
 - Goal announcement no longer hides the first `1.34s` of replay; authoritative replay starts only after announcement phases finish, visibly advances for its full duration, ends once, and resets directly to kickoff without the former `0.60s` dead gap.
 - Replay events now agree with the immutable snapshot returned from the same runtime step.
 - Default-engine replay history is now recorded from authoritative live snapshots instead of the inactive compatibility match state, so naturally scored goals produce playable browser replay frames and exit coherently.
@@ -74,4 +79,3 @@
 - Gameplay updates are now independent from browser render FPS.
 
 ### Documentation
-- Added AI Workspace v5 structure for Codex and Antigravity.

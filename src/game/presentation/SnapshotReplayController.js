@@ -69,6 +69,17 @@ export function createSnapshotReplayController({
       return active;
     },
 
+    syncElapsed(nextElapsed) {
+      if (!Number.isFinite(nextElapsed) || nextElapsed < 0) {
+        throw new TypeError("replay elapsed must be a non-negative finite number");
+      }
+      if (!active) return false;
+      if (nextElapsed < elapsed) throw new RangeError("replay elapsed cannot move backwards");
+      if (nextElapsed == elapsed) return false;
+      elapsed = nextElapsed;
+      return true;
+    },
+
     update(dt) {
       if (!Number.isFinite(dt) || dt < 0) throw new TypeError("replay dt must be a non-negative finite number");
       if (!active) return false;
