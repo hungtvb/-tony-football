@@ -20,14 +20,9 @@ function hasBrowserLocation() {
 }
 
 export function resolveBrowserRuntimeMode(search = hasBrowserLocation() ? globalThis.location.search : null) {
+  // Browser delivery is engine-only after TON-63. Compatibility mode remains
+  // available only through explicit constructor injection in isolated tests.
   if (search === null) return BrowserRuntimeMode.COMPATIBILITY;
-  const params = new URLSearchParams(search);
-  const requested = params.get("runtime");
-  if (requested === BrowserRuntimeMode.COMPATIBILITY) return BrowserRuntimeMode.COMPATIBILITY;
-  if (requested === BrowserRuntimeMode.ENGINE) return BrowserRuntimeMode.ENGINE;
-  // Debug scenarios intentionally mutate legacy fixtures. Keep them on the explicit
-  // compatibility path while normal browser sessions default to the live engine.
-  if (params.has("debugScenario")) return BrowserRuntimeMode.COMPATIBILITY;
   return BrowserRuntimeMode.ENGINE;
 }
 
