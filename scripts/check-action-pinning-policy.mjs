@@ -82,6 +82,7 @@ function checkoutDisablesCredentials(lines, usesIndex, end, keyIndent) {
 
     const withIndent = indentation(active);
     let inputIndent = null;
+    const declarations = [];
     for (let child = index + 1; child < end; child += 1) {
       const input = stripInlineComment(lines[child]);
       if (!input.trim()) continue;
@@ -89,9 +90,10 @@ function checkoutDisablesCredentials(lines, usesIndex, end, keyIndent) {
       if (currentIndent <= withIndent) break;
       if (inputIndent === null) inputIndent = currentIndent;
       if (currentIndent !== inputIndent) continue;
-      if (/^\s*persist-credentials\s*:\s*["']?false["']?\s*$/i.test(input)) return true;
+      const match = input.match(/^\s*persist-credentials\s*:\s*["']?([^\s"']+)["']?\s*$/i);
+      if (match) declarations.push(match[1].toLowerCase());
     }
-    return false;
+    return declarations.length === 1 && declarations[0] === "false";
   }
   return false;
 }
