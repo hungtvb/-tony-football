@@ -75,14 +75,17 @@ function stepBounds(lines, usesIndex) {
   return { start, end, keyIndent };
 }
 
-function checkoutDisablesCredentials(lines, usesIndex, end, keyIndent) {
-  for (let index = usesIndex + 1; index < end; index += 1) {
+function checkoutDisablesCredentials(lines, start, end, keyIndent) {
+  let withBlocks = 0;
+  const declarations = [];
+
+  for (let index = start; index < end; index += 1) {
     const active = stripInlineComment(lines[index]);
-    if (!/^\s*with\s*:\s*$/.test(active) || indentation(active) !== keyIndent) continue;
+    if (!/^\s*(?:-\s*)?with\s*:\s*$/.test(active) || indentation(active) !== keyIndent) continue;
+    withBlocks += 1;
 
     const withIndent = indentation(active);
     let inputIndent = null;
-    const declarations = [];
     for (let child = index + 1; child < end; child += 1) {
       const input = stripInlineComment(lines[child]);
       if (!input.trim()) continue;
@@ -93,9 +96,9 @@ function checkoutDisablesCredentials(lines, usesIndex, end, keyIndent) {
       const match = input.match(/^\s*persist-credentials\s*:\s*["']?([^\s"']+)["']?\s*$/i);
       if (match) declarations.push(match[1].toLowerCase());
     }
-    return declarations.length === 1 && declarations[0] === "false";
   }
-  return false;
+
+  return withBlocks === 1 && declarations.length === 1 && declarations[0] === "false";
 }
 
 export function inspectActionPinningPolicy({ workflowPath, source }) {
@@ -130,8 +133,8 @@ export function inspectActionPinningPolicy({ workflowPath, source }) {
     }
 
     if (!/^actions\/checkout@/i.test(action)) continue;
-    const { end, keyIndent } = stepBounds(lines, index);
-    if (!checkoutDisablesCredentials(lines, index, end, keyIndent)) {
+    const { start, end, keyIndent } = stepBounds(lines, index);
+    if (!checkoutDisablesCredentials(lines, start, end, keyIndent)) {
       findings.push(finding(workflowPath, index + 1, CHECKOUT_CREDENTIAL_RULE_ID, "checkout must set persist-credentials: false", action));
     }
   }
