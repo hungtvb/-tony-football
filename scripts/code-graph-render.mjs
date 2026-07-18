@@ -2,7 +2,7 @@ const graphId = (value) => `n_${value.replace(/[^A-Za-z0-9_]/g, "_")}`;
 const xml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 export function renderGraphJson(graph) {
   const { views: _views, ...canonical } = graph;
-  return `${JSON.stringify(canonical, null, 2)}\n`;
+  return `${JSON.stringify(canonical)}\n`;
 }
 export function renderMermaid(graph, viewName = "runtime") {
   const selected = new Set(graph.views[viewName] ?? graph.nodes.map((node) => node.id));
@@ -45,5 +45,5 @@ export function renderSvg(graph, viewName = "runtime") {
     parts.push(`<g transform="translate(${point.x},${point.y})"><rect width="185" height="50" rx="9" fill="#17233d" stroke="${node.bridge ? "#f2c45e" : "#60739d"}" stroke-width="${node.bridge ? 2.5 : 1.2}"/><text x="9" y="20" fill="#eef3ff" font-family="system-ui" font-size="12">${xml(label)}</text><text x="9" y="38" fill="#aab6d4" font-family="system-ui" font-size="9">${xml(node.layer)}</text></g>`);
   }
   parts.push("</svg>");
-  return `${parts.join("\n")}\n`;
+  return `${parts.join("")}\n`;
 }
