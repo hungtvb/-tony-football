@@ -30,7 +30,7 @@ Every diagnostic contains the rule ID, workflow or local-action manifest path, j
 
 A workflow reference such as `uses: ./.github/actions/example` is not treated as automatically safe. The action-pinning gate resolves exactly one `action.yml` or `action.yaml` manifest, verifies the real path remains inside the repository, and recursively scans every nested local action reference.
 
-Composite and Node action manifests may be used when every external `uses` dependency is pinned by full SHA with an adjacent semantic-version comment. Repeated references are scanned once. Missing or duplicate manifests, `..` path segments, symbolic-link escapes and dependency cycles fail closed. Flow-style mappings/sequences, anchors, aliases, merge keys and YAML tags also fail closed in local action manifests so line-oriented dependency extraction cannot be bypassed through indirection. Quoted punctuation and block-scalar script bodies remain ordinary scalar content. Local Docker actions fail closed because mutable `FROM` dependencies in their Dockerfiles are not yet part of the dependency scanner.
+Composite and Node action manifests may be used when every external `uses` dependency is pinned by full SHA with an adjacent semantic-version comment. Repeated references are scanned once. Missing or duplicate manifests, `..` path segments, symbolic-link escapes and dependency cycles fail closed. Flow-style mappings/sequences, anchors, aliases and merge keys also fail closed before line-oriented dependency extraction. The required local-action YAML safety guard separately rejects quoted mapping keys, explicit-key syntax and every YAML tag property, including the bare non-specific `!` tag. Quoted punctuation in scalar values and block-scalar script bodies remain ordinary content. Local Docker actions fail closed because mutable `FROM` dependencies in their Dockerfiles are not yet part of the dependency scanner.
 
 Calling the single-source inspection helper without repository context also fails closed on local action references. Only the repository-level scan may clear them after full dependency resolution.
 
@@ -81,4 +81,5 @@ The tooling suite proves:
 - a job with direct or inherited `contents: write` cannot use `actions/github-script`, while an explicit job-level read-only override remains allowed;
 - floating action tags, incomplete pins, missing version comments and checkout credential persistence fail the required tooling gate;
 - local composite dependencies and nested local-action chains are scanned transitively;
-- fully pinned block-style local composite actions pass, while flow-style structures, anchors, aliases, merge keys, tags, cycles, path escapes, missing or ambiguous manifests and local Docker actions fail closed.
+- fully pinned block-style local composite actions pass, while flow-style structures, anchors, aliases, merge keys, quoted mapping keys, explicit-key syntax, every YAML tag form, cycles, path escapes, missing or ambiguous manifests and local Docker actions fail closed;
+- quoted punctuation in scalar values and block-scalar script content remain valid.
