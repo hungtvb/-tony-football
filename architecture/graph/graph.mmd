@@ -1,0 +1,64 @@
+flowchart LR
+  subgraph n_layer_browser["browser"]
+    n_browser_entry_js["browser-entry.js"]
+    n_index_html["index.html"]
+  end
+  subgraph n_layer_application["application"]
+    n_BrowserBootstrapComposition["BrowserBootstrapComposition"]
+    n_BrowserMatchRuntime["BrowserMatchRuntime"]
+    n_BrowserRuntimeComposition["BrowserRuntimeComposition"]
+  end
+  subgraph n_layer_presentation["presentation"]
+    n_BrowserGameEventBridge["BrowserGameEventBridge"]
+    n_CompatibilitySnapshotAdapter["CompatibilitySnapshotAdapter"]:::bridge
+    n_game_js["game.js"]:::bridge
+    n_HudSnapshotProjection["HudSnapshotProjection"]
+    n_RadarSnapshotRenderer["RadarSnapshotRenderer"]
+    n_SnapshotRenderState["SnapshotRenderState"]
+    n_SnapshotReplayController["SnapshotReplayController"]
+  end
+  subgraph n_layer_input["input"]
+    n_BrowserInputAdapter["BrowserInputAdapter"]
+  end
+  subgraph n_layer_tooling["tooling"]
+    n_FastCI["Fast CI lane"]
+  end
+  subgraph n_layer_engine["engine"]
+    n_GoalSequenceTimeline["GoalSequenceTimeline"]
+    n_MatchEngine["MatchEngine"]
+  end
+  subgraph n_layer_tests["tests"]
+    n_ScenarioRunner["ScenarioRunner"]
+  end
+  subgraph n_layer_core["core"]
+    n_SimulationLoop["SimulationLoop"]
+  end
+  n_browser_entry_js -->|loads| n_game_js
+  n_BrowserBootstrapComposition -->|wires| n_BrowserInputAdapter
+  n_BrowserBootstrapComposition -->|wires| n_BrowserRuntimeComposition
+  n_BrowserBootstrapComposition -->|wires| n_CompatibilitySnapshotAdapter
+  n_BrowserBootstrapComposition -->|wires| n_SimulationLoop
+  n_BrowserGameEventBridge -->|renders| n_game_js
+  n_BrowserInputAdapter -->|commands| n_BrowserRuntimeComposition
+  n_BrowserMatchRuntime -->|events| n_BrowserGameEventBridge
+  n_BrowserMatchRuntime -->|snapshots| n_CompatibilitySnapshotAdapter
+  n_BrowserMatchRuntime -->|owns| n_MatchEngine
+  n_BrowserRuntimeComposition -->|owns| n_BrowserMatchRuntime
+  n_CompatibilitySnapshotAdapter -->|projects| n_HudSnapshotProjection
+  n_CompatibilitySnapshotAdapter -->|projects| n_RadarSnapshotRenderer
+  n_CompatibilitySnapshotAdapter -->|projects| n_SnapshotRenderState
+  n_CompatibilitySnapshotAdapter -->|projects| n_SnapshotReplayController
+  n_FastCI -->|smoke-tests| n_game_js
+  n_FastCI -->|runs| n_ScenarioRunner
+  n_game_js -->|wires| n_BrowserBootstrapComposition
+  n_HudSnapshotProjection -->|renders| n_game_js
+  n_index_html -->|loads| n_browser_entry_js
+  n_MatchEngine -->|events| n_BrowserMatchRuntime
+  n_MatchEngine -->|snapshots| n_BrowserMatchRuntime
+  n_MatchEngine -->|owns| n_GoalSequenceTimeline
+  n_RadarSnapshotRenderer -->|renders| n_game_js
+  n_ScenarioRunner -->|tests| n_MatchEngine
+  n_SimulationLoop -->|ticks| n_BrowserRuntimeComposition
+  n_SnapshotRenderState -->|renders| n_game_js
+  n_SnapshotReplayController -->|renders| n_game_js
+  classDef bridge stroke:#c58a00,stroke-width:3px;
