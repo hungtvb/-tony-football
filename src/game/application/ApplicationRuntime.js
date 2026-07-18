@@ -14,43 +14,32 @@ const gameCommandByAction = Object.freeze({
 });
 
 export class ApplicationRuntime {
-  #dispatchGameCommand;
   #onNavigation;
-  #getMatchState;
   #runtimeComposition;
   #resetRuntime;
   #sequence = 0;
 
   constructor({
-    dispatchGameCommand,
     onNavigation = () => {},
-    getMatchState = () => "menu",
     runtimeComposition = browserRuntimeComposition,
     resetRuntime = null,
-  }) {
-    if (typeof dispatchGameCommand !== "function") {
-      throw new TypeError("ApplicationRuntime requires dispatchGameCommand");
+  } = {}) {
+    if (!runtimeComposition || typeof runtimeComposition.dispatch !== "function") {
+      throw new TypeError("ApplicationRuntime requires a runtime composition");
     }
     if (resetRuntime !== null && typeof resetRuntime !== "function") {
       throw new TypeError("resetRuntime must be a function");
     }
-    this.#dispatchGameCommand = dispatchGameCommand;
     this.#onNavigation = onNavigation;
-    this.#getMatchState = getMatchState;
     this.#runtimeComposition = runtimeComposition;
-    this.#resetRuntime = resetRuntime ?? (() => {
-      if (!this.#runtimeComposition.authoritative) return false;
-      return this.#runtimeComposition.reset();
-    });
+    this.#resetRuntime = resetRuntime ?? (() => this.#runtimeComposition.reset());
   }
 
   request(type, payload = {}) {
     const action = createApplicationAction(type, payload);
     let resolvedType = action.type;
     if (resolvedType === ApplicationActionType.TOGGLE_PAUSE) {
-      const state = this.#runtimeComposition.authoritative
-        ? this.#runtimeComposition.state
-        : this.#getMatchState();
+      const state = this.#runtimeComposition.state;
       if (state !== "playing" && state !== "paused") return action;
       resolvedType = state === "playing"
         ? ApplicationActionType.PAUSE_MATCH
@@ -65,7 +54,7 @@ export class ApplicationRuntime {
       });
       this.#sequence += 1;
       if (!this.#runtimeComposition.dispatch(command)) {
-        this.#dispatchGameCommand(command);
+        throw new Error("browser lifecycle commands require live engine authority");
       }
       return action;
     }
