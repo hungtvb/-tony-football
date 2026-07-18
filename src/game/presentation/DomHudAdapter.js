@@ -83,12 +83,10 @@ export function createDomHudAdapter({
 
   function renderPlayer(player) {
     if (!player) return;
-
     if (selectedPlayerId !== null && selectedPlayerId !== player.id) {
       flashClass(elements.playerCard, "player-change", PLAYER_CHANGE_MILLISECONDS);
     }
     selectedPlayerId = player.id;
-
     setText(elements.playerName, player.name);
     setText(elements.playerNumber, player.number);
     setText(elements.playerRating, player.rating);
@@ -97,7 +95,7 @@ export function createDomHudAdapter({
 
     const lowStamina = player.stamina < 25;
     setClass(elements.playerCard, "low-stamina", lowStamina);
-    if (elements.staminaBar/.style) {
+    if (elements.staminaBar?.style) {
       elements.staminaBar.style.background = lowStamina
         ? "linear-gradient(90deg,#b63f35,#ff8c78)"
         : "linear-gradient(90deg,#b78a2f,#ffdc78)";
@@ -124,7 +122,7 @@ export function createDomHudAdapter({
     if (elements.controlsMode?.dataset?.mode === mode) return;
 
     if (elements.controlsMode?.dataset) elements.controlsMode.dataset.mode = mode;
-    setText(elements.controlsMode, mode === "attack" ? "TẤN CÔNG" : "PHÒNG THỦ");
+    setText(elements.controlsMode, mode === "attack" ? "TẤN CÔNG" : "PHÓNG THỦ");
     setClass(elements.controlsCard, "defense", mode === "defense");
     for (const label of elements.controlLabels) {
       const value = label.dataset?.[mode];
