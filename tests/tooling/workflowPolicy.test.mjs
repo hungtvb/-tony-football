@@ -88,3 +88,14 @@ test("ordinary base64 artifact decode is not treated as patch transport", () => 
   const result = inspectWorkflow({ workflowPath: ".github/workflows/decode.yml", source: "on: [workflow_dispatch]\npermissions:\n  contents: read\njobs:\n  decode:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo $ASSET | base64 --decode > artifact.bin\n" });
   assert.deepEqual(result.violations, []);
 });
+
+test("allowlisted write job cannot hide publication inside a repository-local script", async () => {
+  const allowlist = parseWorkflowPolicyAllowlist(await fixture("allowlist.json"));
+  const result = inspectWorkflow({
+    workflowPath: ".github/workflows/local-script-release.yml",
+    source: await fixture("blocked-local-script.yml"),
+    allowlist,
+  });
+  assert.deepEqual(codes(result), ["write-job-local-executable"]);
+  assert.equal(result.violations[0].jobId, "publish");
+});

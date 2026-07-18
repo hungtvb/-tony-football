@@ -15,6 +15,7 @@ The scanner rejects:
 - source patch application and encoded patch transport;
 - GitHub/Octokit file, blob, tree, commit and ref mutations, including ref creation;
 - rewrite-and-publish behavior and workflow/transport self-deletion.
+- repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job.
 
 Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
 
@@ -56,3 +57,4 @@ The tooling suite proves:
 - direct publication, option-prefixed Git commands, auto-commit/self-push actions, encoded patch application, Octokit ref mutation and self-delete fail;
 - read-only GitHub Script and ordinary artifact decoding pass;
 - exact path/job exceptions cannot suppress transport findings.
+- an allowlisted write job that invokes a repository-local publishing script fails with `write-job-local-executable`.

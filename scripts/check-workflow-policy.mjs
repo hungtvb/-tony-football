@@ -20,6 +20,7 @@ const RULES = {
   apiMutation: ["github-api-repository-mutation", "GitHub API file/tree/commit/ref mutation is prohibited"],
   selfDelete: ["workflow-self-delete", "workflows may not delete workflow files or transport scripts"],
   rewrite: ["rewrite-and-publish", "workflow rewrites repository content and attempts to publish it"],
+  localExecutable: ["write-job-local-executable", "a contents:write job may not invoke repository-local scripts, npm scripts, executables, or composite actions"],
 };
 
 const AUTO_COMMIT_ACTION = /(?:git-auto-commit-action|add-and-commit|auto-commit|github-push-action|git-push-action|commit-and-push)@/i;
@@ -31,6 +32,7 @@ const SELF_DELETE = /(?:git\s+rm|\brm\s+(?:-[^\s]+\s+)*)[^\n]*(?:\.github\/workf
 const REWRITE_COMMAND = /\b(?:sed|perl|python|node|tee|cat)\b/im;
 const REPOSITORY_PATH = /(?:src\/|tests\/|docs\/|scripts\/|game\.js|package\.json|\.github\/workflows\/)/im;
 const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"]);
+const LOCAL_RUN = /(?:^|[\s;&|])(?:(?:node|python(?:3)?|bash|sh)\s+(?:\.\/)?(?:scripts|tools|\.github)\/[^\s;&|]+|\.\/(?:scripts|tools|\.github)\/[^\s;&|]+|npm\s+run\b)/im;
 
 function normalizeRepositoryPath(value) {
   return String(value).replaceAll("\\", "/").replace(/^\.\//, "");
@@ -242,9 +244,11 @@ export function inspectWorkflow({ workflowPath, source, allowlist = new Map() })
     violations.push({ path: normalizedPath, jobId, ruleId, code: ruleId, reason, message: reason, line });
   };
   const inspectScope = (jobId, lines) => {
+    let requestsContentsWrite = false;
     for (const permission of parsePermissions(lines)) {
       const writeAll = permission.values.get("*") === "write-all";
       const contentsWrite = permission.values.get("contents") === "write";
+      if (contentsWrite || writeAll) requestsContentsWrite = true;
       if (writeAll) add(RULES.writeAll, jobId, permission.line);
       if (contentsWrite || writeAll) {
         if (jobId === "<workflow>") {
@@ -273,6 +277,8 @@ export function inspectWorkflow({ workflowPath, source, allowlist = new Map() })
     const executable = parseExecutable(lines);
     const text = executable.map(({ value }) => value).join("\n");
     const uses = executable.filter(({ kind }) => kind === "uses").map(({ value }) => value).join("\n");
+    const localExecutable = LOCAL_RUN.test(text)
+      || executable.some(({ kind, value }) => kind === "uses" && value.startsWith("./"));
     const directPush = hasGitSubcommand(text, "push");
     const selfCommit = hasGitSubcommand(text, "commit");
     const publishes = directPush || selfCommit || AUTO_COMMIT_ACTION.test(uses) || API_MUTATION.test(text);
@@ -284,6 +290,7 @@ export function inspectWorkflow({ workflowPath, source, allowlist = new Map() })
     if (API_MUTATION.test(text)) add(RULES.apiMutation, jobId);
     if (SELF_DELETE.test(text)) add(RULES.selfDelete, jobId);
     if (REWRITE_COMMAND.test(text) && REPOSITORY_PATH.test(text) && publishes) add(RULES.rewrite, jobId);
+    if (jobId !== "<workflow>" && requestsContentsWrite && localExecutable) add(RULES.localExecutable, jobId);
   };
   inspectScope("<workflow>", workflowLines);
   for (const job of jobs) inspectScope(job.id, job.lines);

@@ -98,3 +98,31 @@ test("anchor-like text in quoted scalars, comments and block scripts is not YAML
   });
   assert.deepEqual(result.violations, []);
 });
+
+test("quoted jobs, permissions and run keys fail closed before extraction", () => {
+  const source = yaml(
+    "name: Quoted keys",
+    "on: [workflow_dispatch]",
+    "permissions:",
+    "  contents: read",
+    '"jobs":',
+    "  publish:",
+    '    "permissions":',
+    "      contents: write",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    '      - "run": git push origin HEAD:main',
+  );
+  const result = inspectWorkflowWithYamlSafety({
+    workflowPath: ".github/workflows/quoted-keys.yml",
+    source,
+  });
+  assert.ok(result.violations.length > 0);
+  assert.ok(result.violations.every(({ code, jobId, line, reason }) => (
+    code === "yaml-quoted-structural-key-unsupported"
+    && jobId === "<workflow>"
+    && Number.isInteger(line)
+    && /quoted/.test(reason)
+  )));
+  assert.deepEqual(result.triggers, []);
+});

@@ -7,7 +7,9 @@ import { inspectWorkflow, scanWorkflowPolicy } from "./check-workflow-policy.mjs
 const WORKFLOW_DIRECTORY = ".github/workflows";
 const WORKFLOW_EXTENSION = /\.ya?ml$/i;
 export const YAML_ALIAS_RULE_ID = "yaml-anchor-alias-unsupported";
+export const QUOTED_KEY_RULE_ID = "yaml-quoted-structural-key-unsupported";
 const YAML_ALIAS_REASON = "YAML anchors and aliases are unsupported; expand workflow values explicitly";
+const QUOTED_KEY_REASON = "quoted jobs, permissions, run, uses, and script keys are unsupported; use explicit unquoted workflow structure";
 
 function normalizeRepositoryPath(value) {
   return String(value).replaceAll("\\", "/").replace(/^\.\//, "");
@@ -92,6 +94,28 @@ export function findYamlAnchorAliases(source) {
   return findings;
 }
 
+export function findQuotedStructuralKeys(source) {
+  const findings = [];
+  let blockScalarIndent = null;
+  for (const [index, rawLine] of source.split(/\r?\n/).entries()) {
+    const activeLine = stripInlineComment(rawLine);
+    if (!activeLine.trim()) continue;
+    const currentIndent = indentation(activeLine);
+    if (blockScalarIndent !== null) {
+      if (currentIndent > blockScalarIndent) continue;
+      blockScalarIndent = null;
+    }
+    if (/:\s*[|>][-+]?\s*$/.test(stripQuotedSegments(activeLine))) {
+      blockScalarIndent = currentIndent;
+      continue;
+    }
+    const match = activeLine.match(/^\s*(?:-\s*)?(["'])(jobs|permissions|run|uses|script)\1\s*:/)
+      || activeLine.match(/[{,]\s*(["'])(jobs|permissions|run|uses|script)\1\s*:/);
+    if (match) findings.push({ line: index + 1, name: match[2] });
+  }
+  return findings;
+}
+
 function aliasViolation(workflowPath, finding) {
   const reason = `${YAML_ALIAS_REASON}: ${finding.kind} ${finding.name}`;
   return {
@@ -105,13 +129,30 @@ function aliasViolation(workflowPath, finding) {
   };
 }
 
+function quotedKeyViolation(workflowPath, finding) {
+  const reason = `${QUOTED_KEY_REASON}: ${finding.name}`;
+  return {
+    path: normalizeRepositoryPath(workflowPath),
+    jobId: "<workflow>",
+    ruleId: QUOTED_KEY_RULE_ID,
+    code: QUOTED_KEY_RULE_ID,
+    reason,
+    message: reason,
+    line: finding.line,
+  };
+}
+
 export function inspectWorkflowWithYamlSafety({ workflowPath, source, allowlist = new Map() }) {
   const findings = findYamlAnchorAliases(source);
-  if (findings.length > 0) {
+  const quotedKeys = findQuotedStructuralKeys(source);
+  if (findings.length > 0 || quotedKeys.length > 0) {
     return {
       path: normalizeRepositoryPath(workflowPath),
       triggers: [],
-      violations: findings.map((finding) => aliasViolation(workflowPath, finding)),
+      violations: [
+        ...findings.map((finding) => aliasViolation(workflowPath, finding)),
+        ...quotedKeys.map((finding) => quotedKeyViolation(workflowPath, finding)),
+      ],
     };
   }
   return inspectWorkflow({ workflowPath, source, allowlist });
@@ -141,6 +182,9 @@ export async function enforceWorkflowPolicy({ rootDir = process.cwd() } = {}) {
     const source = await readFile(path.join(rootDir, workflowPath), "utf8");
     for (const finding of findYamlAnchorAliases(source)) {
       aliasViolations.push(aliasViolation(workflowPath, finding));
+    }
+    for (const finding of findQuotedStructuralKeys(source)) {
+      aliasViolations.push(quotedKeyViolation(workflowPath, finding));
     }
   }
   if (aliasViolations.length > 0) {

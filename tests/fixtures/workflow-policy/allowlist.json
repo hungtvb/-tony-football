@@ -9,6 +9,15 @@
       "reviewIssue": "TON-123",
       "allowedTriggers": ["workflow_dispatch"],
       "permissions": ["contents:write"]
+    },
+    {
+      "path": ".github/workflows/local-script-release.yml",
+      "job": "publish",
+      "owner": "release-maintainers",
+      "reason": "Regression fixture for local executable indirection",
+      "reviewIssue": "TON-16",
+      "allowedTriggers": ["workflow_dispatch"],
+      "permissions": ["contents:write"]
     }
   ]
 }
