@@ -19,6 +19,7 @@ test("production composition boots and routes input, snapshot and lifecycle pres
   const boot = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(boot.renderer).toBe("webgl");
   expect(boot.runtimeMode).toBe("engine");
+  expect(boot.legacyGameplayStepCount).toBe(0);
   await expect(page.locator("#gameCanvas")).toBeVisible();
 
   await page.locator("#quickMatchButton").click();
@@ -49,6 +50,7 @@ test("production composition boots and routes input, snapshot and lifecycle pres
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(1);
   }
+  expect(await page.evaluate(() => window.__TONY_DEBUG__.diagnostics().legacyGameplayStepCount)).toBe(0);
   expect(runtimeErrors).toEqual([]);
 });
 

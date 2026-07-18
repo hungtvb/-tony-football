@@ -38,7 +38,6 @@ export class BrowserBootstrapComposition {
     runtimeComposition,
     simulationLoop,
     snapshotAdapter,
-    dispatchCompatibilityCommand,
     onNavigation = () => {},
     onCameraCycle = () => {},
     getCompatibilityControlMode = () => "attack",
@@ -62,9 +61,6 @@ export class BrowserBootstrapComposition {
     if (!snapshotAdapter || typeof snapshotAdapter.capture !== "function") {
       throw new TypeError("Browser bootstrap requires a snapshot adapter");
     }
-    if (typeof dispatchCompatibilityCommand !== "function") {
-      throw new TypeError("Browser bootstrap requires a compatibility command boundary");
-    }
     if (typeof createPresentationFeedback !== "function") {
       throw new TypeError("createPresentationFeedback must be a function");
     }
@@ -75,7 +71,6 @@ export class BrowserBootstrapComposition {
     this.#snapshotAdapter = snapshotAdapter;
     this.#createPresentationFeedback = createPresentationFeedback;
     this.#applicationRuntime = new ApplicationRuntime({
-      dispatchGameCommand: dispatchCompatibilityCommand,
       onNavigation,
       getMatchState: getCompatibilityMatchState,
       runtimeComposition,
@@ -83,7 +78,9 @@ export class BrowserBootstrapComposition {
     });
     this.#inputAdapter = new BrowserInputAdapter({
       target,
-      onCommand: dispatchCompatibilityCommand,
+      onCommand: () => {
+        throw new Error("browser input cannot dispatch compatibility gameplay commands");
+      },
       onApplicationRequest: (type) => this.#applicationRuntime.request(type),
       onCameraCycle,
       getControlMode: getCompatibilityControlMode,

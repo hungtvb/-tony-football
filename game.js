@@ -154,6 +154,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   });
   let lastSnapshotRenderState = null;
   let recordReplaySnapshot = false;
+  let legacyGameplayStepCount = 0;
 
   function publishCompatibilityEvent(type, payload = {}) {
     const event = createGameEvent(type, payload, {
@@ -622,7 +623,13 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     game.particles = game.particles.filter((particle) => particle.life > 0);
   }
 
-  function update(dt) {
+  function updatePresentation(dt) {
+    updateInput(); updateParticles(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
+    game.cameraNotice = Math.max(0, game.cameraNotice - dt);
+  }
+
+  function updateLegacyGameplay(dt) {
+    legacyGameplayStepCount += 1;
     updateInput(); updateParticles(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
@@ -1314,7 +1321,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     recordReplaySnapshot = false;
     if (compatibilitySnapshots.snapshot) cameraController.update(compatibilitySnapshots.snapshot, dt);
     compatibilityTick += 1;
-    update(dt);
+    updatePresentation(dt);
     if (game.messageTimer > 0) game.messageTimer -= dt;
     const snapshot = captureCompatibilitySnapshot();
     if (recordReplaySnapshot) game.replay.record(snapshot, dt);
@@ -1334,6 +1341,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     clockOptions: gameplayConfig.simulation,
   });
 
+  // Isolated legacy migration helper. Deployed browser composition never references it.
   function applyCompatibilityCommand(command) {
     if (command.type === GameCommandType.MOVE) {
       input.moveX = command.payload.x; input.moveY = command.payload.y; input.magnitude = Math.hypot(input.moveX, input.moveY);
@@ -1377,7 +1385,6 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     runtimeComposition,
     simulationLoop,
     snapshotAdapter: compatibilitySnapshots,
-    dispatchCompatibilityCommand: applyCompatibilityCommand,
     onNavigation: (action) => {
       if (action.type === ApplicationActionType.OPEN_MATCH_SETUP) showMatchSetup({ reset: true });
       if (action.type === ApplicationActionType.OPEN_MAIN_MENU) showMainMenu();
@@ -1440,6 +1447,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
       replay: game.replay.active,
       renderer: use3D ? "webgl" : "canvas",
       visualTestMode,
+      legacyGameplayStepCount,
       selectedStamina: game.selected?.stamina ?? null,
       snapshot: compatibilitySnapshots.snapshot ? {
         tick: compatibilitySnapshots.snapshot.tick,

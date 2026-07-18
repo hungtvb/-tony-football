@@ -27,13 +27,13 @@ Before modifying code:
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, HUD, menus and overlays | Loads the guarded browser entry; never gameplay authority |
 | `browser-entry.js` | Sanitizes browser URL state before loading `game.js` | Removes compatibility/debug gameplay mutation switches and guarantees deployed engine authority |
-| `game.js` | Render implementations, DOM callbacks, settings/effects and temporary snapshot-projected legacy objects | Legacy gameplay functions are dormant in deployed browser flow; they cannot receive lifecycle commands or be activated by URL/debug parameters |
+| `game.js` | Render implementations, DOM callbacks, settings/effects, presentation-only fixed-step decay and temporary snapshot-projected legacy objects | Deployed `simulationStep` invokes only presentation updates and engine snapshot capture; isolated legacy gameplay helpers have a zero-invocation browser guard |
 | `src/game/application/BrowserBootstrapComposition.js` | Named browser composition root for runtime target, application/input adapters, simulation loop, snapshot adapter and presentation-feedback subscription | Owns deterministic start, reset, pause/resume requests and teardown without changing deployed entry behavior |
 | `src/game/application/BrowserRuntimeComposition.js` | Owns live browser runtime configuration, fixed source ticks, lifecycle/input routing and browser event publication | Deployed browser always resolves to engine authority; compatibility construction is isolated and cannot progress application lifecycle |
 | `src/game/application/BrowserMatchRuntime.js` | Owns one `MatchEngine`, deterministic command scheduling, fixed steps, immutable snapshots, ordered events and action intents | Browser-facing wrapper only; it publishes engine results and never infers score/replay transitions |
 | `src/game/engine/MatchEngine.js`, `GoalSequenceTimeline.js` | MatchEngine lifecycle plus deterministic goal phases `native-highlight → goal-card → score-card → replay → kickoff` | Headless authority for phase order, replay clock and post-goal reset; transitions occur before snapshot capture |
 | `src/game/engine/` | Match state, movement, ball simulation, player actions, goalkeeper behavior, AI and selected-owner takeover guard | Headless authority; owns active human attack intent and idle-owner assist; no DOM, Three.js, Canvas, audio or render-frame dependencies |
-| `src/game/input/BrowserInputAdapter.js` | FO4 key lifecycle, immutable human commands and transient attack-intent signaling | Sends commands to live runtime; callback injection is test/transport-only and does not advance gameplay |
+| `src/game/input/BrowserInputAdapter.js` | FO4 key lifecycle, immutable human commands and transient attack-intent signaling | Deployed bootstrap dispatches only to the live runtime and fails closed if authority is unavailable; callback injection remains isolated from production composition |
 | `src/game/application/ApplicationRuntime.js` | Match lifecycle commands and navigation requests | Lifecycle requires live engine dispatch; navigation remains outside MatchEngine |
 | `src/game/application/BrowserApplicationAdapter.js` | Browser buttons/events and immediate lifecycle UI projection | Listener lifecycle only; runtime target attachment belongs to the bootstrap composition |
 | `src/game/presentation/CompatibilitySnapshotAdapter.js` | Mirrors immutable live-engine facts into temporary legacy presentation objects or creates isolated read-only compatibility snapshots | Browser mirror writes never become engine inputs; replay history is an outward-only temporary frame cache |
@@ -71,10 +71,11 @@ Events    → BrowserGameEventBridge → audio, particles and phase-driven overl
 ```
 
 The deployed browser has no compatibility runtime switch. Legacy mutable objects in
-`game.js` are temporary presentation mirrors only: lifecycle commands cannot reach
-their simulator, debug URL parameters are removed before module load, and direct
-mirror writes are overwritten by the next immutable engine snapshot without changing
-engine-owned state.
+`game.js` are temporary presentation mirrors only: deployed fixed steps call the
+presentation-only update path and never invoke legacy AI, physics, rules, clock or
+lifecycle progression. Debug URL parameters are removed before module load, input
+fails closed outside engine authority, and direct mirror writes are overwritten by the
+next immutable engine snapshot without changing engine-owned state.
 
 `BrowserInputAdapter` expresses a charged pass or shot as a transient immutable
 `SET_ATTACK_INTENT` command pair. It sends `active: true` when charging starts and
@@ -113,7 +114,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 
 These are temporary migration points, not patterns to copy:
 
-- `game.js` still contains dormant compatibility implementation functions because renderer, DOM, settings and debug extraction belongs to TON-64; deployed browser flow cannot activate them as gameplay authority.
+- `game.js` still contains isolated legacy implementation helpers because renderer, DOM and settings extraction belongs to TON-64; deployed fixed steps have a tested zero-invocation boundary for those helpers.
 - `CompatibilitySnapshotAdapter` mirrors immutable engine facts into legacy player/ball objects only where existing presentation implementations still read those objects.
 - `CompatibilitySnapshotAdapter` / `SnapshotReplayController` retain an outward-only replay-frame cache, while engine replay phase/progress is the sole lifecycle clock.
 - Browser presentation implementation extraction and removal of now-dead co-located helpers belongs to TON-64; new gameplay logic must never be added to `game.js`.
