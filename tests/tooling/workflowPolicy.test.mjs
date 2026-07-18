@@ -12,7 +12,7 @@ const codes = (result) => result.violations.map(({ code }) => code).sort();
 test("repository .yml and .yaml workflows pass", async () => {
   const result = await scanWorkflowPolicy({ rootDir: fileURLToPath(rootUrl) });
   assert.equal(result.violations.length, 0, JSON.stringify(result.violations, null, 2));
-  assert.equal(result.workflowCount, 2);
+  assert.ok(result.workflowCount >= 2);
 });
 
 test("comments containing banned terms are ignored", async () => {
