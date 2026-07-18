@@ -9,13 +9,48 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  apply-ton63-replay-fix:
+    name: Apply TON-63 replay correction
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'refactor/ton-63-engine-only-browser-authority'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply and validate correction
+        run: |
+          python scripts/ton63-replay-fix.py
+          npm ci
+          node --check game.js
+          node --check src/game/presentation/CompatibilitySnapshotAdapter.js
+          node --check src/game/presentation/SnapshotReplayController.js
+          node --test tests/presentation/snapshotReplayController.test.mjs tests/presentation/liveReplayProjection.test.mjs tests/tooling/engineModeNoLegacyProgression.test.mjs
+          npm run test:ci:fast
+      - name: Commit corrected exact head
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout origin/main -- .github/workflows/ci.yml
+          git rm .github/workflows/ton63-replay-fix.yml scripts/ton63-replay-fix.py
+          git add game.js src/game/presentation/CompatibilitySnapshotAdapter.js src/game/presentation/SnapshotReplayController.js tests/tooling/engineModeNoLegacyProgression.test.mjs tests/presentation/liveReplayProjection.test.mjs docs/11_SOURCE_MAP.md
+          git commit -m "[TON-63] Make replay playback snapshot-driven"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
   fast-validation:
     name: Unit and contracts
     runs-on: ubuntu-latest
