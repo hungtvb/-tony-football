@@ -17,10 +17,22 @@ The scanner rejects:
 - source patch application and encoded patch transport;
 - GitHub/Octokit file, blob, tree, commit and ref mutations, including ref creation;
 - rewrite-and-publish behavior and workflow/transport self-deletion;
-- repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job.
-- `actions/github-script` in any job whose effective permission includes `contents: write`.
+- repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job;
+- `actions/github-script` in any job whose effective permission includes `contents: write`;
+- third-party actions that are not pinned to a full 40-character commit SHA or whose pin lacks a readable semantic-version comment;
+- checkout steps that do not explicitly set `persist-credentials: false`;
+- local action references whose manifest is missing, ambiguous, outside the repository, cyclic, or contains an unpinned transitive action dependency;
+- local Docker actions until Dockerfile base-image dependency closure is enforced.
 
-Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
+Every diagnostic contains the rule ID, workflow or local-action manifest path, job scope and reason. Transport rules cannot be suppressed by an exception.
+
+## Local action dependency closure
+
+A workflow reference such as `uses: ./.github/actions/example` is not treated as automatically safe. The action-pinning gate resolves exactly one `action.yml` or `action.yaml` manifest, verifies the real path remains inside the repository, and recursively scans every nested local action reference.
+
+Composite and Node action manifests may be used when every external `uses` dependency is pinned by full SHA with an adjacent semantic-version comment. Repeated references are scanned once. Missing or duplicate manifests, `..` path segments, symbolic-link escapes and dependency cycles fail closed. Flow-style mappings/sequences, anchors, aliases and merge keys also fail closed before line-oriented dependency extraction. The required local-action YAML safety guard separately rejects quoted mapping keys, explicit-key syntax and every YAML tag property, including the bare non-specific `!` tag. Quoted punctuation in scalar values and block-scalar script bodies remain ordinary content. Local Docker actions fail closed because mutable `FROM` dependencies in their Dockerfiles are not yet part of the dependency scanner.
+
+Calling the single-source inspection helper without repository context also fails closed on local action references. Only the repository-level scan may clear them after full dependency resolution.
 
 ## Exact exception registry
 
@@ -50,6 +62,10 @@ Release/deployment writers should prefer manual dispatch, protected environments
 
 Removing a prohibited transport workflow in a later commit does not sanitize branch history. Before merge, either cleanly rewrite from an approved baseline or squash only the independently reviewed final tree. Any new exact head invalidates previous Reviewer and SA clearance.
 
+## Action update lifecycle
+
+Dependabot checks the `github-actions` ecosystem weekly and opens ordinary pull requests. Each action update must preserve the full commit SHA plus version comment, pass the required workflow-policy and CI gates, and receive normal independent review before merge. Scheduled updates never mutate a delivery branch directly and never bypass the TON-16 transport boundary.
+
 ## Fixture matrix
 
 The tooling suite proves:
@@ -62,4 +78,8 @@ The tooling suite proves:
 - exact path/job exceptions cannot suppress transport findings;
 - flow-style job/step/executable structures fail closed before the line extractor can miss them;
 - an allowlisted write job that invokes a repository-local publishing script fails with `write-job-local-executable`;
-- a job with direct or inherited `contents: write` cannot use `actions/github-script`, while an explicit job-level read-only override remains allowed.
+- a job with direct or inherited `contents: write` cannot use `actions/github-script`, while an explicit job-level read-only override remains allowed;
+- floating action tags, incomplete pins, missing version comments and checkout credential persistence fail the required tooling gate;
+- local composite dependencies and nested local-action chains are scanned transitively;
+- fully pinned block-style local composite actions pass, while flow-style structures, anchors, aliases, merge keys, quoted mapping keys, explicit-key syntax, every YAML tag form, cycles, path escapes, missing or ambiguous manifests and local Docker actions fail closed;
+- quoted punctuation in scalar values and block-scalar script content remain valid.

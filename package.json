@@ -14,7 +14,7 @@
     "test:input": "node --test tests/input/*.test.mjs tests/application/*.test.mjs",
     "test:presentation": "node --test tests/presentation/*.test.mjs",
     "test:gameplay": "node --test tests/gameplay/*.test.mjs",
-    "test:workflow-policy": "node scripts/enforce-workflow-policy.mjs && node scripts/check-write-github-script-policy.mjs",
+    "test:workflow-policy": "node scripts/enforce-workflow-policy.mjs && node scripts/check-write-github-script-policy.mjs && node scripts/check-local-action-yaml-safety.mjs && node scripts/check-action-pinning-policy.mjs",
     "test:tooling": "npm run test:workflow-policy && node --test tests/tooling/*.test.mjs",
     "test:unit": "npm run test:ci:fast",
     "test:e2e": "playwright test",
