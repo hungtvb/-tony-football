@@ -113,7 +113,7 @@ function structuralLines(source) {
 
 export function findYamlAnchorAliases(source) {
   const findings = [];
-  const tokenPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)([&*])([A-Za-z_][A-Za-z0-9_-]*)\b/g;
+  const tokenPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)([&*])([^\s\[\]{},]+)/g;
   for (const item of structuralLines(source)) {
     for (const match of item.structuralLine.matchAll(tokenPattern)) {
       findings.push({
@@ -138,7 +138,7 @@ export function findYamlMergeKeys(source) {
 
 export function findYamlExplicitTags(source) {
   const findings = [];
-  const tagPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)!([A-Za-z_][A-Za-z0-9_!:/-]*)\b/g;
+  const tagPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)(!<[^>\r\n]+>|!![^\s\[\]{},]+|![^\s\[\]{},]+)/g;
   for (const item of structuralLines(source)) {
     for (const match of item.structuralLine.matchAll(tagPattern)) {
       findings.push({ line: item.index, name: match[1] });
@@ -275,6 +275,10 @@ function isLocalRun(value) {
     || sourceCommand.test(value);
 }
 
+function scriptLoadsModulesOrFiles(value) {
+  return /\brequire\s*\(|\bimport\s*\(|\bimport\s+[^;\n]+\s+from\s+|\bprocess\.cwd\s*\(|\b(?:process\.env\.)?GITHUB_WORKSPACE\b|\bfileURLToPath\s*\(|\b(?:fs|path)\.(?:readFile|readFileSync|createReadStream|open|openSync|resolve|join)\s*\(|\b(?:readFile|readFileSync|createReadStream|openSync)\s*\(/im.test(value);
+}
+
 export function findWriteJobLocalExecutables(source) {
   const findings = [];
   const lines = activeLines(source);
@@ -297,7 +301,9 @@ export function findWriteJobLocalExecutables(source) {
     for (const executable of executableValues(jobLines)) {
       const local = executable.kind === "uses"
         ? /^\.{1,2}\//.test(executable.value)
-        : isLocalRun(executable.value);
+        : executable.kind === "script"
+          ? scriptLoadsModulesOrFiles(executable.value) || isLocalRun(executable.value)
+          : isLocalRun(executable.value);
       if (local) findings.push({ line: executable.line, jobId: start.id, value: executable.value });
     }
   }

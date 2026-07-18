@@ -8,7 +8,7 @@ GitHub Actions validates and deploys reviewed content. It must not become an alt
 
 Workflows are read-only by default. The structural extractor evaluates top-level triggers, workflow-level and job-level permissions, flow-style permission maps, block-style jobs and steps, step `run` and `uses` values, and executable `actions/github-script` scripts. YAML comments and shell comment-only content are ignored.
 
-Because the validator is deliberately dependency-free, unsupported flow-style job mappings, step sequences and executable keys fail closed with `yaml-flow-policy-structure-unsupported`. Inline permission maps remain supported. A write-authorized job's `actions/github-script` `with.script` body is inspected and may not load repository-local modules through `require`, dynamic `import`, or file paths.
+Because the validator is deliberately dependency-free, unsupported flow-style job mappings, step sequences and executable keys fail closed with `yaml-flow-policy-structure-unsupported`. Inline permission maps remain supported. A write-authorized job's `actions/github-script` `with.script` body may not load modules or files at all; this closes literal and constructed paths through `require`, dynamic `import`, filesystem APIs, `path.resolve`, `process.cwd()`, or `GITHUB_WORKSPACE`.
 
 The scanner rejects:
 
@@ -60,4 +60,4 @@ The tooling suite proves:
 - read-only GitHub Script and ordinary artifact decoding pass;
 - exact path/job exceptions cannot suppress transport findings;
 - flow-style job/step/executable structures fail closed before the line extractor can miss them;
-- an allowlisted write job that invokes a repository-local publishing script or loads one from GitHub Script fails with `write-job-local-executable`.
+- an allowlisted write job that invokes a repository-local publishing script, loads any module/file from GitHub Script, or constructs such a path fails with `write-job-local-executable`.

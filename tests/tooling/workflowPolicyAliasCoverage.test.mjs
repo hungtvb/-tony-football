@@ -88,6 +88,40 @@ test("merge keys without aliases and explicit tags also fail closed", () => {
   assert.deepEqual(tagged.violations.map(({ code }) => code), [YAML_TAG_RULE_ID]);
 });
 
+test("numeric anchors and aliases fail closed", () => {
+  const source = yaml(
+    "on: [workflow_dispatch]",
+    "jobs:",
+    "  seed:",
+    `    env: ${anchor("1")}`,
+    "      contents: write",
+    "    runs-on: ubuntu-latest",
+    "  publish:",
+    `    permissions: ${alias("1")}`,
+    "    runs-on: ubuntu-latest",
+  );
+  assertAliasBlocked(inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/numeric-alias.yml", source }));
+});
+
+test("standard shorthand, secondary and verbatim YAML tags fail closed", () => {
+  const tags = [
+    "!!map { contents: write }",
+    "!custom { contents: write }",
+    "!<tag:yaml.org,2002:map> { contents: write }",
+  ];
+  for (const taggedPermissions of tags) {
+    const source = yaml(
+      "on: [workflow_dispatch]",
+      "jobs:",
+      "  publish:",
+      `    permissions: ${taggedPermissions}`,
+      "    runs-on: ubuntu-latest",
+    );
+    const result = inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/tagged-permissions.yml", source });
+    assert.deepEqual(result.violations.map(({ code }) => code), [YAML_TAG_RULE_ID], taggedPermissions);
+  }
+});
+
 test("anchor-like text in quoted scalars, comments and block scripts is not YAML alias syntax", () => {
   const source = yaml(
     "on: [workflow_dispatch]",
@@ -228,6 +262,32 @@ test("write job GitHub Script cannot load repository-local modules", () => {
       `          script: ${script}`,
     );
     const result = inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/github-script.yml", source });
+    assert.deepEqual(result.violations.map(({ code }) => code), [WRITE_LOCAL_RULE_ID], script);
+  }
+});
+
+test("write job GitHub Script cannot construct local module or file paths", () => {
+  const variants = [
+    "const path = require('node:path'); require(path.resolve('publish.cjs'));",
+    "require(process.cwd() + '/publish.cjs');",
+    "await import(process.env.GITHUB_WORKSPACE + '/publish.mjs');",
+    "const fs = require('node:fs'); fs.readFileSync('publish.cjs', 'utf8');",
+    "const root = GITHUB_WORKSPACE; await import(root + '/publish.mjs');",
+  ];
+  for (const script of variants) {
+    const source = yaml(
+      "on: [workflow_dispatch]",
+      "jobs:",
+      "  publish:",
+      "    permissions: { contents: write }",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/github-script@v7",
+      "        with:",
+      "          script: |",
+      `            ${script}`,
+    );
+    const result = inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/constructed-script.yml", source });
     assert.deepEqual(result.violations.map(({ code }) => code), [WRITE_LOCAL_RULE_ID], script);
   }
 });
