@@ -20,6 +20,10 @@ function indentation(line) {
   return line.match(/^\s*/)?.[0].length ?? 0;
 }
 
+function mappingKeyIndent(line) {
+  return indentation(line) + (/^\s*-\s+/.test(line) ? 2 : 0);
+}
+
 function stripInlineComment(line) {
   let singleQuoted = false;
   let doubleQuoted = false;
@@ -59,7 +63,7 @@ function stepBounds(lines, usesIndex) {
   }
 
   const stepIndent = indentation(stripInlineComment(lines[start]));
-  const keyIndent = inlineUses ? usesIndent + 2 : usesIndent;
+  const keyIndent = mappingKeyIndent(activeUses);
   let end = lines.length;
   for (let index = start + 1; index < lines.length; index += 1) {
     const active = stripInlineComment(lines[index]);
@@ -81,10 +85,10 @@ function checkoutDisablesCredentials(lines, start, end, keyIndent) {
 
   for (let index = start; index < end; index += 1) {
     const active = stripInlineComment(lines[index]);
-    if (!/^\s*(?:-\s*)?with\s*:\s*$/.test(active) || indentation(active) !== keyIndent) continue;
+    if (!/^\s*(?:-\s*)?with\s*:\s*$/.test(active) || mappingKeyIndent(active) !== keyIndent) continue;
     withBlocks += 1;
 
-    const withIndent = indentation(active);
+    const withIndent = mappingKeyIndent(active);
     let inputIndent = null;
     for (let child = index + 1; child < end; child += 1) {
       const input = stripInlineComment(lines[child]);
