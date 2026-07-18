@@ -17,12 +17,22 @@ The scanner rejects:
 - source patch application and encoded patch transport;
 - GitHub/Octokit file, blob, tree, commit and ref mutations, including ref creation;
 - rewrite-and-publish behavior and workflow/transport self-deletion;
-- repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job.
-- `actions/github-script` in any job whose effective permission includes `contents: write`.
+- repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job;
+- `actions/github-script` in any job whose effective permission includes `contents: write`;
 - third-party actions that are not pinned to a full 40-character commit SHA or whose pin lacks a readable semantic-version comment;
-- checkout steps that do not explicitly set `persist-credentials: false`.
+- checkout steps that do not explicitly set `persist-credentials: false`;
+- local action references whose manifest is missing, ambiguous, outside the repository, cyclic, or contains an unpinned transitive action dependency;
+- local Docker actions until Dockerfile base-image dependency closure is enforced.
 
-Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
+Every diagnostic contains the rule ID, workflow or local-action manifest path, job scope and reason. Transport rules cannot be suppressed by an exception.
+
+## Local action dependency closure
+
+A workflow reference such as `uses: ./.github/actions/example` is not treated as automatically safe. The action-pinning gate resolves exactly one `action.yml` or `action.yaml` manifest, verifies the real path remains inside the repository, and recursively scans every nested local action reference.
+
+Composite and Node action manifests may be used when every external `uses` dependency is pinned by full SHA with an adjacent semantic-version comment. Repeated references are scanned once. Missing or duplicate manifests, `..` path segments, symbolic-link escapes and dependency cycles fail closed. Local Docker actions fail closed because mutable `FROM` dependencies in their Dockerfiles are not yet part of the dependency scanner.
+
+Calling the single-source inspection helper without repository context also fails closed on local action references. Only the repository-level scan may clear them after full dependency resolution.
 
 ## Exact exception registry
 
@@ -68,5 +78,7 @@ The tooling suite proves:
 - exact path/job exceptions cannot suppress transport findings;
 - flow-style job/step/executable structures fail closed before the line extractor can miss them;
 - an allowlisted write job that invokes a repository-local publishing script fails with `write-job-local-executable`;
-- a job with direct or inherited `contents: write` cannot use `actions/github-script`, while an explicit job-level read-only override remains allowed.
-- floating action tags, incomplete pins, missing version comments and checkout credential persistence fail the required tooling gate.
+- a job with direct or inherited `contents: write` cannot use `actions/github-script`, while an explicit job-level read-only override remains allowed;
+- floating action tags, incomplete pins, missing version comments and checkout credential persistence fail the required tooling gate;
+- local composite dependencies and nested local-action chains are scanned transitively;
+- fully pinned local composite actions pass, while cycles, path escapes, missing or ambiguous manifests and local Docker actions fail closed.
