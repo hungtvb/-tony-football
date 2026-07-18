@@ -40,17 +40,26 @@ export function extractWorkflowTriggers(source) {
   const onLine = lines[onIndex];
   const onIndent = indentation(onLine);
   const inline = onLine.replace(/^\s*["']?on["']?\s*:\s*/, "").trim();
-  for (const name of ["pull_request", "pull_request_target", "push", "workflow_dispatch", "workflow_call", "schedule", "release"]) {
-    if (new RegExp(`(?:^|[\\s\\[,])${name}(?:$|[\\s\\],])`).test(inline)) triggers.add(name);
+  if (inline) {
+    const mapKeys = [...inline.matchAll(/([a-z][a-z0-9_-]*)\s*:/gi)].map((match) => match[1]);
+    const values = mapKeys.length > 0
+      ? mapKeys
+      : inline.replace(/[\[\]{},]/g, " ").split(/\s+/).filter(Boolean);
+    for (const value of values) {
+      if (/^[a-z][a-z0-9_-]*$/i.test(value) && !/^(?:true|false|null)$/i.test(value)) triggers.add(value);
+    }
   }
 
+  let triggerIndent = null;
   for (let index = onIndex + 1; index < lines.length; index += 1) {
     const line = lines[index];
     if (!line.trim()) continue;
     const currentIndent = indentation(line);
     if (currentIndent <= onIndent && /^\s*[\w"'-]+\s*:/.test(line)) break;
-    const match = line.match(/^\s*(pull_request_target|pull_request|push|workflow_dispatch|workflow_call|schedule|release)\s*:/);
-    if (match) triggers.add(match[1]);
+    const match = line.match(/^\s*["']?([a-z][a-z0-9_-]*)["']?\s*:/i);
+    if (!match) continue;
+    if (triggerIndent === null) triggerIndent = currentIndent;
+    if (currentIndent === triggerIndent) triggers.add(match[1]);
   }
 
   return triggers;
@@ -72,10 +81,9 @@ function validateException(entry, index) {
   if (!Array.isArray(entry.allowedTriggers) || entry.allowedTriggers.length === 0) {
     throw new TypeError(`workflow policy exception ${index} requires allowedTriggers`);
   }
-  const validTriggers = new Set(["pull_request", "pull_request_target", "push", "workflow_dispatch", "workflow_call", "schedule", "release"]);
-  const invalidTriggers = entry.allowedTriggers.filter((trigger) => !validTriggers.has(trigger));
+  const invalidTriggers = entry.allowedTriggers.filter((trigger) => typeof trigger !== "string" || !/^[a-z][a-z0-9_-]*$/i.test(trigger));
   if (invalidTriggers.length > 0) {
-    throw new TypeError(`workflow policy exception ${index} has unsupported triggers: ${invalidTriggers.join(", ")}`);
+    throw new TypeError(`workflow policy exception ${index} has invalid triggers: ${invalidTriggers.join(", ")}`);
   }
   if (!Array.isArray(entry.permissions) || !entry.permissions.includes("contents:write")) {
     throw new TypeError(`workflow policy exception ${index} must explicitly allow contents:write`);

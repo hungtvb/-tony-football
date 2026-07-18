@@ -81,6 +81,17 @@ test("allowlist cannot silently broaden to an undeclared trigger", async () => {
   assert.deepEqual(codes(result), ["exception-trigger-mismatch"]);
 });
 
+test("allowlist compares every top-level GitHub event, not a fixed trigger shortlist", async () => {
+  const allowlist = parseWorkflowPolicyAllowlist(await fixture("allowlist.json"));
+  const result = inspectWorkflow({
+    workflowPath: ".github/workflows/release.yml",
+    source: (await fixture("allowed-release.yml")).replace("workflow_dispatch:", "issues:"),
+    allowlist,
+  });
+  assert.deepEqual(result.triggers, ["issues"]);
+  assert.deepEqual(codes(result), ["exception-trigger-mismatch"]);
+});
+
 test("allowlist entries require review metadata and exact workflow paths", () => {
   assert.throws(
     () => parseWorkflowPolicyAllowlist(JSON.stringify({ version: 1, exceptions: [{ path: "release.yml" }] })),
