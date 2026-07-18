@@ -103,9 +103,15 @@ export function inspectActionPinningPolicy({ workflowPath, source }) {
   const lines = source.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
     const active = stripInlineComment(lines[index]);
-    const match = active.match(/^\s*(?:-\s*)?uses\s*:\s*["']?([^\s"']+)["']?\s*$/i);
-    if (!match) continue;
-    const action = match[1];
+    const uses = active.match(/^\s*(?:-\s*)?uses\s*:\s*(.*?)\s*$/i);
+    if (!uses) continue;
+    const simpleValue = uses[1].match(/^["']?([^\s"']+)["']?$/);
+    if (!simpleValue) {
+      findings.push(finding(workflowPath, index + 1, ACTION_PIN_RULE_ID, "action uses values must be a simple immutable scalar reference", uses[1] || "<multiline>"));
+      continue;
+    }
+
+    const action = simpleValue[1];
     if (action.startsWith("./")) continue;
     if (action.startsWith("docker://")) {
       if (!DOCKER_DIGEST.test(action)) {
