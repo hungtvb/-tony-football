@@ -139,6 +139,28 @@ function projectLiveSnapshotToCompatibilitySource(source, snapshot) {
   }
 }
 
+function recordLiveReplayHistory(replay, snapshot, previousSnapshot) {
+  if (typeof replay?.record !== "function") return false;
+  if (snapshot.match.state !== "playing") return false;
+  if (snapshot.match.replay?.active || snapshot.match.goalSequence) return false;
+
+  const elapsed = snapshot.match.elapsed ?? 0;
+  const previousElapsed = previousSnapshot?.match?.elapsed ?? elapsed;
+  const deltaSeconds = Math.max(0, elapsed - previousElapsed);
+  if (deltaSeconds <= 0) return false;
+  return replay.record(snapshot, deltaSeconds);
+}
+
+function advanceLiveReplayPlayback(replay, snapshot, previousSnapshot) {
+  if (typeof replay?.update !== "function") return false;
+  if (!previousSnapshot?.match?.replay?.active) return false;
+  const elapsed = snapshot.match.replay?.elapsed ?? 0;
+  const previousElapsed = previousSnapshot.match.replay?.elapsed ?? elapsed;
+  const deltaSeconds = Math.max(0, elapsed - previousElapsed);
+  if (deltaSeconds <= 0) return false;
+  return replay.update(deltaSeconds);
+}
+
 function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapshot) {
   const replay = source?.replay;
   if (!replay) return;
@@ -152,11 +174,17 @@ function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapsh
 
   const active = Boolean(snapshot.match.replay?.active);
   const wasActive = Boolean(previousSnapshot?.match?.replay?.active);
+  advanceLiveReplayPlayback(replay, snapshot, previousSnapshot);
   if (active && !wasActive && typeof replay.start === "function") {
     replay.start(snapshot);
-  } else if (!active && wasActive && typeof replay.stop === "function") {
-    replay.stop();
+    return;
   }
+  if (!active && wasActive && typeof replay.stop === "function") {
+    replay.stop();
+    return;
+  }
+
+  recordLiveReplayHistory(replay, snapshot, previousSnapshot);
 }
 
 export class CompatibilitySnapshotAdapter {
