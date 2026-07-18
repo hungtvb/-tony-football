@@ -79,10 +79,12 @@ test("legacy runtime and debug query seams are removed before browser gameplay b
 
   const result = await page.evaluate(() => ({
     search: window.location.search,
+    hasApplyScenario: typeof window.__TONY_DEBUG__.applyScenario,
     diagnostics: window.__TONY_DEBUG__.diagnostics(),
   }));
   expect(result.search).not.toContain("runtime=");
   expect(result.search).not.toContain("debugScenario=");
+  expect(result.hasApplyScenario).toBe("undefined");
   expect(result.diagnostics.runtimeMode).toBe("engine");
   expect(result.diagnostics.state).toBe("menu");
   expect(runtimeErrors).toEqual([]);
