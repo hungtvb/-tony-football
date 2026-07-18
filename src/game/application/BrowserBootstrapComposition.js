@@ -3,6 +3,7 @@ import { ApplicationRuntime } from "./ApplicationRuntime.js";
 import { BrowserApplicationAdapter } from "./BrowserApplicationAdapter.js";
 import { BrowserInputAdapter } from "../input/BrowserInputAdapter.js";
 import { BrowserPresentationComposition } from "../presentation/BrowserPresentationComposition.js";
+import { createDomHudAdapter } from "../presentation/DomHudAdapter.js";
 
 function assertSimulationLoop(loop) {
   if (
@@ -19,6 +20,7 @@ function assertPresentationComposition(composition) {
   if (
     !composition
     || typeof composition.start !== "function"
+    || typeof composition.render !== "function"
     || typeof composition.reset !== "function"
     || typeof composition.teardown !== "function"
   ) {
@@ -36,6 +38,7 @@ export class BrowserBootstrapComposition {
   #applicationRuntime;
   #inputAdapter;
   #applicationAdapter;
+  #unsubscribeAfterRender = null;
   #started = false;
 
   constructor({
@@ -78,7 +81,10 @@ export class BrowserBootstrapComposition {
     this.#simulationLoop = simulationLoop;
     this.#snapshotAdapter = snapshotAdapter;
     this.#presentationComposition = presentationComposition ?? new BrowserPresentationComposition({
-      adapterFactories: [() => createPresentationFeedback()],
+      adapterFactories: [
+        ({ document: browserDocument }) => createDomHudAdapter({ document: browserDocument }),
+        () => createPresentationFeedback(),
+      ],
     });
     assertPresentationComposition(this.#presentationComposition);
     this.#applicationRuntime = new ApplicationRuntime({
@@ -140,11 +146,18 @@ export class BrowserBootstrapComposition {
         runtimeComposition: this.#runtimeComposition,
         snapshotAdapter: this.#snapshotAdapter,
       });
+      if (typeof this.#simulationLoop.subscribeAfterRender === "function") {
+        this.#unsubscribeAfterRender = this.#simulationLoop.subscribeAfterRender(
+          (timing) => this.#renderPresentation(timing),
+        );
+      }
       this.#simulationLoop.start();
       this.#started = true;
       return true;
     } catch (error) {
       this.#simulationLoop.stop();
+      this.#unsubscribeAfterRender?.();
+      this.#unsubscribeAfterRender = null;
       this.#presentationComposition.teardown();
       this.#applicationAdapter.detach();
       this.#inputAdapter.detach();
@@ -179,6 +192,8 @@ export class BrowserBootstrapComposition {
   teardown() {
     if (!this.#started) return false;
     this.#simulationLoop.stop();
+    this.#unsubscribeAfterRender?.();
+    this.#unsubscribeAfterRender = null;
     this.#applicationAdapter.detach();
     this.#inputAdapter.detach();
     this.#presentationComposition.teardown();
@@ -186,5 +201,26 @@ export class BrowserBootstrapComposition {
     this.#runtimeComposition.teardown();
     this.#started = false;
     return true;
+  }
+
+  #renderPresentation(timing) {
+    const snapshotFrame = typeof this.#snapshotAdapter.createRenderFrame === "function"
+      ? this.#snapshotAdapter.createRenderFrame(timing.alpha)
+      : null;
+    const snapshot = snapshotFrame?.current ?? this.#snapshotAdapter.snapshot ?? null;
+    if (!snapshot) return false;
+
+    const frame = Object.freeze({
+      snapshot,
+      previousSnapshot: snapshotFrame?.previous ?? snapshot,
+      alpha: timing.alpha,
+      nowMilliseconds: timing.nowMilliseconds,
+      controlMode: this.#runtimeComposition.controlMode,
+      hasActiveInput: Boolean(
+        this.#inputAdapter.activeCharge
+        || this.#inputAdapter.pressedCodes?.length,
+      ),
+    });
+    return this.#presentationComposition.render(frame);
   }
 }

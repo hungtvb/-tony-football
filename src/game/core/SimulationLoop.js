@@ -1,5 +1,11 @@
 import { FixedClock } from "./FixedClock.js";
 
+function assertAfterRenderListener(listener) {
+  if (typeof listener !== "function") {
+    throw new TypeError("after-render listener must be a function");
+  }
+}
+
 export function createSimulationLoop({
   update,
   render,
@@ -12,6 +18,7 @@ export function createSimulationLoop({
   if (typeof requestFrame !== "function") throw new TypeError("requestFrame must be a function");
 
   const clock = new FixedClock(clockOptions);
+  const afterRenderListeners = new Set();
   let frameHandle = null;
   let running = false;
 
@@ -20,6 +27,14 @@ export function createSimulationLoop({
 
     const result = clock.advance(nowMilliseconds / 1000, update);
     render(result.alpha, nowMilliseconds, result);
+    const renderFrame = Object.freeze({
+      alpha: result.alpha,
+      nowMilliseconds,
+      steps: result.steps,
+      frameDeltaSeconds: result.frameDeltaSeconds,
+      droppedSeconds: result.droppedSeconds,
+    });
+    for (const listener of afterRenderListeners) listener(renderFrame);
     frameHandle = requestFrame(frame);
   }
 
@@ -41,6 +56,12 @@ export function createSimulationLoop({
 
     reset(nowMilliseconds = null) {
       clock.reset(nowMilliseconds === null ? null : nowMilliseconds / 1000);
+    },
+
+    subscribeAfterRender(listener) {
+      assertAfterRenderListener(listener);
+      afterRenderListeners.add(listener);
+      return () => afterRenderListeners.delete(listener);
     },
 
     get running() {
