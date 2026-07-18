@@ -1,0 +1,10 @@
+name: Safe comments
+on: [pull_request]
+permissions:
+  contents: read
+# git push; contents: write; git commit; PATCH_BASE64
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm test

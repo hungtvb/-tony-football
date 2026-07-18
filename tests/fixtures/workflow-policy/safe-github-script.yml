@@ -1,0 +1,12 @@
+name: API read
+on: [workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.get({ owner: context.repo.owner, repo: context.repo.repo })

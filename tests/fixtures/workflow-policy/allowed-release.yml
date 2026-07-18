@@ -1,0 +1,12 @@
+name: Release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release create v1 asset.zip

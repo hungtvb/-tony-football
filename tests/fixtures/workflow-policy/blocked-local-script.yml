@@ -1,0 +1,11 @@
+name: Local script release
+on: [workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - run: node scripts/publish.mjs
