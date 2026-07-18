@@ -4,7 +4,7 @@
 
 Gameplay and AI authority have been extracted from `game.js` into the deterministic `MatchEngine` under `src/game/engine/`. The deployed browser consumes immutable snapshots and ordered events; temporary objects in `game.js` are outward-only presentation mirrors and cannot progress gameplay.
 
-The remaining constraint is presentation ownership. Three.js/WebGL, Canvas fallback, model animation, DOM/HUD binding, settings, audio, particles, trails and several overlay callbacks are still co-located in `game.js`. Pure snapshot/event projections already exist for render state, camera, replay, HUD, radar and feedback. `BrowserPresentationComposition` is the lifecycle owner for presentation adapters, allowing each remaining implementation to be extracted behind explicit attach/render/reset/teardown contracts without re-entering engine authority.
+The remaining constraint is presentation ownership. Three.js/WebGL, Canvas fallback, model animation, settings, audio, particles, trails and several overlay callbacks are still co-located in `game.js`. DOM/HUD projection and radar drawing now run behind `DomHudAdapter` and `RadarSnapshotAdapter`; their remaining legacy callbacks in `game.js` are temporary parity bridges rather than runtime owners. Pure snapshot/event projections already exist for render state, camera, replay, HUD, radar and feedback. `BrowserPresentationComposition` is the lifecycle owner for presentation adapters, allowing each remaining implementation to be extracted behind explicit attach/render/reset/teardown contracts without re-entering engine authority.
 
 Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
 
@@ -37,6 +37,7 @@ Core and engine modules have no DOM, Three.js, Canvas or Web Audio dependency. B
 - The engine owns players, ball, score, statistics, match lifecycle, and gameplay event ordering.
 - The engine publishes read-only snapshots for rendering and typed events for presentation feedback.
 - `BrowserPresentationComposition` owns presentation adapter creation, startup rollback, reset and reverse-order teardown.
+- `DomHudAdapter` and `RadarSnapshotAdapter` own snapshot-driven browser HUD and radar projection; the radar adapter claims its Canvas context so the temporary legacy call cannot draw twice.
 - Three.js, Canvas fallback, radar, HUD, audio, and presentation flows may consume snapshots and events but may not mutate engine state.
 - Render interpolation may blend previous and current snapshots without changing authoritative positions.
 - Start, restart, and kickoff resets are snapshot discontinuities; their first render frame uses `previous === current` and never blends entities across matches or kickoffs.

@@ -4,6 +4,7 @@ import { BrowserApplicationAdapter } from "./BrowserApplicationAdapter.js";
 import { BrowserInputAdapter } from "../input/BrowserInputAdapter.js";
 import { BrowserPresentationComposition } from "../presentation/BrowserPresentationComposition.js";
 import { createDomHudAdapter } from "../presentation/DomHudAdapter.js";
+import { createRadarSnapshotAdapter } from "../presentation/RadarSnapshotAdapter.js";
 
 function assertSimulationLoop(loop) {
   if (
@@ -83,6 +84,7 @@ export class BrowserBootstrapComposition {
     this.#presentationComposition = presentationComposition ?? new BrowserPresentationComposition({
       adapterFactories: [
         ({ document: browserDocument }) => createDomHudAdapter({ document: browserDocument }),
+        ({ document: browserDocument }) => createRadarSnapshotAdapter({ document: browserDocument }),
         () => createPresentationFeedback(),
       ],
     });

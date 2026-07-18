@@ -122,7 +122,7 @@ export function createDomHudAdapter({
     if (elements.controlsMode?.dataset?.mode === mode) return;
 
     if (elements.controlsMode?.dataset) elements.controlsMode.dataset.mode = mode;
-    setText(elements.controlsMode, mode === "attack" ? "TẤN CÔNG" : "PHÓNG THỦ");
+    setText(elements.controlsMode, mode === "attack" ? "TẤN CÔNG" : "PHÒNG THỦ");
     setClass(elements.controlsCard, "defense", mode === "defense");
     for (const label of elements.controlLabels) {
       const value = label.dataset?.[mode];
