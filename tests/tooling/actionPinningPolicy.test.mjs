@@ -53,6 +53,11 @@ test("checkout rejects persist-credentials true", () => {
   assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
 });
 
+test("checkout rejects duplicate persist-credentials declarations", () => {
+  const source = `jobs:\n  test:\n    steps:\n      - name: Checkout\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2\n        with:\n          persist-credentials: false\n          persist-credentials: true`;
+  assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
+});
+
 test("checkout ignores similarly named values outside its with block", () => {
   const source = `jobs:\n  test:\n    steps:\n      - name: Checkout\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2\n        env:\n          persist-credentials: false`;
   assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
