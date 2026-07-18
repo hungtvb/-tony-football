@@ -2,18 +2,18 @@
 
 GitHub Actions validates and deploys reviewed content. It must not become an alternate source-publication channel or mutate the exact branch head under review.
 
-`scripts/check-workflow-policy.mjs` scans every `.yml` and `.yaml` file directly under `.github/workflows`. It runs through `test:tooling` and therefore the required browser-free CI lane.
+`scripts/check-workflow-policy.mjs` recursively scans every `.yml` and `.yaml` file under `.github/workflows`. It runs through `test:tooling` and therefore the required browser-free CI lane.
 
 ## Default boundary
 
-Workflows are read-only by default. The structural extractor evaluates top-level triggers, workflow-level and job-level permissions, step `run` and `uses` values, and executable `actions/github-script` scripts. Comment-only lines are ignored.
+Workflows are read-only by default. The structural extractor evaluates top-level triggers, workflow-level and job-level permissions, flow-style permission maps, step `run` and `uses` values, and executable `actions/github-script` scripts. YAML comments and shell comment-only content are ignored.
 
 The scanner rejects:
 
-- `contents: write` without an exact exception and all `permissions: write-all` grants;
-- direct `git push`, workflow-created commits and auto-commit actions;
+- workflow-level repository write permission, unallowlisted job-level `contents: write`, and all `permissions: write-all` grants;
+- direct Git publication commands, including option-prefixed commands, workflow-created commits and auto-commit/self-push actions;
 - source patch application and encoded patch transport;
-- GitHub/Octokit file, blob, tree, commit and ref mutations;
+- GitHub/Octokit file, blob, tree, commit and ref mutations, including ref creation;
 - rewrite-and-publish behavior and workflow/transport self-deletion.
 
 Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
@@ -34,7 +34,9 @@ Write exceptions live only in `.github/workflow-policy-allowlist.json` and bind 
 }
 ```
 
-The path and job are exact; globs and workflow-wide grants are invalid. The workflow trigger set must exactly equal `allowedTriggers`, so adding `pull_request_target`, `push`, or any other event requires review. Only `contents:write` can be excepted. Missing, duplicate, stale, unused, job-mismatched or trigger-broadened entries fail.
+The path and concrete job are exact; globs and workflow-wide grants are invalid. The workflow trigger set must exactly equal `allowedTriggers`, so adding any event requires review. Quoted and unquoted inline trigger forms are normalized before comparison. Only `contents:write` can be excepted. Missing, duplicate, stale, unused, job-mismatched or trigger-broadened entries fail.
+
+`pull_request`, `pull_request_target`, `push`, and `workflow_run` are high-risk write triggers. An exception that intentionally uses one of them must also set `"allowHighRiskTriggers": true`; otherwise the scanner emits `high-risk-write-trigger`. This flag records acknowledgement only. It never suppresses source-publication, patch-transport, API-mutation, or self-delete findings.
 
 An exception requires a dedicated tracking issue, named owner and architecture/security review of the exact workflow, job, triggers, permission, external actions and write operation. It never permits source, test, documentation, script or workflow patch transport.
 
@@ -46,4 +48,11 @@ Removing a prohibited transport workflow in a later commit does not sanitize bra
 
 ## Fixture matrix
 
-The tooling suite proves read-only `.yml` and `.yaml` workflows pass; banned words in comments do not trigger; workflow/job write grants, `write-all`, `pull_request_target` broadening, direct push/commit, auto-commit actions, encoded patch application, Octokit mutation and self-delete fail; read-only GitHub Script and ordinary artifact decoding pass; and exact path/job exceptions cannot suppress transport findings.
+The tooling suite proves:
+
+- the current read-only workflow tree, scheduled browser evidence, `.yml`, `.yaml`, and nested workflow paths pass recursive discovery;
+- banned terms in block and inline comments do not trigger;
+- workflow/job write grants, flow-style permission maps, `write-all`, and high-risk trigger broadening fail unless the exact reviewed exception applies;
+- direct publication, option-prefixed Git commands, auto-commit/self-push actions, encoded patch application, Octokit ref mutation and self-delete fail;
+- read-only GitHub Script and ordinary artifact decoding pass;
+- exact path/job exceptions cannot suppress transport findings.
