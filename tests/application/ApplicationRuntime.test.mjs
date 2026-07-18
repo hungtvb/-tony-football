@@ -5,10 +5,24 @@ import { ApplicationActionType } from "../../src/game/application/ApplicationAct
 import { ApplicationRuntime } from "../../src/game/application/ApplicationRuntime.js";
 import { GameCommandSource, GameCommandType } from "../../src/game/engine/GameCommands.js";
 
+function createRuntimeComposition({ commands = [], getState = () => "menu" } = {}) {
+  return {
+    authoritative: true,
+    get state() {
+      return getState();
+    },
+    dispatch: (command) => {
+      commands.push(command);
+      return true;
+    },
+    reset: () => true,
+  };
+}
+
 test("application runtime translates lifecycle requests into immutable engine commands", () => {
   const commands = [];
   const runtime = new ApplicationRuntime({
-    dispatchGameCommand: (command) => commands.push(command)
+    runtimeComposition: createRuntimeComposition({ commands }),
   });
   runtime.request(ApplicationActionType.START_MATCH);
   runtime.request(ApplicationActionType.RESTART_MATCH);
@@ -22,12 +36,11 @@ test("application runtime translates lifecycle requests into immutable engine co
   assert.ok(commands.every(Object.isFrozen));
 });
 
-test("toggle pause resolves from match state without presentation inference", () => {
+test("toggle pause resolves from live match state without presentation inference", () => {
   const commands = [];
   let state = "playing";
   const runtime = new ApplicationRuntime({
-    dispatchGameCommand: (command) => commands.push(command),
-    getMatchState: () => state
+    runtimeComposition: createRuntimeComposition({ commands, getState: () => state }),
   });
   runtime.request(ApplicationActionType.TOGGLE_PAUSE);
   state = "paused";
@@ -44,7 +57,7 @@ test("toggle pause resolves from match state without presentation inference", ()
 test("navigation remains an explicit application action outside MatchEngine", () => {
   const navigation = [];
   const runtime = new ApplicationRuntime({
-    dispatchGameCommand: () => assert.fail("navigation must not enter MatchEngine"),
+    runtimeComposition: createRuntimeComposition(),
     onNavigation: (action) => navigation.push(action)
   });
   runtime.request(ApplicationActionType.OPEN_MATCH_SETUP);
