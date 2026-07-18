@@ -62,8 +62,8 @@ test("Canvas fallback boots engine snapshot-backed HUD without runtime errors", 
   const diagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(diagnostics.renderer).toBe("canvas");
   expect(diagnostics.runtimeMode).toBe("engine");
-  expect(diagnostics.engineSnapshot.selectedPlayerId).toMatch(/^home-/);
-  expect(diagnostics.renderState.selectedPlayerId).toBe(diagnostics.engineSnapshot.selectedPlayerId);
+  expect(diagnostics.engineSnapshot.match.selectedPlayerId).toMatch(/^home-/);
+  expect(diagnostics.renderState.selectedPlayerId).toBe(diagnostics.engineSnapshot.match.selectedPlayerId);
   await expect(page.locator("#radarCanvas")).toBeVisible();
   await expect(page.locator("#staminaText")).toHaveText(/^\d+%$/);
   expect(runtimeErrors).toEqual([]);
