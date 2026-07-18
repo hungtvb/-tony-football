@@ -34,7 +34,7 @@ test("write-all is always blocked", () => {
 
 test("transport fixture reports every source-publication boundary", async () => {
   const result = inspectWorkflow({ workflowPath: ".github/workflows/patch.yml", source: await fixture("blocked-patch-transport.yml") });
-  assert.deepEqual(codes(result), ["direct-git-push", "encoded-patch-transport", "rewrite-and-publish", "source-patch-application", "unallowlisted-contents-write", "workflow-self-commit", "workflow-self-delete"]);
+  assert.deepEqual(codes(result), ["direct-git-push", "encoded-patch-transport", "rewrite-and-publish", "source-patch-application", "unallowlisted-contents-write", "workflow-level-contents-write", "workflow-self-commit", "workflow-self-delete"]);
   assert.ok(result.violations.every(({ path, jobId, ruleId, reason }) => path && jobId && ruleId && reason));
 });
 
