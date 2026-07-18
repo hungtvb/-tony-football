@@ -8,6 +8,11 @@ import {
   ACTION_PIN_RULE_ID,
   ACTION_VERSION_RULE_ID,
   CHECKOUT_CREDENTIAL_RULE_ID,
+  LOCAL_ACTION_CYCLE_RULE_ID,
+  LOCAL_ACTION_MANIFEST_RULE_ID,
+  LOCAL_ACTION_PATH_RULE_ID,
+  LOCAL_ACTION_SCAN_RULE_ID,
+  LOCAL_DOCKER_ACTION_RULE_ID,
   inspectActionPinningPolicy,
   scanActionPinningPolicy,
 } from "../../scripts/check-action-pinning-policy.mjs";
@@ -17,6 +22,22 @@ const CHECKOUT_SHA = "11bd71901bbe5b1630ceea73d27597364c9af683";
 const DOCKER_DIGEST = "a".repeat(64);
 const inspect = (source) => inspectActionPinningPolicy({ workflowPath: ".github/workflows/ci.yml", source: `${source}\n` });
 const codes = (source) => inspect(source).map(({ code }) => code);
+
+async function createRepository(t) {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "tony-action-pins-"));
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  await mkdir(path.join(rootDir, ".github", "workflows"), { recursive: true });
+  return rootDir;
+}
+
+async function writeRepositoryFile(rootDir, relativePath, content) {
+  const absolutePath = path.join(rootDir, relativePath);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, content, "utf8");
+}
+
+const workflowUsing = (action) => `jobs:\n  test:\n    steps:\n      - uses: ${action}\n`;
+const compositeUsing = (action) => `name: Local action\ndescription: Test local dependency closure\nruns:\n  using: composite\n  steps:\n    - uses: ${action}\n`;
 
 test("floating tag refs are rejected", () => {
   assert.deepEqual(codes("jobs:\n  test:\n    steps:\n      - uses: actions/setup-node@v4"), [ACTION_PIN_RULE_ID]);
@@ -93,8 +114,8 @@ test("nested checkout input cannot impersonate direct persist-credentials", () =
   assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
 });
 
-test("local actions do not require third-party pins", () => {
-  assert.deepEqual(inspect("jobs:\n  test:\n    steps:\n      - uses: ./.github/actions/test"), []);
+test("isolated inspection fails closed on unresolved local actions", () => {
+  assert.deepEqual(codes("jobs:\n  test:\n    steps:\n      - uses: ./.github/actions/test"), [LOCAL_ACTION_SCAN_RULE_ID]);
 });
 
 test("container actions require immutable digests", () => {
@@ -107,15 +128,92 @@ test("pinned container actions require readable version comments", () => {
 });
 
 test("recursive discovery scans nested yaml workflows", async (t) => {
-  const rootDir = await mkdtemp(path.join(tmpdir(), "tony-action-pins-"));
-  t.after(() => rm(rootDir, { recursive: true, force: true }));
-  const workflowDir = path.join(rootDir, ".github", "workflows", "nested");
-  await mkdir(workflowDir, { recursive: true });
-  await writeFile(path.join(workflowDir, "branch-ref.yaml"), "jobs:\n  test:\n    steps:\n      - uses: actions/setup-node@main\n", "utf8");
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/nested/branch-ref.yaml", workflowUsing("actions/setup-node@main"));
 
   const result = await scanActionPinningPolicy({ rootDir });
   assert.equal(result.workflowCount, 1);
   assert.equal(result.violations.length, 1);
   assert.equal(result.violations[0].path, ".github/workflows/nested/branch-ref.yaml");
   assert.equal(result.violations[0].code, ACTION_PIN_RULE_ID);
+});
+
+test("local composite actions expose floating third-party dependencies", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/build"));
+  await writeRepositoryFile(rootDir, ".github/actions/build/action.yml", compositeUsing("vendor/action@main"));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.equal(result.localActionCount, 1);
+  assert.deepEqual(result.violations.map(({ code }) => code), [ACTION_PIN_RULE_ID]);
+  assert.equal(result.violations[0].path, ".github/actions/build/action.yml");
+});
+
+test("nested local action chains are scanned transitively", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/a"));
+  await writeRepositoryFile(rootDir, ".github/actions/a/action.yml", compositeUsing("./.github/actions/b"));
+  await writeRepositoryFile(rootDir, ".github/actions/b/action.yaml", compositeUsing("vendor/action@v2"));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.equal(result.localActionCount, 2);
+  assert.deepEqual(result.violations.map(({ code }) => code), [ACTION_PIN_RULE_ID]);
+  assert.equal(result.violations[0].path, ".github/actions/b/action.yaml");
+});
+
+test("fully pinned local composite actions pass dependency closure", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/build"));
+  await writeRepositoryFile(rootDir, ".github/actions/build/action.yml", compositeUsing(`actions/setup-node@${SETUP_SHA} # v4.4.0`));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.equal(result.workflowCount, 1);
+  assert.equal(result.localActionCount, 1);
+  assert.deepEqual(result.violations, []);
+});
+
+test("local action dependency cycles fail closed", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/a"));
+  await writeRepositoryFile(rootDir, ".github/actions/a/action.yml", compositeUsing("./.github/actions/b"));
+  await writeRepositoryFile(rootDir, ".github/actions/b/action.yml", compositeUsing("./.github/actions/a"));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_CYCLE_RULE_ID]);
+  assert.equal(result.violations[0].path, ".github/actions/b/action.yml");
+});
+
+test("local action paths cannot escape the repository", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./../outside"));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_PATH_RULE_ID]);
+});
+
+test("missing local action manifests fail closed", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/missing"));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_MANIFEST_RULE_ID]);
+});
+
+test("ambiguous local action manifests fail closed", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/ambiguous"));
+  await writeRepositoryFile(rootDir, ".github/actions/ambiguous/action.yml", compositeUsing(`actions/setup-node@${SETUP_SHA} # v4.4.0`));
+  await writeRepositoryFile(rootDir, ".github/actions/ambiguous/action.yaml", compositeUsing(`actions/setup-node@${SETUP_SHA} # v4.4.0`));
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_MANIFEST_RULE_ID]);
+});
+
+test("local Docker actions fail closed until Dockerfile dependencies are scanned", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/docker"));
+  await writeRepositoryFile(rootDir, ".github/actions/docker/action.yml", "name: Docker action\ndescription: Local Docker action\nruns:\n  using: docker\n  image: Dockerfile\n");
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_DOCKER_ACTION_RULE_ID]);
 });
