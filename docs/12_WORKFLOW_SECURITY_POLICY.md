@@ -19,6 +19,8 @@ The scanner rejects:
 - rewrite-and-publish behavior and workflow/transport self-deletion;
 - repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job.
 - `actions/github-script` in any job whose effective permission includes `contents: write`.
+- third-party actions that are not pinned to a full 40-character commit SHA or whose pin lacks a readable semantic-version comment;
+- checkout steps that do not explicitly set `persist-credentials: false`.
 
 Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
 
@@ -50,6 +52,10 @@ Release/deployment writers should prefer manual dispatch, protected environments
 
 Removing a prohibited transport workflow in a later commit does not sanitize branch history. Before merge, either cleanly rewrite from an approved baseline or squash only the independently reviewed final tree. Any new exact head invalidates previous Reviewer and SA clearance.
 
+## Action update lifecycle
+
+Dependabot checks the `github-actions` ecosystem weekly and opens ordinary pull requests. Each action update must preserve the full commit SHA plus version comment, pass the required workflow-policy and CI gates, and receive normal independent review before merge. Scheduled updates never mutate a delivery branch directly and never bypass the TON-16 transport boundary.
+
 ## Fixture matrix
 
 The tooling suite proves:
@@ -63,3 +69,4 @@ The tooling suite proves:
 - flow-style job/step/executable structures fail closed before the line extractor can miss them;
 - an allowlisted write job that invokes a repository-local publishing script fails with `write-job-local-executable`;
 - a job with direct or inherited `contents: write` cannot use `actions/github-script`, while an explicit job-level read-only override remains allowed.
+- floating action tags, incomplete pins, missing version comments and checkout credential persistence fail the required tooling gate.
