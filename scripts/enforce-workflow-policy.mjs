@@ -9,11 +9,13 @@ const WORKFLOW_EXTENSION = /\.ya?ml$/i;
 export const YAML_ALIAS_RULE_ID = "yaml-anchor-alias-unsupported";
 export const YAML_MERGE_RULE_ID = "yaml-merge-key-unsupported";
 export const YAML_TAG_RULE_ID = "yaml-explicit-tag-unsupported";
+export const YAML_FLOW_RULE_ID = "yaml-flow-policy-structure-unsupported";
 export const QUOTED_KEY_RULE_ID = "yaml-quoted-structural-key-unsupported";
 export const WRITE_LOCAL_RULE_ID = "write-job-local-executable";
 const YAML_ALIAS_REASON = "YAML anchors and aliases are unsupported; expand workflow values explicitly";
 const YAML_MERGE_REASON = "YAML merge keys are unsupported; expand inherited workflow mappings explicitly";
 const YAML_TAG_REASON = "explicit YAML tags are unsupported in workflow policy inputs";
+const YAML_FLOW_REASON = "flow-style jobs, job mappings, steps, and executable keys are unsupported; expand policy structure explicitly";
 const QUOTED_KEY_REASON = "quoted policy-structural keys unsupported by the core extractor must be expanded explicitly";
 const WRITE_LOCAL_REASON = "a contents:write job may not invoke repository-local scripts, package scripts, executables, or composite actions";
 
@@ -145,6 +147,40 @@ export function findYamlExplicitTags(source) {
   return findings;
 }
 
+export function findUnsupportedFlowStylePolicy(source) {
+  const findings = [];
+  const lines = activeLines(source);
+  for (const item of structuralLines(source)) {
+    if (/^\s*jobs\s*:\s*[\[{]/.test(item.structuralLine)) {
+      findings.push({ line: item.index, name: "jobs" });
+      continue;
+    }
+    if (/^\s*steps\s*:\s*\[/.test(item.structuralLine)) {
+      findings.push({ line: item.index, name: "steps" });
+      continue;
+    }
+    const executable = item.structuralLine.match(/[\[{,]\s*(run|uses|script)\s*:/);
+    if (executable) findings.push({ line: item.index, name: executable[1] });
+  }
+
+  const jobsIndex = lines.findIndex(({ line }) => /^\s*jobs\s*:\s*$/.test(line));
+  if (jobsIndex !== -1) {
+    const jobsBlock = collectBlock(lines, jobsIndex, indentation(lines[jobsIndex].line));
+    const mappingLines = jobsBlock.filter(({ line }) => /^\s*[A-Za-z0-9_-]+\s*:/.test(line));
+    const jobIndent = mappingLines.length > 0
+      ? Math.min(...mappingLines.map(({ line }) => indentation(line)))
+      : null;
+    if (jobIndent !== null) {
+      for (const item of mappingLines) {
+        if (indentation(item.line) === jobIndent && /^\s*[A-Za-z0-9_-]+\s*:\s*\{/.test(item.line)) {
+          findings.push({ line: item.index, name: "job" });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 export function findQuotedStructuralKeys(source) {
   const findings = [];
   const lines = activeLines(source);
@@ -215,7 +251,7 @@ function jobRequestsContentsWrite(lines) {
 function executableValues(lines) {
   const values = [];
   for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].line.match(/^\s*(?:-\s*)?(run|uses)\s*:\s*(.*?)\s*$/);
+    const match = lines[index].line.match(/^\s*(?:-\s*)?(run|uses|script)\s*:\s*(.*?)\s*$/);
     if (!match) continue;
     let value = match[2].trim();
     if (/^[|>][-+]?\s*$/.test(value)) {
@@ -297,6 +333,10 @@ function tagViolation(workflowPath, finding) {
   return violation(workflowPath, YAML_TAG_RULE_ID, `${YAML_TAG_REASON}: ${finding.name}`, finding.line);
 }
 
+function flowViolation(workflowPath, finding) {
+  return violation(workflowPath, YAML_FLOW_RULE_ID, `${YAML_FLOW_REASON}: ${finding.name}`, finding.line);
+}
+
 function quotedKeyViolation(workflowPath, finding) {
   return violation(workflowPath, QUOTED_KEY_RULE_ID, `${QUOTED_KEY_REASON}: ${finding.name}`, finding.line);
 }
@@ -309,9 +349,10 @@ export function inspectWorkflowWithYamlSafety({ workflowPath, source, allowlist 
   const aliases = findYamlAnchorAliases(source);
   const mergeKeys = aliases.length === 0 ? findYamlMergeKeys(source) : [];
   const tags = findYamlExplicitTags(source);
+  const flowStructures = findUnsupportedFlowStylePolicy(source);
   const quotedKeys = findQuotedStructuralKeys(source);
   const localExecutables = findWriteJobLocalExecutables(source);
-  if (aliases.length > 0 || mergeKeys.length > 0 || tags.length > 0 || quotedKeys.length > 0 || localExecutables.length > 0) {
+  if (aliases.length > 0 || mergeKeys.length > 0 || tags.length > 0 || flowStructures.length > 0 || quotedKeys.length > 0 || localExecutables.length > 0) {
     return {
       path: normalizeRepositoryPath(workflowPath),
       triggers: [],
@@ -319,6 +360,7 @@ export function inspectWorkflowWithYamlSafety({ workflowPath, source, allowlist 
         ...aliases.map((finding) => aliasViolation(workflowPath, finding)),
         ...mergeKeys.map((finding) => mergeViolation(workflowPath, finding)),
         ...tags.map((finding) => tagViolation(workflowPath, finding)),
+        ...flowStructures.map((finding) => flowViolation(workflowPath, finding)),
         ...quotedKeys.map((finding) => quotedKeyViolation(workflowPath, finding)),
         ...localExecutables.map((finding) => localExecutableViolation(workflowPath, finding)),
       ],

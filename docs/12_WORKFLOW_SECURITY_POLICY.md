@@ -6,7 +6,9 @@ GitHub Actions validates and deploys reviewed content. It must not become an alt
 
 ## Default boundary
 
-Workflows are read-only by default. The structural extractor evaluates top-level triggers, workflow-level and job-level permissions, flow-style permission maps, step `run` and `uses` values, and executable `actions/github-script` scripts. YAML comments and shell comment-only content are ignored.
+Workflows are read-only by default. The structural extractor evaluates top-level triggers, workflow-level and job-level permissions, flow-style permission maps, block-style jobs and steps, step `run` and `uses` values, and executable `actions/github-script` scripts. YAML comments and shell comment-only content are ignored.
+
+Because the validator is deliberately dependency-free, unsupported flow-style job mappings, step sequences and executable keys fail closed with `yaml-flow-policy-structure-unsupported`. Inline permission maps remain supported. A write-authorized job's `actions/github-script` `with.script` body is inspected and may not load repository-local modules through `require`, dynamic `import`, or file paths.
 
 The scanner rejects:
 
@@ -14,7 +16,7 @@ The scanner rejects:
 - direct Git publication commands, including option-prefixed commands, workflow-created commits and auto-commit/self-push actions;
 - source patch application and encoded patch transport;
 - GitHub/Octokit file, blob, tree, commit and ref mutations, including ref creation;
-- rewrite-and-publish behavior and workflow/transport self-deletion.
+- rewrite-and-publish behavior and workflow/transport self-deletion;
 - repository-local scripts, npm scripts, executables, or composite actions invoked from a `contents: write` job.
 
 Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
@@ -56,5 +58,6 @@ The tooling suite proves:
 - workflow/job write grants, flow-style permission maps, `write-all`, and high-risk trigger broadening fail unless the exact reviewed exception applies;
 - direct publication, option-prefixed Git commands, auto-commit/self-push actions, encoded patch application, Octokit ref mutation and self-delete fail;
 - read-only GitHub Script and ordinary artifact decoding pass;
-- exact path/job exceptions cannot suppress transport findings.
-- an allowlisted write job that invokes a repository-local publishing script fails with `write-job-local-executable`.
+- exact path/job exceptions cannot suppress transport findings;
+- flow-style job/step/executable structures fail closed before the line extractor can miss them;
+- an allowlisted write job that invokes a repository-local publishing script or loads one from GitHub Script fails with `write-job-local-executable`.

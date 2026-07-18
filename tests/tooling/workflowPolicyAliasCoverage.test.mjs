@@ -6,6 +6,7 @@ import {
   inspectWorkflowWithYamlSafety,
   WRITE_LOCAL_RULE_ID,
   YAML_ALIAS_RULE_ID,
+  YAML_FLOW_RULE_ID,
   YAML_MERGE_RULE_ID,
   YAML_TAG_RULE_ID,
 } from "../../scripts/enforce-workflow-policy.mjs";
@@ -180,6 +181,55 @@ test("write jobs reject all repository-local command and action variants", () =>
     inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/local-action.yml", source: actionSource }).violations.map(({ code }) => code),
     [WRITE_LOCAL_RULE_ID],
   );
+});
+
+test("flow-style jobs and executable structures fail closed", () => {
+  const sources = [
+    yaml(
+      "on: [workflow_dispatch]",
+      'jobs: { publish: { permissions: { contents: write }, steps: [ { run: "git push origin HEAD:main" } ] } }',
+    ),
+    yaml(
+      "on: [workflow_dispatch]",
+      "jobs:",
+      '  publish: { permissions: { contents: write }, steps: [ { run: "git push origin HEAD:main" } ] }',
+    ),
+    yaml(
+      "on: [workflow_dispatch]",
+      "jobs:",
+      "  publish:",
+      "    permissions: { contents: write }",
+      "    runs-on: ubuntu-latest",
+      '    steps: [ { run: "git push origin HEAD:main" } ]',
+    ),
+  ];
+  for (const source of sources) {
+    const result = inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/flow.yml", source });
+    assert.ok(result.violations.some(({ code }) => code === YAML_FLOW_RULE_ID));
+    assert.deepEqual(result.triggers, []);
+  }
+});
+
+test("write job GitHub Script cannot load repository-local modules", () => {
+  const variants = [
+    "require('./publish.cjs')",
+    "await import('../scripts/publish.mjs')",
+  ];
+  for (const script of variants) {
+    const source = yaml(
+      "on: [workflow_dispatch]",
+      "jobs:",
+      "  publish:",
+      "    permissions: { contents: write }",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/github-script@v7",
+      "        with:",
+      `          script: ${script}`,
+    );
+    const result = inspectWorkflowWithYamlSafety({ workflowPath: ".github/workflows/github-script.yml", source });
+    assert.deepEqual(result.violations.map(({ code }) => code), [WRITE_LOCAL_RULE_ID], script);
+  }
 });
 
 test("local execution remains allowed in a separate read-only job", () => {
