@@ -142,18 +142,15 @@ test("browser application navigation uses the bootstrap-owned reset boundary", (
   }
 });
 
-test("browser bootstrap preserves the explicit compatibility command fallback", () => {
+test("browser bootstrap cannot progress lifecycle through compatibility gameplay", () => {
   const { composition, compatibilityCommands } = createComposition({ authoritative: false });
   composition.start();
 
-  composition.request(ApplicationActionType.START_MATCH);
-  composition.pause();
-  composition.resume();
+  assert.throws(
+    () => composition.request(ApplicationActionType.START_MATCH),
+    /require live engine authority/,
+  );
+  assert.deepEqual(compatibilityCommands, []);
 
-  assert.deepEqual(compatibilityCommands.slice(0, 3).map((command) => command.type), [
-    GameCommandType.START_MATCH,
-    GameCommandType.PAUSE_MATCH,
-    GameCommandType.RESUME_MATCH,
-  ]);
   composition.teardown();
 });
