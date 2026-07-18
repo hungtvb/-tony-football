@@ -18,21 +18,30 @@ export class ApplicationRuntime {
   #onNavigation;
   #getMatchState;
   #runtimeComposition;
+  #resetRuntime;
   #sequence = 0;
 
   constructor({
     dispatchGameCommand,
     onNavigation = () => {},
     getMatchState = () => "menu",
-    runtimeComposition = browserRuntimeComposition
+    runtimeComposition = browserRuntimeComposition,
+    resetRuntime = null,
   }) {
     if (typeof dispatchGameCommand !== "function") {
       throw new TypeError("ApplicationRuntime requires dispatchGameCommand");
+    }
+    if (resetRuntime !== null && typeof resetRuntime !== "function") {
+      throw new TypeError("resetRuntime must be a function");
     }
     this.#dispatchGameCommand = dispatchGameCommand;
     this.#onNavigation = onNavigation;
     this.#getMatchState = getMatchState;
     this.#runtimeComposition = runtimeComposition;
+    this.#resetRuntime = resetRuntime ?? (() => {
+      if (!this.#runtimeComposition.authoritative) return false;
+      return this.#runtimeComposition.reset();
+    });
   }
 
   request(type, payload = {}) {
@@ -61,7 +70,7 @@ export class ApplicationRuntime {
       return action;
     }
 
-    if (this.#runtimeComposition.authoritative) this.#runtimeComposition.reset();
+    this.#resetRuntime(action);
     this.#onNavigation(action);
     return action;
   }

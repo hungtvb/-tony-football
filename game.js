@@ -28,10 +28,9 @@ import { canvasHeading, chooseSprintTransitionResponse, chooseTurnResponse, damp
 import { GameCommandType } from "./src/game/engine/GameCommands.js";
 import { GameEventType, createGameEvent } from "./src/game/engine/GameEvents.js";
 import { FO4_CONTROLS } from "./src/game/input/FO4Controls.js";
-import { BrowserInputAdapter } from "./src/game/input/BrowserInputAdapter.js";
 import { ApplicationActionType } from "./src/game/application/ApplicationActions.js";
-import { ApplicationRuntime } from "./src/game/application/ApplicationRuntime.js";
-import { BrowserApplicationAdapter } from "./src/game/application/BrowserApplicationAdapter.js";
+import { BrowserBootstrapComposition } from "./src/game/application/BrowserBootstrapComposition.js";
+import { BrowserRuntimeComposition } from "./src/game/application/BrowserRuntimeComposition.js";
 import { publishGameEvent } from "./src/game/presentation/BrowserGameEventBridge.js";
 import { CompatibilitySnapshotAdapter, compatibilityPlayerId } from "./src/game/presentation/CompatibilitySnapshotAdapter.js";
 import { createHudSnapshotProjection } from "./src/game/presentation/HudSnapshotProjection.js";
@@ -148,7 +147,11 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   const isKeyPressed = (code) => browserInput?.isPressed(code) ?? false;
   let compatibilityTick = 0;
   let compatibilityEventSequence = 0;
-  const compatibilitySnapshots = new CompatibilitySnapshotAdapter();
+  const runtimeComposition = new BrowserRuntimeComposition();
+  const compatibilitySnapshots = new CompatibilitySnapshotAdapter({
+    mode: runtimeComposition.mode,
+    runtimeComposition,
+  });
   let lastSnapshotRenderState = null;
   let recordReplaySnapshot = false;
 
@@ -1292,18 +1295,20 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   function whistle(long = false) { if(!audioFeedback.canPlay("whistle",audioNow()))return;tone(1450,long?.5:.25,"sine",.03);tone(1750,long?.42:.18,"sine",.02,.08); }
   function goalSound() { if(!audioFeedback.canPlay("goal",audioNow()))return;[392,523,659,784].forEach((note,index)=>tone(note,.42,"square",.025,index*.09)); }
 
-  createBrowserPresentationFeedbackAdapter({
-    target: window,
-    onKick: kickSound,
-    onWhistle: whistle,
-    onGoal: goalSound,
-    onParticles: ({ x, y, particleCount = 0, particleColor = "#f4f7f5", particleEnergy = 1 }) => {
-      for (let index = 0; index < particleCount; index += 1) spawnParticle(x, y, particleColor, particleEnergy);
-    },
-    onContextParticles: ({ x, y, contextX = x, contextY = y, contextEnergy = 1 }) => {
-      spawnContextParticles(contextX, contextY, contextEnergy);
-    }
-  });
+  function createPresentationFeedback() {
+    return createBrowserPresentationFeedbackAdapter({
+      target: window,
+      onKick: kickSound,
+      onWhistle: whistle,
+      onGoal: goalSound,
+      onParticles: ({ x, y, particleCount = 0, particleColor = "#f4f7f5", particleEnergy = 1 }) => {
+        for (let index = 0; index < particleCount; index += 1) spawnParticle(x, y, particleColor, particleEnergy);
+      },
+      onContextParticles: ({ x, y, contextX = x, contextY = y, contextEnergy = 1 }) => {
+        spawnContextParticles(contextX, contextY, contextEnergy);
+      }
+    });
+  }
 
   function simulationStep(dt) {
     recordReplaySnapshot = false;
@@ -1366,31 +1371,23 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     }
   }
 
-  const applicationRuntime = new ApplicationRuntime({
-    dispatchGameCommand: applyCompatibilityCommand,
-    getMatchState: () => game.state,
+  const browserBootstrap = new BrowserBootstrapComposition({
+    target: window,
+    document,
+    runtimeComposition,
+    simulationLoop,
+    snapshotAdapter: compatibilitySnapshots,
+    dispatchCompatibilityCommand: applyCompatibilityCommand,
     onNavigation: (action) => {
       if (action.type === ApplicationActionType.OPEN_MATCH_SETUP) showMatchSetup({ reset: true });
       if (action.type === ApplicationActionType.OPEN_MAIN_MENU) showMainMenu();
-    }
-  });
-
-  browserInput = new BrowserInputAdapter({
-    target: window,
-    onCommand: applyCompatibilityCommand,
-    onApplicationRequest: (type) => applicationRuntime.request(type),
+    },
     onCameraCycle: cycleCamera,
-    getControlMode: controlMode,
-    getMatchState: () => game.state
+    getCompatibilityControlMode: controlMode,
+    getCompatibilityMatchState: () => game.state,
+    createPresentationFeedback,
   });
-  browserInput.attach();
-
-  const browserApplication = new BrowserApplicationAdapter({
-    target: window,
-    document,
-    runtime: applicationRuntime
-  });
-  browserApplication.attach();
+  browserInput = browserBootstrap.inputAdapter;
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll("[data-difficulty]").forEach((item) => item.classList.remove("active")); button.classList.add("active");
@@ -1460,7 +1457,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     }),
   };
 
-  init3D(); createTeams(); updateUI(captureCompatibilitySnapshot()); simulationLoop.start();
+  init3D(); createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();
   const debugScenario = new URLSearchParams(location.search).get("debugScenario");
   if (debugScenario) applyDebugScenario(debugScenario);
   window.__TONY_DEBUG__.ready = true;

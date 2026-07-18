@@ -46,7 +46,6 @@ export class BrowserApplicationAdapter {
     this.#runtime = runtime;
     this.#runtimeComposition = runtimeComposition;
     this.#buttonActions = buttonActions;
-    if (runtimeComposition.authoritative) runtimeComposition.attachTarget(target);
   }
 
   attach() {
