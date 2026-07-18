@@ -17,6 +17,7 @@ export const LOCAL_ACTION_PATH_RULE_ID = "local-action-path-invalid";
 export const LOCAL_ACTION_MANIFEST_RULE_ID = "local-action-manifest-invalid";
 export const LOCAL_ACTION_CYCLE_RULE_ID = "local-action-cycle";
 export const LOCAL_DOCKER_ACTION_RULE_ID = "local-docker-action-unsupported";
+export const LOCAL_ACTION_YAML_STRUCTURE_RULE_ID = "local-action-yaml-structure-unsupported";
 
 function normalizeRepositoryPath(value) {
   return String(value).replaceAll("\\", "/").replace(/^\.\//, "");
@@ -46,6 +47,73 @@ function stripInlineComment(line) {
     escaped = false;
   }
   return line;
+}
+
+function maskQuotedScalarsAndComment(line) {
+  let masked = "";
+  let singleQuoted = false;
+  let doubleQuoted = false;
+  let escaped = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (!singleQuoted && !doubleQuoted && character === "#" && (index === 0 || /\s/.test(line[index - 1]))) {
+      return masked;
+    }
+    if (doubleQuoted && character === "\\" && !escaped) {
+      masked += " ";
+      escaped = true;
+      continue;
+    }
+    if (!escaped && character === "'" && !doubleQuoted) {
+      singleQuoted = !singleQuoted;
+      masked += " ";
+      continue;
+    }
+    if (!escaped && character === '"' && !singleQuoted) {
+      doubleQuoted = !doubleQuoted;
+      masked += " ";
+      continue;
+    }
+    masked += singleQuoted || doubleQuoted ? " " : character;
+    escaped = false;
+  }
+  return masked;
+}
+
+function unsupportedLocalManifestStructure(source) {
+  const lines = source.split(/\r?\n/);
+  let blockScalarIndent = null;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (blockScalarIndent !== null) {
+      if (!line.trim() || indentation(line) > blockScalarIndent) continue;
+      blockScalarIndent = null;
+    }
+
+    const masked = maskQuotedScalarsAndComment(line);
+    if (/^\s*(?:-\s*)?(?:"<<"|'<<'|<<)\s*:/.test(stripInlineComment(line))) {
+      return { line: index + 1, reason: "YAML merge keys are unsupported in local action manifests" };
+    }
+    if (/^\s*(?:-\s*)?[\[{]/.test(masked) || /:\s*[\[{]/.test(masked)) {
+      return { line: index + 1, reason: "flow-style YAML is unsupported in local action manifests" };
+    }
+    if (/(?:^|:\s*|-\s+)&[A-Za-z0-9_-]+/.test(masked)) {
+      return { line: index + 1, reason: "YAML anchors are unsupported in local action manifests" };
+    }
+    if (/(?:^|:\s*|-\s+)\*[A-Za-z0-9_-]+/.test(masked)) {
+      return { line: index + 1, reason: "YAML aliases are unsupported in local action manifests" };
+    }
+    if (/(?:^|:\s*|-\s+)!(?:!|<|[A-Za-z0-9_-])/.test(masked)) {
+      return { line: index + 1, reason: "YAML tags are unsupported in local action manifests" };
+    }
+    if (/^\s*(?:-\s*)?[^:#]+:\s*[>|][+-]?\d*\s*$/.test(masked)) {
+      blockScalarIndent = indentation(line);
+    }
+  }
+
+  return null;
 }
 
 function finding(sourcePath, line, ruleId, reason, action) {
@@ -294,6 +362,19 @@ export async function scanActionPinningPolicy({ rootDir = process.cwd() } = {}) 
       return;
     }
     if (visitedLocalActions.has(manifestPath)) return;
+
+    const unsupportedStructure = unsupportedLocalManifestStructure(source);
+    if (unsupportedStructure) {
+      violations.push(finding(
+        manifestPath,
+        unsupportedStructure.line,
+        LOCAL_ACTION_YAML_STRUCTURE_RULE_ID,
+        unsupportedStructure.reason,
+        reference,
+      ));
+      visitedLocalActions.add(manifestPath);
+      return;
+    }
 
     const runtimes = localActionRuntime(source);
     if (runtimes.length !== 1) {

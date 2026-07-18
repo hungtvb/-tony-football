@@ -12,6 +12,7 @@ import {
   LOCAL_ACTION_MANIFEST_RULE_ID,
   LOCAL_ACTION_PATH_RULE_ID,
   LOCAL_ACTION_SCAN_RULE_ID,
+  LOCAL_ACTION_YAML_STRUCTURE_RULE_ID,
   LOCAL_DOCKER_ACTION_RULE_ID,
   inspectActionPinningPolicy,
   scanActionPinningPolicy,
@@ -169,6 +170,49 @@ test("fully pinned local composite actions pass dependency closure", async (t) =
   const result = await scanActionPinningPolicy({ rootDir });
   assert.equal(result.workflowCount, 1);
   assert.equal(result.localActionCount, 1);
+  assert.deepEqual(result.violations, []);
+});
+
+test("flow-style local composite steps fail closed", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/build"));
+  await writeRepositoryFile(rootDir, ".github/actions/build/action.yml", "name: Flow action\nruns:\n  using: composite\n  steps: [{ uses: vendor/action@main }]\n");
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_YAML_STRUCTURE_RULE_ID]);
+  assert.match(result.violations[0].reason, /flow-style YAML/);
+});
+
+test("local action YAML anchors aliases and merge keys fail closed", async (t) => {
+  for (const [name, manifest] of [
+    ["anchor", "name: Anchor action\ndefaults: &defaults\n  uses: vendor/action@main\nruns:\n  using: composite\n  steps: []\n"],
+    ["alias", "name: Alias action\ndefaults: *defaults\nruns:\n  using: composite\n  steps: []\n"],
+    ["merge", "name: Merge action\n\"<<\": *defaults\nruns:\n  using: composite\n  steps: []\n"],
+  ]) {
+    const rootDir = await createRepository(t);
+    await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/build"));
+    await writeRepositoryFile(rootDir, ".github/actions/build/action.yml", manifest);
+    const result = await scanActionPinningPolicy({ rootDir });
+    assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_YAML_STRUCTURE_RULE_ID], name);
+  }
+});
+
+test("local action YAML tags fail closed", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/build"));
+  await writeRepositoryFile(rootDir, ".github/actions/build/action.yml", "name: Tagged action\nmetadata: !custom value\nruns:\n  using: composite\n  steps: []\n");
+
+  const result = await scanActionPinningPolicy({ rootDir });
+  assert.deepEqual(result.violations.map(({ code }) => code), [LOCAL_ACTION_YAML_STRUCTURE_RULE_ID]);
+  assert.match(result.violations[0].reason, /YAML tags/);
+});
+
+test("quoted punctuation and block scalar scripts do not trigger structural findings", async (t) => {
+  const rootDir = await createRepository(t);
+  await writeRepositoryFile(rootDir, ".github/workflows/ci.yml", workflowUsing("./.github/actions/build"));
+  await writeRepositoryFile(rootDir, ".github/actions/build/action.yml", `name: Safe action\ndescription: "Shows [brackets], & anchors, * aliases and ! tags as text"\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: |\n        values=(one two)\n        echo safe\n    - uses: actions/setup-node@${SETUP_SHA} # v4.4.0\n`);
+
+  const result = await scanActionPinningPolicy({ rootDir });
   assert.deepEqual(result.violations, []);
 });
 
