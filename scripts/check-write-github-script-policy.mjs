@@ -58,21 +58,28 @@ function parseInlinePermissions(value) {
   return match[1].split(",").some((entry) => /^\s*["']?contents["']?\s*:\s*["']?write["']?\s*$/.test(entry));
 }
 
-function permissionState(lines, requiredIndent = null) {
+function permissionState(lines, requiredIndent) {
   for (let index = 0; index < lines.length; index += 1) {
-    if (requiredIndent !== null && indentation(lines[index].line) !== requiredIndent) continue;
+    if (indentation(lines[index].line) !== requiredIndent) continue;
     const match = lines[index].line.match(/^\s*permissions\s*:\s*(.*?)\s*$/);
     if (!match) continue;
     if (/^write-all$/.test(match[1].trim()) || parseInlinePermissions(match[1])) {
       return { declared: true, contentsWrite: true };
     }
-    const block = collectBlock(lines, index, indentation(lines[index].line));
+    const block = collectBlock(lines, index, requiredIndent);
     return {
       declared: true,
       contentsWrite: block.some(({ line }) => /^\s*contents\s*:\s*write\s*$/.test(line)),
     };
   }
   return { declared: false, contentsWrite: false };
+}
+
+function directChildIndent(lines, parentIndent) {
+  const candidates = lines
+    .map(({ line }) => indentation(line))
+    .filter((currentIndent) => currentIndent > parentIndent);
+  return candidates.length > 0 ? Math.min(...candidates) : null;
 }
 
 function githubScriptUse(lines) {
@@ -86,11 +93,11 @@ function githubScriptUse(lines) {
 export function inspectWriteGithubScriptPolicy({ workflowPath, source }) {
   const findings = [];
   const lines = activeLines(source);
-  const jobsIndex = lines.findIndex(({ line }) => /^\s*jobs\s*:\s*$/.test(line));
+  const jobsIndex = lines.findIndex(({ line }) => indentation(line) === 0 && /^jobs\s*:\s*$/.test(line));
   if (jobsIndex === -1) return findings;
 
-  const workflowPermissions = permissionState(lines.slice(0, jobsIndex), 0);
-  const jobsBlock = collectBlock(lines, jobsIndex, indentation(lines[jobsIndex].line));
+  const workflowPermissions = permissionState(lines, 0);
+  const jobsBlock = collectBlock(lines, jobsIndex, 0);
   let jobIndent = null;
   const starts = [];
   for (let index = 0; index < jobsBlock.length; index += 1) {
@@ -103,8 +110,12 @@ export function inspectWriteGithubScriptPolicy({ workflowPath, source }) {
 
   for (let index = 0; index < starts.length; index += 1) {
     const start = starts[index];
+    const jobLine = jobsBlock[start.index];
     const jobLines = jobsBlock.slice(start.index + 1, starts[index + 1]?.index ?? jobsBlock.length);
-    const jobPermissions = permissionState(jobLines);
+    const childIndent = directChildIndent(jobLines, indentation(jobLine.line));
+    const jobPermissions = childIndent === null
+      ? { declared: false, contentsWrite: false }
+      : permissionState(jobLines, childIndent);
     const contentsWrite = jobPermissions.declared
       ? jobPermissions.contentsWrite
       : workflowPermissions.contentsWrite;
