@@ -141,6 +141,44 @@ test("engine snapshots are mirrored only into legacy presentation objects", () =
   assert.deepEqual(source.stats.possession, snapshot.match.stats.possession);
 });
 
+test("direct browser mirror writes cannot mutate live engine-owned facts", () => {
+  const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.ENGINE });
+  const adapter = new CompatibilitySnapshotAdapter({
+    mode: BrowserRuntimeMode.ENGINE,
+    runtimeComposition: composition,
+  });
+  const runtime = applicationRuntime(composition);
+  const source = createSource(0);
+
+  adapter.capture(source);
+  runtime.request(ApplicationActionType.START_MATCH);
+  source.tick = 1;
+  const before = adapter.capture(source);
+  const selectedId = before.match.selectedPlayerId;
+  const legacySelected = source.players.find((player) => player.team === 0 && player.index === 4);
+
+  source.state = "ended";
+  source.time = 0;
+  source.score[0] = 9;
+  source.stats.possession[0] = 999;
+  source.stats.shots[0] = 99;
+  source.stats.passes = 99;
+  source.stats.completed = 99;
+  legacySelected.x = 999;
+  source.ball.x = 999;
+  source.tick = 2;
+
+  const after = adapter.capture(source);
+  const selected = after.players.find((player) => player.id === selectedId);
+  assert.equal(after.match.state, "playing");
+  assert.deepEqual(after.match.score, [0, 0]);
+  assert.deepEqual(after.match.stats.shots, [0, 0]);
+  assert.equal(after.match.stats.passes, 0);
+  assert.equal(after.match.stats.completed, 0);
+  assert.notEqual(selected.x, 999);
+  assert.notEqual(after.ball.x, 999);
+});
+
 test("application lifecycle commands cannot progress compatibility gameplay", () => {
   const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.COMPATIBILITY });
   const runtime = applicationRuntime(composition);
