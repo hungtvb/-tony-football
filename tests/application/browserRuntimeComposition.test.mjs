@@ -47,13 +47,13 @@ function applicationRuntime(runtimeComposition, compatibilityCommands = []) {
   });
 }
 
-test("browser runtime mode defaults to engine while retaining explicit compatibility paths", () => {
+test("deployed browser runtime always resolves to engine authority", () => {
   assert.equal(resolveBrowserRuntimeMode(null), BrowserRuntimeMode.COMPATIBILITY);
   assert.equal(resolveBrowserRuntimeMode(""), BrowserRuntimeMode.ENGINE);
   assert.equal(resolveBrowserRuntimeMode("?runtime=engine"), BrowserRuntimeMode.ENGINE);
-  assert.equal(resolveBrowserRuntimeMode("?runtime=compatibility"), BrowserRuntimeMode.COMPATIBILITY);
-  assert.equal(resolveBrowserRuntimeMode("?debugScenario=low-stamina"), BrowserRuntimeMode.COMPATIBILITY);
-  assert.equal(resolveBrowserRuntimeMode("?runtime=engine&debugScenario=low-stamina"), BrowserRuntimeMode.ENGINE);
+  assert.equal(resolveBrowserRuntimeMode("?runtime=compatibility"), BrowserRuntimeMode.ENGINE);
+  assert.equal(resolveBrowserRuntimeMode("?debugScenario=low-stamina"), BrowserRuntimeMode.ENGINE);
+  assert.equal(resolveBrowserRuntimeMode("?runtime=compatibility&debugScenario=replay"), BrowserRuntimeMode.ENGINE);
 });
 
 test("live browser composition owns lifecycle commands and authoritative snapshots", () => {
@@ -146,7 +146,7 @@ test("engine snapshots are mirrored only into legacy presentation objects", () =
   assert.deepEqual(source.stats.possession, snapshot.match.stats.possession);
 });
 
-test("compatibility mode preserves the legacy dispatch callback", () => {
+test("compatibility mode remains explicit for isolated contract tests", () => {
   const composition = new BrowserRuntimeComposition({ mode: BrowserRuntimeMode.COMPATIBILITY });
   const compatibilityCommands = [];
   const runtime = applicationRuntime(composition, compatibilityCommands);
