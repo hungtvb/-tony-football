@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "title": "Tony Football Architecture Graph",
+  "sourceMap": "docs/11_SOURCE_MAP.md",
+  "layers": [
+    "browser",
+    "application",
+    "input",
+    "core",
+    "engine",
+    "presentation",
+    "tests",
+    "tooling",
+    "assets",
+    "external"
+  ],
+  "forbiddenImports": [
+    {
+      "id": "engine-no-browser-presentation",
+      "from": ["engine", "core"],
+      "to": ["browser", "presentation"],
+      "reason": "Engine and core must remain browser-free and presentation-free."
+    },
+    {
+      "id": "engine-no-input-application",
+      "from": ["engine"],
+      "to": ["input", "application"],
+      "reason": "Engine contracts may be consumed outward; engine implementation must not depend on adapters."
+    }
+  ],
+  "outputFiles": ["graph.json", "graph.mmd", "graph.svg", "index.html"]
+}
