@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { inspectWorkflowWithYamlSafety } from "../../scripts/enforce-workflow-policy.mjs";
 
-const fixtureUrl = new URL("../fixtures/workflow-policy/", import.meta.url);
-const fixture = (name) => readFile(new URL(name, fixtureUrl), "utf8");
+const anchor = (name) => ["&", name].join("");
+const alias = (name) => ["*", name].join("");
+const yaml = (...lines) => `${lines.join("\n")}\n`;
 
 function assertAliasBlocked(result) {
   assert.ok(result.violations.length >= 2);
@@ -18,33 +18,59 @@ function assertAliasBlocked(result) {
   assert.deepEqual(result.triggers, []);
 }
 
-test("aliased permission maps fail closed before permission inspection", async () => {
+test("aliased permission maps fail closed before permission inspection", () => {
+  const source = yaml(
+    "name: Aliased permissions",
+    "on: [pull_request_target]",
+    "jobs:",
+    "  template:",
+    `    permissions: ${anchor("write_permissions")}`,
+    "      contents: write",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - run: echo template",
+    "  publish:",
+    `    permissions: ${alias("write_permissions")}`,
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - run: echo publish",
+  );
   const result = inspectWorkflowWithYamlSafety({
     workflowPath: ".github/workflows/aliased-permissions.yml",
-    source: await fixture("blocked-aliased-permissions.yml"),
+    source,
   });
   assertAliasBlocked(result);
 });
 
-test("aliased executable job content fails closed before job inspection", async () => {
+test("aliased executable job content fails closed before job inspection", () => {
+  const source = yaml(
+    "name: Aliased publisher job",
+    "on: [push]",
+    "jobs:",
+    `  publisher: ${anchor("publisher_job")}`,
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - run: echo generated",
+    `  publish: ${alias("publisher_job")}`,
+  );
   const result = inspectWorkflowWithYamlSafety({
     workflowPath: ".github/workflows/aliased-job.yaml",
-    source: await fixture("blocked-aliased-job.yaml"),
+    source,
   });
   assertAliasBlocked(result);
 });
 
 test("YAML merge-key aliases fail closed before inherited job inspection", () => {
-  const source = `
-on: [push]
-jobs:
-  template: &publisher_job
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo generated
-  publish:
-    <<: *publisher_job
-`;
+  const source = yaml(
+    "on: [push]",
+    "jobs:",
+    `  template: ${anchor("publisher_job")}`,
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - run: echo generated",
+    "  publish:",
+    `    <<: ${alias("publisher_job")}`,
+  );
   const result = inspectWorkflowWithYamlSafety({
     workflowPath: ".github/workflows/aliased-merge.yml",
     source,
@@ -53,19 +79,19 @@ jobs:
 });
 
 test("anchor-like text in quoted scalars, comments and block scripts is not YAML alias syntax", () => {
-  const source = `
-on: [workflow_dispatch]
-name: "literal &anchor and *alias"
-jobs:
-  inspect:
-    runs-on: ubuntu-latest
-    steps:
-      # permissions: *write_permissions
-      - run: |
-          echo '&anchor'
-          echo "*alias"
-      - run: echo '*inline_alias'
-`;
+  const source = yaml(
+    "on: [workflow_dispatch]",
+    `name: "literal ${anchor("anchor")} and ${alias("alias")}"`,
+    "jobs:",
+    "  inspect:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    `      # permissions: ${alias("write_permissions")}`,
+    "      - run: |",
+    `          echo '${anchor("anchor")}'`,
+    `          echo "${alias("alias")}"`,
+    `      - run: echo '${alias("inline_alias")}'`,
+  );
   const result = inspectWorkflowWithYamlSafety({
     workflowPath: ".github/workflows/literals.yml",
     source,
