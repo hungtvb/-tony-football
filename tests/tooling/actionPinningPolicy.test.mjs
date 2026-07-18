@@ -63,6 +63,11 @@ test("checkout rejects duplicate persist-credentials declarations", () => {
   assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
 });
 
+test("checkout rejects duplicate with mappings", () => {
+  const source = `jobs:\n  test:\n    steps:\n      - name: Checkout\n        with:\n          persist-credentials: false\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2\n        with:\n          persist-credentials: false`;
+  assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
+});
+
 test("checkout ignores similarly named values outside its with block", () => {
   const source = `jobs:\n  test:\n    steps:\n      - name: Checkout\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2\n        env:\n          persist-credentials: false`;
   assert.deepEqual(codes(source), [CHECKOUT_CREDENTIAL_RULE_ID]);
@@ -70,6 +75,11 @@ test("checkout ignores similarly named values outside its with block", () => {
 
 test("named checkout with disabled persisted credentials passes", () => {
   const source = `jobs:\n  test:\n    steps:\n      - name: Checkout\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2\n        with:\n          persist-credentials: false`;
+  assert.deepEqual(inspect(source), []);
+});
+
+test("checkout mapping key order is irrelevant", () => {
+  const source = `jobs:\n  test:\n    steps:\n      - with:\n          persist-credentials: false\n        uses: actions/checkout@${CHECKOUT_SHA} # v4.2.2`;
   assert.deepEqual(inspect(source), []);
 });
 
