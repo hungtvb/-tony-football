@@ -78,9 +78,7 @@ export class BrowserBootstrapComposition {
     });
     this.#inputAdapter = new BrowserInputAdapter({
       target,
-      onCommand: () => {
-        throw new Error("browser input cannot dispatch compatibility gameplay commands");
-      },
+      onCommand: () => false,
       onApplicationRequest: (type) => this.#applicationRuntime.request(type),
       onCameraCycle,
       getControlMode: getCompatibilityControlMode,
