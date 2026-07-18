@@ -7,9 +7,15 @@ import { inspectWorkflow, scanWorkflowPolicy } from "./check-workflow-policy.mjs
 const WORKFLOW_DIRECTORY = ".github/workflows";
 const WORKFLOW_EXTENSION = /\.ya?ml$/i;
 export const YAML_ALIAS_RULE_ID = "yaml-anchor-alias-unsupported";
+export const YAML_MERGE_RULE_ID = "yaml-merge-key-unsupported";
+export const YAML_TAG_RULE_ID = "yaml-explicit-tag-unsupported";
 export const QUOTED_KEY_RULE_ID = "yaml-quoted-structural-key-unsupported";
+export const WRITE_LOCAL_RULE_ID = "write-job-local-executable";
 const YAML_ALIAS_REASON = "YAML anchors and aliases are unsupported; expand workflow values explicitly";
-const QUOTED_KEY_REASON = "quoted jobs, permissions, run, uses, and script keys are unsupported; use explicit unquoted workflow structure";
+const YAML_MERGE_REASON = "YAML merge keys are unsupported; expand inherited workflow mappings explicitly";
+const YAML_TAG_REASON = "explicit YAML tags are unsupported in workflow policy inputs";
+const QUOTED_KEY_REASON = "quoted policy-structural keys unsupported by the core extractor must be expanded explicitly";
+const WRITE_LOCAL_REASON = "a contents:write job may not invoke repository-local scripts, package scripts, executables, or composite actions";
 
 function normalizeRepositoryPath(value) {
   return String(value).replaceAll("\\", "/").replace(/^\.\//, "");
@@ -66,10 +72,25 @@ function stripQuotedSegments(line) {
   return result;
 }
 
-export function findYamlAnchorAliases(source) {
-  const findings = [];
+function activeLines(source) {
+  return source
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: stripInlineComment(line), index: index + 1 }))
+    .filter(({ line }) => line.trim().length > 0);
+}
+
+function collectBlock(lines, start, parentIndent) {
+  const result = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (indentation(lines[index].line) <= parentIndent) break;
+    result.push(lines[index]);
+  }
+  return result;
+}
+
+function structuralLines(source) {
+  const result = [];
   let blockScalarIndent = null;
-  const tokenPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)([&*])([A-Za-z_][A-Za-z0-9_-]*)\b/g;
   for (const [index, rawLine] of source.split(/\r?\n/).entries()) {
     const activeLine = stripInlineComment(rawLine);
     if (!activeLine.trim()) continue;
@@ -83,9 +104,18 @@ export function findYamlAnchorAliases(source) {
       blockScalarIndent = currentIndent;
       continue;
     }
-    for (const match of structuralLine.matchAll(tokenPattern)) {
+    result.push({ line: activeLine, structuralLine, index: index + 1 });
+  }
+  return result;
+}
+
+export function findYamlAnchorAliases(source) {
+  const findings = [];
+  const tokenPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)([&*])([A-Za-z_][A-Za-z0-9_-]*)\b/g;
+  for (const item of structuralLines(source)) {
+    for (const match of item.structuralLine.matchAll(tokenPattern)) {
       findings.push({
-        line: index + 1,
+        line: item.index,
         kind: match[1] === "&" ? "anchor" : "alias",
         name: match[2],
       });
@@ -94,12 +124,33 @@ export function findYamlAnchorAliases(source) {
   return findings;
 }
 
+export function findYamlMergeKeys(source) {
+  const findings = [];
+  for (const item of structuralLines(source)) {
+    if (/^\s*(?:-\s*)?<<\s*:/.test(item.structuralLine) || /[{,]\s*<<\s*:/.test(item.structuralLine)) {
+      findings.push({ line: item.index, name: "<<" });
+    }
+  }
+  return findings;
+}
+
+export function findYamlExplicitTags(source) {
+  const findings = [];
+  const tagPattern = /(?:^|:\s*|-\s*|[\[{,]\s*)!([A-Za-z_][A-Za-z0-9_!:/-]*)\b/g;
+  for (const item of structuralLines(source)) {
+    for (const match of item.structuralLine.matchAll(tagPattern)) {
+      findings.push({ line: item.index, name: match[1] });
+    }
+  }
+  return findings;
+}
+
 export function findQuotedStructuralKeys(source) {
   const findings = [];
+  const lines = activeLines(source);
   let blockScalarIndent = null;
-  for (const [index, rawLine] of source.split(/\r?\n/).entries()) {
-    const activeLine = stripInlineComment(rawLine);
-    if (!activeLine.trim()) continue;
+  for (let index = 0; index < lines.length; index += 1) {
+    const activeLine = lines[index].line;
     const currentIndent = indentation(activeLine);
     if (blockScalarIndent !== null) {
       if (currentIndent > blockScalarIndent) continue;
@@ -111,47 +162,165 @@ export function findQuotedStructuralKeys(source) {
     }
     const match = activeLine.match(/^\s*(?:-\s*)?(["'])(jobs|permissions|run|uses|script)\1\s*:/)
       || activeLine.match(/[{,]\s*(["'])(jobs|permissions|run|uses|script)\1\s*:/);
-    if (match) findings.push({ line: index + 1, name: match[2] });
+    if (match) findings.push({ line: lines[index].index, name: match[2] });
+  }
+
+  const jobsIndex = lines.findIndex(({ line }) => /^\s*jobs\s*:/.test(line));
+  if (jobsIndex !== -1) {
+    const jobsIndent = indentation(lines[jobsIndex].line);
+    const jobsBlock = collectBlock(lines, jobsIndex, jobsIndent);
+    const jobIndent = jobsBlock.find(({ line }) => /^\s*(?:["'][^"']+["']|[A-Za-z0-9_-]+)\s*:/.test(line));
+    if (jobIndent) {
+      const expectedIndent = indentation(jobIndent.line);
+      for (const item of jobsBlock) {
+        const match = item.line.match(/^\s*(["'])([^"']+)\1\s*:/);
+        if (match && indentation(item.line) === expectedIndent) {
+          findings.push({ line: item.index, name: `job:${match[2]}` });
+        }
+      }
+    }
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const permission = lines[index].line.match(/^\s*permissions\s*:\s*$/);
+    if (!permission) continue;
+    const parentIndent = indentation(lines[index].line);
+    for (const child of collectBlock(lines, index, parentIndent)) {
+      const match = child.line.match(/^\s*(["'])([^"']+)\1\s*:/);
+      if (match) findings.push({ line: child.index, name: `permission:${match[2]}` });
+    }
+  }
+
+  return findings;
+}
+
+function parseInlinePermissions(value) {
+  const match = value.match(/\{([\s\S]*)\}/);
+  if (!match) return false;
+  return match[1].split(",").some((entry) => /^\s*["']?contents["']?\s*:\s*["']?write["']?\s*$/.test(entry));
+}
+
+function jobRequestsContentsWrite(lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].line.match(/^\s*permissions\s*:\s*(.*?)\s*$/);
+    if (!match) continue;
+    if (/^write-all$/.test(match[1].trim()) || parseInlinePermissions(match[1])) return true;
+    for (const child of collectBlock(lines, index, indentation(lines[index].line))) {
+      if (/^\s*contents\s*:\s*write\s*$/.test(child.line)) return true;
+    }
+  }
+  return false;
+}
+
+function executableValues(lines) {
+  const values = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].line.match(/^\s*(?:-\s*)?(run|uses)\s*:\s*(.*?)\s*$/);
+    if (!match) continue;
+    let value = match[2].trim();
+    if (/^[|>][-+]?\s*$/.test(value)) {
+      value = collectBlock(lines, index, indentation(lines[index].line)).map(({ line }) => line.trim()).join("\n");
+    }
+    values.push({ kind: match[1], value: value.replace(/^["']|["']$/g, ""), line: lines[index].index });
+  }
+  return values;
+}
+
+function isLocalRun(value) {
+  const packageCommand = /(?:^|[\s;&|])(?:(?:npm|pnpm|yarn|bun)\s+(?:run|exec|dlx)\b|(?:npx|bunx)\b)/im;
+  const interpreterCommand = /(?:^|[\s;&|])(?:node|python3?|bash|sh|zsh|pwsh|ruby|perl|deno|tsx)\b/im;
+  const taskRunner = /(?:^|[\s;&|])(?:make|just|task|mage|rake|gradle|mvn|ant|cargo\s+run|go\s+run|dotnet\s+run|composer\s+run|poetry\s+run|uv\s+run|pipenv\s+run|bundle\s+exec)\b/im;
+  const repositoryPath = /(?:^|[\s("'=;&|])(?:\.{1,2}\/|(?:scripts|tools|src|tests|docs|\.github)\/|(?:package\.json|Makefile|Justfile|Taskfile\.ya?ml)\b)/im;
+  const sourceCommand = /(?:^|[\s;&|])(?:source|\.)\s+[^\s;&|]+/im;
+  return packageCommand.test(value)
+    || interpreterCommand.test(value)
+    || taskRunner.test(value)
+    || repositoryPath.test(value)
+    || sourceCommand.test(value);
+}
+
+export function findWriteJobLocalExecutables(source) {
+  const findings = [];
+  const lines = activeLines(source);
+  const jobsIndex = lines.findIndex(({ line }) => /^\s*jobs\s*:/.test(line));
+  if (jobsIndex === -1) return findings;
+  const jobsBlock = collectBlock(lines, jobsIndex, indentation(lines[jobsIndex].line));
+  let jobIndent = null;
+  const starts = [];
+  for (let index = 0; index < jobsBlock.length; index += 1) {
+    const match = jobsBlock[index].line.match(/^\s*([A-Za-z0-9_-]+)\s*:\s*$/);
+    if (!match) continue;
+    const currentIndent = indentation(jobsBlock[index].line);
+    if (jobIndent === null) jobIndent = currentIndent;
+    if (currentIndent === jobIndent) starts.push({ index, id: match[1] });
+  }
+  for (let index = 0; index < starts.length; index += 1) {
+    const start = starts[index];
+    const jobLines = jobsBlock.slice(start.index + 1, starts[index + 1]?.index ?? jobsBlock.length);
+    if (!jobRequestsContentsWrite(jobLines)) continue;
+    for (const executable of executableValues(jobLines)) {
+      const local = executable.kind === "uses"
+        ? /^\.{1,2}\//.test(executable.value)
+        : isLocalRun(executable.value);
+      if (local) findings.push({ line: executable.line, jobId: start.id, value: executable.value });
+    }
   }
   return findings;
 }
 
-function aliasViolation(workflowPath, finding) {
-  const reason = `${YAML_ALIAS_REASON}: ${finding.kind} ${finding.name}`;
+function violation(workflowPath, ruleId, reason, line, jobId = "<workflow>") {
   return {
     path: normalizeRepositoryPath(workflowPath),
-    jobId: "<workflow>",
-    ruleId: YAML_ALIAS_RULE_ID,
-    code: YAML_ALIAS_RULE_ID,
+    jobId,
+    ruleId,
+    code: ruleId,
     reason,
     message: reason,
-    line: finding.line,
+    line,
   };
+}
+
+function aliasViolation(workflowPath, finding) {
+  return violation(
+    workflowPath,
+    YAML_ALIAS_RULE_ID,
+    `${YAML_ALIAS_REASON}: ${finding.kind} ${finding.name}`,
+    finding.line,
+  );
+}
+
+function mergeViolation(workflowPath, finding) {
+  return violation(workflowPath, YAML_MERGE_RULE_ID, YAML_MERGE_REASON, finding.line);
+}
+
+function tagViolation(workflowPath, finding) {
+  return violation(workflowPath, YAML_TAG_RULE_ID, `${YAML_TAG_REASON}: ${finding.name}`, finding.line);
 }
 
 function quotedKeyViolation(workflowPath, finding) {
-  const reason = `${QUOTED_KEY_REASON}: ${finding.name}`;
-  return {
-    path: normalizeRepositoryPath(workflowPath),
-    jobId: "<workflow>",
-    ruleId: QUOTED_KEY_RULE_ID,
-    code: QUOTED_KEY_RULE_ID,
-    reason,
-    message: reason,
-    line: finding.line,
-  };
+  return violation(workflowPath, QUOTED_KEY_RULE_ID, `${QUOTED_KEY_REASON}: ${finding.name}`, finding.line);
+}
+
+function localExecutableViolation(workflowPath, finding) {
+  return violation(workflowPath, WRITE_LOCAL_RULE_ID, WRITE_LOCAL_REASON, finding.line, finding.jobId);
 }
 
 export function inspectWorkflowWithYamlSafety({ workflowPath, source, allowlist = new Map() }) {
-  const findings = findYamlAnchorAliases(source);
+  const aliases = findYamlAnchorAliases(source);
+  const mergeKeys = aliases.length === 0 ? findYamlMergeKeys(source) : [];
+  const tags = findYamlExplicitTags(source);
   const quotedKeys = findQuotedStructuralKeys(source);
-  if (findings.length > 0 || quotedKeys.length > 0) {
+  const localExecutables = findWriteJobLocalExecutables(source);
+  if (aliases.length > 0 || mergeKeys.length > 0 || tags.length > 0 || quotedKeys.length > 0 || localExecutables.length > 0) {
     return {
       path: normalizeRepositoryPath(workflowPath),
       triggers: [],
       violations: [
-        ...findings.map((finding) => aliasViolation(workflowPath, finding)),
+        ...aliases.map((finding) => aliasViolation(workflowPath, finding)),
+        ...mergeKeys.map((finding) => mergeViolation(workflowPath, finding)),
+        ...tags.map((finding) => tagViolation(workflowPath, finding)),
         ...quotedKeys.map((finding) => quotedKeyViolation(workflowPath, finding)),
+        ...localExecutables.map((finding) => localExecutableViolation(workflowPath, finding)),
       ],
     };
   }
@@ -177,22 +346,18 @@ async function listWorkflowFiles(rootDir) {
 
 export async function enforceWorkflowPolicy({ rootDir = process.cwd() } = {}) {
   const workflowPaths = await listWorkflowFiles(rootDir);
-  const aliasViolations = [];
+  const preflightViolations = [];
   for (const workflowPath of workflowPaths) {
     const source = await readFile(path.join(rootDir, workflowPath), "utf8");
-    for (const finding of findYamlAnchorAliases(source)) {
-      aliasViolations.push(aliasViolation(workflowPath, finding));
-    }
-    for (const finding of findQuotedStructuralKeys(source)) {
-      aliasViolations.push(quotedKeyViolation(workflowPath, finding));
-    }
+    const result = inspectWorkflowWithYamlSafety({ workflowPath, source });
+    if (result.violations.length > 0) preflightViolations.push(...result.violations);
   }
-  if (aliasViolations.length > 0) {
+  if (preflightViolations.length > 0) {
     return {
       workflowCount: workflowPaths.length,
       exceptionCount: 0,
       results: [],
-      violations: aliasViolations,
+      violations: preflightViolations,
     };
   }
   return scanWorkflowPolicy({ rootDir });
@@ -202,8 +367,8 @@ async function main() {
   const result = await enforceWorkflowPolicy();
   if (result.violations.length > 0) {
     console.error("Workflow policy violations:");
-    for (const violation of result.violations) {
-      console.error(`- ${violation.path} job=${violation.jobId} [${violation.ruleId}] ${violation.reason}`);
+    for (const item of result.violations) {
+      console.error(`- ${item.path} job=${item.jobId} [${item.ruleId}] ${item.reason}`);
     }
     process.exitCode = 1;
     return;
