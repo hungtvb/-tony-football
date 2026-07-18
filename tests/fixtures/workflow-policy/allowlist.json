@@ -3,9 +3,10 @@
   "exceptions": [
     {
       "path": ".github/workflows/release.yml",
+      "job": "publish",
       "owner": "release-maintainers",
-      "reason": "Publish reviewed release assets without modifying repository source",
-      "reviewIssue": "TON-16 fixture",
+      "reason": "Publish reviewed release assets",
+      "reviewIssue": "TON-123",
       "allowedTriggers": ["workflow_dispatch"],
       "permissions": ["contents:write"]
     }

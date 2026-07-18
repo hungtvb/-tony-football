@@ -1,0 +1,12 @@
+name: API mutation
+on: [workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.git.createTree({ owner: context.repo.owner, repo: context.repo.repo, tree: [] })

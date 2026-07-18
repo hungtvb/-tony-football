@@ -1,6 +1,5 @@
-name: Release
-on:
-  workflow_dispatch:
+name: Job write
+on: [workflow_dispatch]
 permissions:
   contents: read
 jobs:

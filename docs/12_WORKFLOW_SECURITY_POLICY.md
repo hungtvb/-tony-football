@@ -1,85 +1,49 @@
 # GitHub Actions Workflow Security Policy
 
-## Purpose
+GitHub Actions validates and deploys reviewed content. It must not become an alternate source-publication channel or mutate the exact branch head under review.
 
-GitHub Actions validates and deploys reviewed repository content. It must not become an alternate source-publication channel or mutate the branch whose exact head is under review.
+`scripts/check-workflow-policy.mjs` scans every `.yml` and `.yaml` file directly under `.github/workflows`. It runs through `test:tooling` and therefore the required browser-free CI lane.
 
-The required gate is `scripts/check-workflow-policy.mjs`. It scans every `.yml` and `.yaml` file directly under `.github/workflows` and runs through `npm run test:tooling`, which is part of the required browser-free CI lane.
+## Default boundary
 
-## Default policy
+Workflows are read-only by default. The structural extractor evaluates top-level triggers, workflow-level and job-level permissions, step `run` and `uses` values, and executable `actions/github-script` scripts. Comment-only lines are ignored.
 
-Repository workflows are read-only by default.
+The scanner rejects:
 
-The scanner reports these policy codes:
+- `contents: write` without an exact exception and all `permissions: write-all` grants;
+- direct `git push`, workflow-created commits and auto-commit actions;
+- source patch application and encoded patch transport;
+- GitHub/Octokit file, blob, tree, commit and ref mutations;
+- rewrite-and-publish behavior and workflow/transport self-deletion.
 
-- `unallowlisted-contents-write`: repository write permission lacks an exact path-scoped exception;
-- `direct-git-push`: a workflow attempts direct repository ref publication;
-- `workflow-self-commit`: a workflow creates repository commits;
-- `source-patch-application`: a workflow applies a transported source patch;
-- `encoded-patch-transport`: encoded source payload transport is present;
-- `rewrite-and-publish`: repository source, tests, documentation, scripts, workflows, `game.js`, or `package.json` are rewritten and then published;
-- `workflow-self-delete`: a workflow removes itself or its transport files;
-- `exception-trigger-mismatch`, `unused-exception`, and `stale-exception`: an exception is broader than reviewed, no longer needed, or no longer attached to a workflow.
+Every diagnostic contains the rule ID, workflow path, job ID and reason. Transport rules cannot be suppressed by an exception.
 
-Transport violations remain prohibited even when a workflow has an approved repository-write exception. A legitimate release or deployment writer must use a reviewed GitHub action or API operation and may not publish developer source changes.
+## Exact exception registry
 
-## Exception registry
-
-All write exceptions live in `.github/workflow-policy-allowlist.json`.
-
-Each exception must contain:
+Write exceptions live only in `.github/workflow-policy-allowlist.json` and bind all of these fields:
 
 ```json
 {
   "path": ".github/workflows/release.yml",
+  "job": "publish",
   "owner": "release-maintainers",
-  "reason": "Publish reviewed release assets without modifying repository source",
+  "reason": "Publish reviewed release assets",
   "reviewIssue": "TON-123",
   "allowedTriggers": ["workflow_dispatch"],
   "permissions": ["contents:write"]
 }
 ```
 
-Rules:
+The path and job are exact; globs and workflow-wide grants are invalid. The workflow trigger set must exactly equal `allowedTriggers`, so adding `pull_request_target`, `push`, or any other event requires review. Only `contents:write` can be excepted. Missing, duplicate, stale, unused, job-mismatched or trigger-broadened entries fail.
 
-1. `path` is an exact repository-relative `.github/workflows/*.yml` or `.yaml` path. Globs and directory-wide exceptions are not allowed.
-2. `owner`, `reason`, and `reviewIssue` are mandatory and identify who maintains the exception and where it was approved.
-3. `allowedTriggers` enumerates every trigger used by the workflow. Adding any trigger requires an allowlist update and fresh review in the same pull request.
-4. `permissions` explicitly contains `contents:write`; no implicit or workspace-wide exception exists.
-5. An allowlist entry fails once its workflow disappears or no longer requests write permission. Remove stale entries in the same change.
-6. An exception permits only the documented release/deployment write. It never suppresses transport violation codes.
+An exception requires a dedicated tracking issue, named owner and architecture/security review of the exact workflow, job, triggers, permission, external actions and write operation. It never permits source, test, documentation, script or workflow patch transport.
 
-## Approved review flow
+## Review and history
 
-A new or changed exception requires:
+Release/deployment writers should prefer manual dispatch, protected environments, immutable reviewed artifacts and release/deployment APIs. Required CI must be green on the unchanged exact head.
 
-1. a dedicated Linear item or linked approval issue;
-2. architecture/security review of the exact workflow path, triggers, permissions, external actions, and write operation;
-3. focused fixture coverage when the exception introduces a new safe pattern;
-4. required CI green on the unchanged exact head;
-5. removal or narrowing when the write requirement ends.
+Removing a prohibited transport workflow in a later commit does not sanitize branch history. Before merge, either cleanly rewrite from an approved baseline or squash only the independently reviewed final tree. Any new exact head invalidates previous Reviewer and SA clearance.
 
-Release and deployment workflows should prefer manual dispatch, environment protection, immutable reviewed artifacts, and GitHub release/deployment APIs. They remain read-only unless the documented operation technically requires repository write access.
+## Fixture matrix
 
-## Branch-history handling
-
-Removing a prohibited workflow in a later commit does not automatically make every merge method safe.
-
-Before merge, either:
-
-- cleanly rewrite the branch from an approved baseline, or
-- squash only the independently reviewed final tree.
-
-A merge strategy must not import rejected transport commits into `main`. Any branch rewrite or new exact head invalidates previous Reviewer and SA clearance.
-
-## Validation
-
-Run the workflow-policy command, the complete tooling suite, and the browser-free CI suite before handoff.
-
-The fixture suite proves:
-
-- normal read-only PR and main-branch CI passes;
-- unallowlisted repository-write permission fails;
-- the TON-63 incident pattern reports all transport violation codes;
-- a narrow documented release exception passes only on its declared path and triggers;
-- stale, unused, malformed, or trigger-broadened exceptions fail.
+The tooling suite proves read-only `.yml` and `.yaml` workflows pass; banned words in comments do not trigger; workflow/job write grants, `write-all`, `pull_request_target` broadening, direct push/commit, auto-commit actions, encoded patch application, Octokit mutation and self-delete fail; read-only GitHub Script and ordinary artifact decoding pass; and exact path/job exceptions cannot suppress transport findings.
