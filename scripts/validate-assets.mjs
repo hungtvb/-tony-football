@@ -17,6 +17,7 @@ const animationPath = "assets/models/football-animations-v2.glb";
 const character = await readGLB(characterPath);
 const animation = await readGLB(animationPath);
 const gameSource = await readFile("game.js", "utf8");
+const entrySource = await readFile("browser-entry.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 
 if (character.bytes.length > 750_000) throw new Error(`${characterPath}: exceeds 750 KB budget`);
@@ -73,12 +74,15 @@ for (const legacyPrimitive of ["attach(\"spine_01\"", "patchGeometry", "new THRE
 
 for (const pageContract of [
   "u1-match-experience.css",
-  "game.js?v=20.0.0",
+  "browser-entry.js?v=1.0.0",
   "class=\"match-hud\"",
   "class=\"overlay-card pre-match-card\"",
   "class=\"overlay-card pause-card\""
 ]) {
   if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
+}
+if (!entrySource.includes('await import("./game.js?v=20.0.0")')) {
+  throw new Error("browser-entry.js: missing versioned game entry import");
 }
 
 console.log(`Player assets and U1 page contract valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
