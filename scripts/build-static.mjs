@@ -4,7 +4,7 @@ import { extname, join } from "node:path";
 const root = new URL("../", import.meta.url);
 const output = new URL("../dist/", import.meta.url);
 const staticExtensions = new Set([".css", ".html", ".js"]);
-const staticDirectories = new Set(["assets", "src"]);
+const staticDirectories = new Set(["assets", "src", "architecture"]);
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -27,6 +27,9 @@ for (const entry of entries) {
 
 if (!copied.includes("index.html")) {
   throw new Error("Static build did not include index.html");
+}
+if (!copied.includes("architecture/")) {
+  throw new Error("Static build did not include the architecture explorer");
 }
 
 console.log(`Static build ready: ${join(output.pathname)} (${copied.length} root entries)`);
