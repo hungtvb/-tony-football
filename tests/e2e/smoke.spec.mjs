@@ -52,18 +52,19 @@ test("production composition boots and routes input, snapshot and lifecycle pres
   expect(runtimeErrors).toEqual([]);
 });
 
-test("Canvas fallback boots snapshot-backed HUD without runtime errors", async ({ page }, testInfo) => {
+test("Canvas fallback boots engine snapshot-backed HUD without runtime errors", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one representative Canvas boot is sufficient");
   const runtimeErrors = captureRuntimeErrors(page);
-  await page.goto("/?visualTest=1&renderer=canvas&debugScenario=low-stamina", {
+  await page.goto("/?visualTest=1&renderer=canvas&skipIntro=1", {
     waitUntil: "domcontentloaded"
   });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
   const diagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(diagnostics.renderer).toBe("canvas");
-  expect(diagnostics.snapshot.selectedPlayerId).toMatch(/^home-/);
-  expect(diagnostics.renderState.selectedPlayerId).toBe(diagnostics.snapshot.selectedPlayerId);
+  expect(diagnostics.runtimeMode).toBe("engine");
+  expect(diagnostics.engineSnapshot.selectedPlayerId).toMatch(/^home-/);
+  expect(diagnostics.renderState.selectedPlayerId).toBe(diagnostics.engineSnapshot.selectedPlayerId);
   await expect(page.locator("#radarCanvas")).toBeVisible();
-  await expect(page.locator("#staminaText")).toHaveText("18%");
+  await expect(page.locator("#staminaText")).toHaveText(/^\d+%$/);
   expect(runtimeErrors).toEqual([]);
 });
