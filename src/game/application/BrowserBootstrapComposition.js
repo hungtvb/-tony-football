@@ -2,6 +2,7 @@ import { ApplicationActionType } from "./ApplicationActions.js";
 import { ApplicationRuntime } from "./ApplicationRuntime.js";
 import { BrowserApplicationAdapter } from "./BrowserApplicationAdapter.js";
 import { BrowserInputAdapter } from "../input/BrowserInputAdapter.js";
+import { BrowserPresentationComposition } from "../presentation/BrowserPresentationComposition.js";
 
 function assertSimulationLoop(loop) {
   if (
@@ -14,22 +15,27 @@ function assertSimulationLoop(loop) {
   }
 }
 
-function disposePresentationFeedback(service) {
-  if (!service) return;
-  if (typeof service.unsubscribe === "function") service.unsubscribe();
-  else if (typeof service.detach === "function") service.detach();
+function assertPresentationComposition(composition) {
+  if (
+    !composition
+    || typeof composition.start !== "function"
+    || typeof composition.reset !== "function"
+    || typeof composition.teardown !== "function"
+  ) {
+    throw new TypeError("Browser bootstrap requires a presentation composition");
+  }
 }
 
 export class BrowserBootstrapComposition {
   #target;
+  #document;
   #runtimeComposition;
   #simulationLoop;
   #snapshotAdapter;
+  #presentationComposition;
   #applicationRuntime;
   #inputAdapter;
   #applicationAdapter;
-  #createPresentationFeedback;
-  #presentationFeedback = null;
   #started = false;
 
   constructor({
@@ -38,6 +44,7 @@ export class BrowserBootstrapComposition {
     runtimeComposition,
     simulationLoop,
     snapshotAdapter,
+    presentationComposition = null,
     onNavigation = () => {},
     onCameraCycle = () => {},
     getCompatibilityControlMode = () => "attack",
@@ -66,10 +73,14 @@ export class BrowserBootstrapComposition {
     }
 
     this.#target = target;
+    this.#document = document;
     this.#runtimeComposition = runtimeComposition;
     this.#simulationLoop = simulationLoop;
     this.#snapshotAdapter = snapshotAdapter;
-    this.#createPresentationFeedback = createPresentationFeedback;
+    this.#presentationComposition = presentationComposition ?? new BrowserPresentationComposition({
+      adapterFactories: [() => createPresentationFeedback()],
+    });
+    assertPresentationComposition(this.#presentationComposition);
     this.#applicationRuntime = new ApplicationRuntime({
       onNavigation,
       getMatchState: getCompatibilityMatchState,
@@ -113,20 +124,28 @@ export class BrowserBootstrapComposition {
     return this.#applicationRuntime;
   }
 
+  get presentationComposition() {
+    return this.#presentationComposition;
+  }
+
   start() {
     if (this.#started) return false;
     this.#runtimeComposition.attachTarget(this.#target);
     try {
       this.#inputAdapter.attach();
       this.#applicationAdapter.attach();
-      this.#presentationFeedback = this.#createPresentationFeedback();
+      this.#presentationComposition.start({
+        target: this.#target,
+        document: this.#document,
+        runtimeComposition: this.#runtimeComposition,
+        snapshotAdapter: this.#snapshotAdapter,
+      });
       this.#simulationLoop.start();
       this.#started = true;
       return true;
     } catch (error) {
       this.#simulationLoop.stop();
-      disposePresentationFeedback(this.#presentationFeedback);
-      this.#presentationFeedback = null;
+      this.#presentationComposition.teardown();
       this.#applicationAdapter.detach();
       this.#inputAdapter.detach();
       this.#runtimeComposition.teardown();
@@ -150,6 +169,10 @@ export class BrowserBootstrapComposition {
     this.#inputAdapter.reset({ requestPause: false });
     this.#runtimeComposition.reset();
     this.#snapshotAdapter.reset?.();
+    this.#presentationComposition.reset({
+      runtimeComposition: this.#runtimeComposition,
+      snapshotAdapter: this.#snapshotAdapter,
+    });
     this.#simulationLoop.reset(nowMilliseconds);
   }
 
@@ -158,8 +181,7 @@ export class BrowserBootstrapComposition {
     this.#simulationLoop.stop();
     this.#applicationAdapter.detach();
     this.#inputAdapter.detach();
-    disposePresentationFeedback(this.#presentationFeedback);
-    this.#presentationFeedback = null;
+    this.#presentationComposition.teardown();
     this.#snapshotAdapter.reset?.();
     this.#runtimeComposition.teardown();
     this.#started = false;
