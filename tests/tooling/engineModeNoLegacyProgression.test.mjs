@@ -23,16 +23,22 @@ function functionBody(source, name) {
 }
 
 test("engine browser step never invokes legacy gameplay progression", async () => {
-  const [game, bootstrap] = await Promise.all([
+  const [game, bootstrap, replayAdapter] = await Promise.all([
     read("game.js"),
     read("src/game/application/BrowserBootstrapComposition.js"),
+    read("src/game/presentation/CompatibilitySnapshotAdapter.js"),
   ]);
 
   const step = functionBody(game, "simulationStep");
   assert.match(step, /updatePresentation\(dt\)/);
   assert.doesNotMatch(step, /updateLegacyGameplay\(|(?:^|\s)update\(dt\)/);
+  const presentation = functionBody(game, "updatePresentation");
+  assert.doesNotMatch(presentation, /updateLegacyReplay\(|updateReplay\(/);
   assert.match(game, /function updateLegacyGameplay\(dt\)/);
+  assert.match(game, /function updateLegacyReplay\(dt\)/);
   assert.match(game, /legacyGameplayStepCount \+= 1/);
+  assert.doesNotMatch(replayAdapter, /replay\.update\(/);
+  assert.match(replayAdapter, /replay\.syncElapsed\(/);
   assert.doesNotMatch(game, /dispatchCompatibilityCommand:\s*applyCompatibilityCommand/);
   assert.doesNotMatch(bootstrap, /dispatchCompatibilityCommand/);
   assert.match(bootstrap, /onCommand:\s*\(\) => false/);

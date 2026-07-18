@@ -36,7 +36,7 @@ Before modifying code:
 | `src/game/input/BrowserInputAdapter.js` | FO4 key lifecycle, immutable human commands and transient attack-intent signaling | Deployed bootstrap dispatches only to the live runtime and fails closed if authority is unavailable; callback injection remains isolated from production composition |
 | `src/game/application/ApplicationRuntime.js` | Match lifecycle commands and navigation requests | Lifecycle requires live engine dispatch; navigation remains outside MatchEngine |
 | `src/game/application/BrowserApplicationAdapter.js` | Browser buttons/events and immediate lifecycle UI projection | Listener lifecycle only; runtime target attachment belongs to the bootstrap composition |
-| `src/game/presentation/CompatibilitySnapshotAdapter.js` | Mirrors immutable live-engine facts into temporary legacy presentation objects or creates isolated read-only compatibility snapshots | Browser mirror writes never become engine inputs; replay history is an outward-only temporary frame cache |
+| `src/game/presentation/CompatibilitySnapshotAdapter.js` | Mirrors immutable live-engine facts into temporary legacy presentation objects or creates isolated read-only compatibility snapshots | Browser mirror writes never become engine inputs; replay history is outward-only and playback elapsed/start/stop follow authoritative engine snapshots |
 | `src/game/presentation/GoalPresentationFlow.js`, `GoalPresentationPhaseProjection.js` | Maps authoritative goal-phase events to announcement-card visibility, replay exposure and completion | Presentation consumes phases; preview timers are isolated fixtures and cannot start/end authoritative replay |
 | `src/game/presentation/SnapshotRenderState.js` | Interpolates immutable player/ball transforms between fixed snapshots | Shared by WebGL and Canvas; presentation-only |
 | `src/game/presentation/SnapshotCameraController.js`, `SnapshotReplayController.js` | Snapshot-driven camera and replay frame selection | Never mutate gameplay state; replay progress comes from engine snapshots |
@@ -116,7 +116,7 @@ These are temporary migration points, not patterns to copy:
 
 - `game.js` still contains isolated legacy implementation helpers because renderer, DOM and settings extraction belongs to TON-64; deployed fixed steps have a tested zero-invocation boundary for those helpers.
 - `CompatibilitySnapshotAdapter` mirrors immutable engine facts into legacy player/ball objects only where existing presentation implementations still read those objects.
-- `CompatibilitySnapshotAdapter` / `SnapshotReplayController` retain an outward-only replay-frame cache, while engine replay phase/progress is the sole lifecycle clock.
+- `CompatibilitySnapshotAdapter` / `SnapshotReplayController` retain an outward-only replay-frame cache. The adapter synchronizes playback elapsed from authoritative engine snapshots, starts on `replay.active` false→true and stops only on true→false; the browser fixed step never advances or ends replay.
 - Browser presentation implementation extraction and removal of now-dead co-located helpers belongs to TON-64; new gameplay logic must never be added to `game.js`.
 
 ## Dependency rules

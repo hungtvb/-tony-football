@@ -596,7 +596,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     if (game.replay.active) publishCompatibilityEvent(GameEventType.REPLAY_STARTED);
   }
 
-  function updateReplay(dt) {
+  function updateLegacyReplay(dt) {
     if (game.replay.update(dt)) {
       ui.replayBadge.classList.remove("show");
       publishCompatibilityEvent(GameEventType.REPLAY_ENDED);
@@ -624,13 +624,13 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   }
 
   function updatePresentation(dt) {
-    updateInput(); updateParticles(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
   }
 
   function updateLegacyGameplay(dt) {
     legacyGameplayStepCount += 1;
-    updateInput(); updateParticles(dt); updateReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
+    updateInput(); updateParticles(dt); updateLegacyReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);
     game.cameraNotice = Math.max(0, game.cameraNotice - dt);
     if (game.state !== "playing") return;
     for (const player of players) {

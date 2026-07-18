@@ -66,7 +66,7 @@ function createSource(calls) {
         return true;
       },
       start(value) { calls.push(["start", value.tick]); return true; },
-      update(deltaSeconds) { calls.push(["update", deltaSeconds]); return false; },
+      syncElapsed(value) { calls.push(["syncElapsed", value]); return true; },
       stop() { calls.push("stop"); },
     },
   };
@@ -108,8 +108,7 @@ test("live engine snapshots fill history, advance playback, and stop from engine
     ["record", 2, STEP],
     ["record", 3, STEP],
     ["start", 4],
-    ["update", STEP],
-    ["update", STEP],
+    ["syncElapsed", STEP],
     "stop",
   ]);
   assert.deepEqual(source.score, [0, 0]);

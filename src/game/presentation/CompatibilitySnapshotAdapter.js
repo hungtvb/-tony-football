@@ -151,14 +151,13 @@ function recordLiveReplayHistory(replay, snapshot, previousSnapshot) {
   return replay.record(snapshot, deltaSeconds);
 }
 
-function advanceLiveReplayPlayback(replay, snapshot, previousSnapshot) {
-  if (typeof replay?.update !== "function") return false;
-  if (!previousSnapshot?.match?.replay?.active) return false;
-  const elapsed = snapshot.match.replay?.elapsed ?? 0;
-  const previousElapsed = previousSnapshot.match.replay?.elapsed ?? elapsed;
-  const deltaSeconds = Math.max(0, elapsed - previousElapsed);
-  if (deltaSeconds <= 0) return false;
-  return replay.update(deltaSeconds);
+function syncLiveReplayPlayback(replay, snapshot, previousSnapshot) {
+  if (typeof replay?.syncElapsed !== "function") return false;
+  if (!snapshot.match.replay?.active || !previousSnapshot?.match?.replay?.active) return false;
+  const elapsed = Math.max(0, snapshot.match.replay?.elapsed ?? 0);
+  const previousElapsed = Math.max(0, previousSnapshot.match.replay?.elapsed ?? 0);
+  if (elapsed <= previousElapsed) return false;
+  return replay.syncElapsed(elapsed);
 }
 
 function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapshot) {
@@ -174,13 +173,18 @@ function projectLiveReplayToCompatibilitySource(source, snapshot, previousSnapsh
 
   const active = Boolean(snapshot.match.replay?.active);
   const wasActive = Boolean(previousSnapshot?.match?.replay?.active);
-  advanceLiveReplayPlayback(replay, snapshot, previousSnapshot);
-  if (active && !wasActive && typeof replay.start === "function") {
-    replay.start(snapshot);
+  if (active && !wasActive) {
+    if (typeof replay.start === "function") replay.start(snapshot);
+    const elapsed = Math.max(0, snapshot.match.replay?.elapsed ?? 0);
+    if (elapsed > 0 && typeof replay.syncElapsed === "function") replay.syncElapsed(elapsed);
     return;
   }
-  if (!active && wasActive && typeof replay.stop === "function") {
-    replay.stop();
+  if (active && wasActive) {
+    syncLiveReplayPlayback(replay, snapshot, previousSnapshot);
+    return;
+  }
+  if (!active && wasActive) {
+    if (typeof replay.stop === "function") replay.stop();
     return;
   }
 

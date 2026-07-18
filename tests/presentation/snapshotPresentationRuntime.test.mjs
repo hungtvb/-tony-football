@@ -13,7 +13,7 @@ test("browser runtime delegates camera, replay, and gameplay feedback to present
   assert.doesNotMatch(runtimeSource, /game\.replay\.(?:frames|buffer|active|elapsed|accumulator)\s*=/);
 
   const releaseBallBody = runtimeSource.slice(runtimeSource.indexOf("function releaseBall"), runtimeSource.indexOf("function passBall"));
-  const goalBody = runtimeSource.slice(runtimeSource.indexOf("function goal"), runtimeSource.indexOf("function updateReplay"));
+  const goalBody = runtimeSource.slice(runtimeSource.indexOf("function goal"), runtimeSource.indexOf("function updateLegacyReplay"));
   assert.doesNotMatch(releaseBallBody, /kickSound|spawnParticle/);
   assert.doesNotMatch(goalBody, /goalSound|spawnParticle/);
   assert.match(releaseBallBody, /GameEventType\.BALL_KICKED/);
