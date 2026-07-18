@@ -43,33 +43,53 @@ function finding(workflowPath, line, ruleId, reason, action) {
 }
 
 function stepBounds(lines, usesIndex) {
-  const usesIndent = indentation(lines[usesIndex]);
+  const activeUses = stripInlineComment(lines[usesIndex]);
+  const usesIndent = indentation(activeUses);
+  const inlineUses = /^\s*-\s*uses\s*:/.test(activeUses);
   let start = usesIndex;
-  if (!/^\s*-\s*uses\s*:/.test(lines[usesIndex])) {
+
+  if (!inlineUses) {
     for (let index = usesIndex - 1; index >= 0; index -= 1) {
-      if (/^\s*-\s+/.test(lines[index]) && indentation(lines[index]) < usesIndent) { start = index; break; }
+      const active = stripInlineComment(lines[index]);
+      if (/^\s*-\s+/.test(active) && indentation(active) < usesIndent) {
+        start = index;
+        break;
+      }
     }
   }
-  const stepIndent = indentation(lines[start]);
+
+  const stepIndent = indentation(stripInlineComment(lines[start]));
+  const keyIndent = inlineUses ? usesIndent + 2 : usesIndent;
   let end = lines.length;
   for (let index = start + 1; index < lines.length; index += 1) {
-    if (/^\s*-\s+/.test(lines[index]) && indentation(lines[index]) === stepIndent) { end = index; break; }
-    if (lines[index].trim() && indentation(lines[index]) < stepIndent) { end = index; break; }
+    const active = stripInlineComment(lines[index]);
+    if (/^\s*-\s+/.test(active) && indentation(active) === stepIndent) {
+      end = index;
+      break;
+    }
+    if (active.trim() && indentation(active) < stepIndent) {
+      end = index;
+      break;
+    }
   }
-  return { start, end };
+  return { start, end, keyIndent };
 }
 
-function checkoutDisablesCredentials(lines, usesIndex, end) {
-  const usesIndent = indentation(lines[usesIndex]);
+function checkoutDisablesCredentials(lines, usesIndex, end, keyIndent) {
   for (let index = usesIndex + 1; index < end; index += 1) {
     const active = stripInlineComment(lines[index]);
-    if (!/^\s*with\s*:\s*$/.test(active) || indentation(active) !== usesIndent) continue;
+    if (!/^\s*with\s*:\s*$/.test(active) || indentation(active) !== keyIndent) continue;
+
     const withIndent = indentation(active);
+    let inputIndent = null;
     for (let child = index + 1; child < end; child += 1) {
       const input = stripInlineComment(lines[child]);
       if (!input.trim()) continue;
-      if (indentation(input) <= withIndent) break;
-      if (/^\s*persist-credentials\s*:\s*["']?false["']?\s*$/.test(input)) return true;
+      const currentIndent = indentation(input);
+      if (currentIndent <= withIndent) break;
+      if (inputIndent === null) inputIndent = currentIndent;
+      if (currentIndent !== inputIndent) continue;
+      if (/^\s*persist-credentials\s*:\s*["']?false["']?\s*$/i.test(input)) return true;
     }
     return false;
   }
@@ -102,8 +122,8 @@ export function inspectActionPinningPolicy({ workflowPath, source }) {
     }
 
     if (!/^actions\/checkout@/i.test(action)) continue;
-    const { end } = stepBounds(lines, index);
-    if (!checkoutDisablesCredentials(lines, index, end)) {
+    const { end, keyIndent } = stepBounds(lines, index);
+    if (!checkoutDisablesCredentials(lines, index, end, keyIndent)) {
       findings.push(finding(workflowPath, index + 1, CHECKOUT_CREDENTIAL_RULE_ID, "checkout must set persist-credentials: false", action));
     }
   }
