@@ -8,22 +8,14 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { createThreeSceneHostPort } from "./ThreeSceneHostContract.js";
-
-const WORLD_WIDTH = 1200;
-const WORLD_HEIGHT = 700;
-const WORLD_SCALE = 0.1;
-const FIELD = Object.freeze({ left: 48, right: 1152, top: 42, bottom: 658 });
-
-const PITCH_STYLES = Object.freeze({
-  classic: Object.freeze({ top: "#0b7547", mid: "#087044", bottom: "#075d39", outside: "#07100d", grass: 0x15915b, tint: 0xffffff, wet: 0xb7d8c8 }),
-  elite: Object.freeze({ top: "#11915b", mid: "#0b8351", bottom: "#086b43", outside: "#07140f", grass: 0x20a869, tint: 0xf2fff8, wet: 0xa8d8c4 }),
-  dry: Object.freeze({ top: "#8b9c4d", mid: "#74883e", bottom: "#637537", outside: "#16170d", grass: 0x879d4c, tint: 0xfff1cc, wet: 0xb8c39a }),
-  midnight: Object.freeze({ top: "#075943", mid: "#064b38", bottom: "#043d2e", outside: "#030c09", grass: 0x08795a, tint: 0xc4e9dc, wet: 0x86b8a9 }),
-});
+import {
+  createThreeSceneEnvironmentProfile,
+  DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE,
+} from "./ThreeSceneEnvironmentProfile.js";
 
 const lerp = (start, end, amount) => start + (end - start) * amount;
-const worldX = (value) => (value - WORLD_WIDTH / 2) * WORLD_SCALE;
-const worldZ = (value) => (value - WORLD_HEIGHT / 2) * WORLD_SCALE;
+const worldX = (value, geometry) => (value - geometry.worldWidth / 2) * geometry.worldScale;
+const worldZ = (value, geometry) => (value - geometry.worldHeight / 2) * geometry.worldScale;
 
 function seededNoise(seed) {
   const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -52,31 +44,32 @@ function disposeObject(root) {
   });
 }
 
-function createPitchTexture({ document, renderer, style }) {
-  const theme = PITCH_STYLES[style] ?? PITCH_STYLES.classic;
+function createPitchTexture({ document, renderer, style, profile }) {
+  const theme = profile.pitchStyles[style] ?? profile.pitchStyles.classic;
+  const { worldWidth, worldHeight, field } = profile.geometry;
   const textureCanvas = document.createElement("canvas");
-  textureCanvas.width = WORLD_WIDTH;
-  textureCanvas.height = WORLD_HEIGHT;
+  textureCanvas.width = worldWidth;
+  textureCanvas.height = worldHeight;
   const paint = textureCanvas.getContext("2d");
   if (!paint) throw new Error("Pitch texture requires a 2D canvas context");
 
   paint.fillStyle = theme.outside;
-  paint.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-  const grass = paint.createLinearGradient(0, FIELD.top, 0, FIELD.bottom);
+  paint.fillRect(0, 0, worldWidth, worldHeight);
+  const grass = paint.createLinearGradient(0, field.top, 0, field.bottom);
   grass.addColorStop(0, theme.top);
   grass.addColorStop(0.5, theme.mid);
   grass.addColorStop(1, theme.bottom);
   paint.fillStyle = grass;
-  paint.fillRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
+  paint.fillRect(field.left, field.top, field.right - field.left, field.bottom - field.top);
 
-  const stripe = (FIELD.right - FIELD.left) / 16;
+  const stripe = (field.right - field.left) / 16;
   for (let index = 0; index < 16; index += 1) {
     paint.fillStyle = index % 2 ? "rgba(255,255,255,.035)" : "rgba(0,20,8,.05)";
-    paint.fillRect(FIELD.left + index * stripe, FIELD.top, stripe, FIELD.bottom - FIELD.top);
+    paint.fillRect(field.left + index * stripe, field.top, stripe, field.bottom - field.top);
   }
   for (let index = 0; index < 2600; index += 1) {
-    const x = FIELD.left + seededNoise(index * 2.17) * (FIELD.right - FIELD.left);
-    const y = FIELD.top + seededNoise(index * 5.43 + 9) * (FIELD.bottom - FIELD.top);
+    const x = field.left + seededNoise(index * 2.17) * (field.right - field.left);
+    const y = field.top + seededNoise(index * 5.43 + 9) * (field.bottom - field.top);
     paint.fillStyle = seededNoise(index * 8.1) > 0.48 ? "rgba(255,255,220,.035)" : "rgba(0,20,8,.04)";
     paint.fillRect(x, y, 1, 2);
   }
@@ -84,22 +77,22 @@ function createPitchTexture({ document, renderer, style }) {
   paint.strokeStyle = "rgba(245,250,247,.94)";
   paint.lineWidth = 3;
   paint.lineCap = "round";
-  paint.strokeRect(FIELD.left, FIELD.top, FIELD.right - FIELD.left, FIELD.bottom - FIELD.top);
+  paint.strokeRect(field.left, field.top, field.right - field.left, field.bottom - field.top);
   paint.beginPath();
-  paint.moveTo(WORLD_WIDTH / 2, FIELD.top);
-  paint.lineTo(WORLD_WIDTH / 2, FIELD.bottom);
+  paint.moveTo(worldWidth / 2, field.top);
+  paint.lineTo(worldWidth / 2, field.bottom);
   paint.stroke();
   paint.beginPath();
-  paint.arc(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 83, 0, Math.PI * 2);
+  paint.arc(worldWidth / 2, worldHeight / 2, 83, 0, Math.PI * 2);
   paint.stroke();
   paint.fillStyle = "white";
   paint.beginPath();
-  paint.arc(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 5, 0, Math.PI * 2);
+  paint.arc(worldWidth / 2, worldHeight / 2, 5, 0, Math.PI * 2);
   paint.fill();
-  paint.strokeRect(FIELD.left, 175, 180, 350);
-  paint.strokeRect(FIELD.left, 267, 83, 166);
-  paint.strokeRect(FIELD.right - 180, 175, 180, 350);
-  paint.strokeRect(FIELD.right - 83, 267, 83, 166);
+  paint.strokeRect(field.left, 175, 180, 350);
+  paint.strokeRect(field.left, 267, 83, 166);
+  paint.strokeRect(field.right - 180, 175, 180, 350);
+  paint.strokeRect(field.right - 83, 267, 83, 166);
 
   const texture = new THREE.CanvasTexture(textureCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -107,10 +100,17 @@ function createPitchTexture({ document, renderer, style }) {
   return texture;
 }
 
-function addPitchDetails(scene) {
+function addPitchDetails(scene, profile) {
   const poleMaterial = new THREE.MeshStandardMaterial({ color: 0xe9efec, metalness: 0.62, roughness: 0.32 });
   const flagColors = [0xe1bb58, 0x47c9d4, 0x47c9d4, 0xe1bb58];
-  const corners = [[-55.2, -30.8], [-55.2, 30.8], [55.2, -30.8], [55.2, 30.8]];
+  const { geometry } = profile;
+  const { field } = geometry;
+  const corners = [
+    [worldX(field.left, geometry), worldZ(field.top, geometry)],
+    [worldX(field.left, geometry), worldZ(field.bottom, geometry)],
+    [worldX(field.right, geometry), worldZ(field.top, geometry)],
+    [worldX(field.right, geometry), worldZ(field.bottom, geometry)],
+  ];
   corners.forEach(([x, z], index) => {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 1.65, 8), poleMaterial);
     pole.position.set(x, 0.82, z);
@@ -143,25 +143,31 @@ function addPitchDetails(scene) {
   }
 }
 
-function createPitch({ scene, document, renderer, style }) {
-  const theme = PITCH_STYLES[style] ?? PITCH_STYLES.classic;
+function createPitch({ scene, document, renderer, style, profile }) {
+  const theme = profile.pitchStyles[style] ?? profile.pitchStyles.classic;
+  const { worldWidth, worldHeight, worldScale } = profile.geometry;
   const pitch = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD_WIDTH * WORLD_SCALE, WORLD_HEIGHT * WORLD_SCALE),
-    new THREE.MeshStandardMaterial({ map: createPitchTexture({ document, renderer, style }), roughness: 0.94, metalness: 0 }),
+    new THREE.PlaneGeometry(worldWidth * worldScale, worldHeight * worldScale),
+    new THREE.MeshStandardMaterial({ map: createPitchTexture({ document, renderer, style, profile }), roughness: 0.94, metalness: 0 }),
   );
   pitch.rotation.x = -Math.PI / 2;
   pitch.receiveShadow = true;
   scene.add(pitch);
-  const base = new THREE.Mesh(new THREE.BoxGeometry(124, 1.2, 74), new THREE.MeshStandardMaterial({ color: 0x06130e, roughness: 1 }));
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(worldWidth * worldScale + 4, 1.2, worldHeight * worldScale + 4),
+    new THREE.MeshStandardMaterial({ color: 0x06130e, roughness: 1 }),
+  );
   base.position.y = -0.7;
   base.receiveShadow = true;
   scene.add(base);
-  addPitchDetails(scene);
+  addPitchDetails(scene, profile);
   return { pitch, dryColor: new THREE.Color(theme.tint), wetColor: new THREE.Color(theme.wet) };
 }
 
-function createGrass({ scene, style, lowPowerDevice }) {
-  const theme = PITCH_STYLES[style] ?? PITCH_STYLES.classic;
+function createGrass({ scene, style, lowPowerDevice, profile }) {
+  const theme = profile.pitchStyles[style] ?? profile.pitchStyles.classic;
+  const { geometry } = profile;
+  const { field } = geometry;
   const count = lowPowerDevice ? 220 : 1800;
   const bladeGeometry = new THREE.PlaneGeometry(0.055, 0.42);
   bladeGeometry.translate(0, 0.21, 0);
@@ -170,9 +176,9 @@ function createGrass({ scene, style, lowPowerDevice }) {
   const dummy = new THREE.Object3D();
   for (let index = 0; index < count; index += 1) {
     dummy.position.set(
-      worldX(FIELD.left + seededNoise(index * 2.13) * (FIELD.right - FIELD.left)),
+      worldX(field.left + seededNoise(index * 2.13) * (field.right - field.left), geometry),
       0.015,
-      worldZ(FIELD.top + seededNoise(index * 5.71 + 3) * (FIELD.bottom - FIELD.top)),
+      worldZ(field.top + seededNoise(index * 5.71 + 3) * (field.bottom - field.top), geometry),
     );
     dummy.rotation.y = seededNoise(index * 9.37) * Math.PI;
     const size = 0.65 + seededNoise(index * 4.43) * 0.7;
@@ -317,7 +323,10 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
   const crowdGeometry = new THREE.BufferGeometry();
   crowdGeometry.setAttribute("position", new THREE.Float32BufferAttribute(crowdPositions, 3));
   crowdGeometry.setAttribute("color", new THREE.Float32BufferAttribute(crowdColors, 3));
-  const crowd = new THREE.Points(crowdGeometry, new THREE.PointsMaterial({ size: 0.34, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.9 }));
+  const crowd = new THREE.Points(
+    crowdGeometry,
+    new THREE.PointsMaterial({ size: 0.34, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.9 }),
+  );
   scene.add(crowd);
 
   createLedBoard({ scene, document, x: 0, z: -35.1, text: "TONY FOOTBALL MAX", color: 0xe1bb58, ledViews });
@@ -343,32 +352,42 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
   return crowd;
 }
 
-function createGoal({ scene, x, side, nets }) {
-  const goal = new THREE.Group();
-  goal.position.x = x;
+function createGoal({ scene, x, side, nets, profile }) {
+  const { goal } = profile.geometry;
+  const goalObject = new THREE.Group();
+  goalObject.position.x = x;
   const postMaterial = new THREE.MeshStandardMaterial({ color: 0xf4f7f5, roughness: 0.28, metalness: 0.28 });
-  const postGeometry = new THREE.CylinderGeometry(0.12, 0.12, 3.5, 10);
-  const crossGeometry = new THREE.CylinderGeometry(0.12, 0.12, 17, 10);
+  const postGeometry = new THREE.CylinderGeometry(0.12, 0.12, goal.height, 10);
+  const crossGeometry = new THREE.CylinderGeometry(0.12, 0.12, goal.width, 10);
   crossGeometry.rotateX(Math.PI / 2);
-  for (const z of [-8.5, 8.5]) {
+  const halfWidth = goal.width / 2;
+  for (const z of [-halfWidth, halfWidth]) {
     const post = new THREE.Mesh(postGeometry, postMaterial);
-    post.position.set(0, 1.75, z);
+    post.position.set(0, goal.height / 2, z);
     post.castShadow = true;
-    goal.add(post);
+    goalObject.add(post);
   }
   const cross = new THREE.Mesh(crossGeometry, postMaterial);
-  cross.position.set(0, 3.5, 0);
-  goal.add(cross);
+  cross.position.set(0, goal.height, 0);
+  goalObject.add(cross);
   const netMaterial = new THREE.LineBasicMaterial({ color: 0xbfd1c8, transparent: true, opacity: 0.34 });
   const netVertices = [];
-  for (let z = -8.5; z <= 8.5; z += 1.7) netVertices.push(0, 0, z, side * 3, 0, z, 0, 3.5, z, side * 3, 2.8, z);
-  for (let y = 0; y <= 3.5; y += 0.7) netVertices.push(0, y, -8.5, side * 3, y * 0.8, -8.5, 0, y, 8.5, side * 3, y * 0.8, 8.5, side * 3, y * 0.8, -8.5, side * 3, y * 0.8, 8.5);
+  for (let z = -halfWidth; z <= halfWidth + 0.001; z += goal.width / 10) {
+    netVertices.push(0, 0, z, side * goal.depth, 0, z, 0, goal.height, z, side * goal.depth, goal.height * 0.8, z);
+  }
+  for (let y = 0; y <= goal.height + 0.001; y += goal.height / 5) {
+    netVertices.push(
+      0, y, -halfWidth, side * goal.depth, y * 0.8, -halfWidth,
+      0, y, halfWidth, side * goal.depth, y * 0.8, halfWidth,
+      side * goal.depth, y * 0.8, -halfWidth, side * goal.depth, y * 0.8, halfWidth,
+    );
+  }
   const netGeometry = new THREE.BufferGeometry();
   netGeometry.setAttribute("position", new THREE.Float32BufferAttribute(netVertices, 3));
   const net = new THREE.LineSegments(netGeometry, netMaterial);
-  goal.add(net);
+  goalObject.add(net);
   nets.push(net);
-  scene.add(goal);
+  scene.add(goalObject);
 }
 
 function createComposer({ renderer, scene, camera, viewport, lowPowerDevice }) {
@@ -388,17 +407,36 @@ function createComposer({ renderer, scene, camera, viewport, lowPowerDevice }) {
   return composer;
 }
 
-export function createBrowserThreeSceneEnvironmentHost({ canvas, target, document, viewport, lowPowerDevice = false } = {}) {
+function defaultRendererFactory({ canvas, lowPowerDevice }) {
+  return new THREE.WebGLRenderer({ canvas, antialias: lowPowerDevice, alpha: false, powerPreference: "high-performance" });
+}
+
+export function createBrowserThreeSceneEnvironmentHost({
+  canvas,
+  target,
+  document,
+  viewport,
+  lowPowerDevice = false,
+  profile = DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE,
+  rendererFactory = defaultRendererFactory,
+} = {}) {
   if (!canvas || !target || !document || !viewport) throw new TypeError("Browser Three scene host requires canvas, target, document and viewport");
+  if (typeof rendererFactory !== "function") throw new TypeError("rendererFactory must be a function");
+  const activeProfile = createThreeSceneEnvironmentProfile(profile);
+  const { geometry, renderer: rendererProfile, camera: cameraProfile, lighting } = activeProfile;
 
   let renderer = null;
   let composer = null;
   let scene = null;
+  let environmentRoot = null;
   let camera = null;
   let pitch = null;
   let grass = null;
   let crowd = null;
   let rain = null;
+  let hemisphere = null;
+  let flood = null;
+  let rim = null;
   let dryPitchColor = null;
   let wetPitchColor = null;
   let environmentTexture = null;
@@ -408,22 +446,46 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
   const ledViews = [];
   const goalNetViews = [];
   const stadiumLights = [];
+  const foreignObjects = new Set();
+
+  function applyEnvironmentStyle(style) {
+    const theme = activeProfile.pitchStyles[style] ?? activeProfile.pitchStyles.classic;
+    const environment = theme.environment;
+    scene?.background?.set?.(environment.background ?? rendererProfile.background);
+    scene?.fog?.color?.set?.(environment.fogColor ?? rendererProfile.fogColor);
+    if (renderer) renderer.toneMappingExposure = environment.exposure ?? rendererProfile.exposure;
+    if (hemisphere) hemisphere.intensity = environment.hemisphere ?? lighting.hemisphere.intensity;
+    if (flood) flood.intensity = environment.flood ?? lighting.flood.intensity;
+    if (rim) rim.intensity = environment.rim ?? lighting.rim.intensity;
+    for (const lamp of stadiumLights) lamp.intensity = environment.stadium ?? lighting.stadium.intensity;
+  }
 
   function start() {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: lowPowerDevice, alpha: false, powerPreference: "high-performance" });
+    if (renderer) return false;
+    renderer = rendererFactory({ canvas, lowPowerDevice, profile: activeProfile });
     renderer.setPixelRatio(Math.min(viewport.pixelRatio, lowPowerDevice ? 1.1 : 2));
     renderer.setSize(viewport.width, viewport.height, false);
     renderer.shadowMap.enabled = !lowPowerDevice;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = rendererProfile.exposure;
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050a09);
-    scene.fog = new THREE.FogExp2(0x07110e, 0.011);
-    camera = new THREE.PerspectiveCamera(lowPowerDevice ? 43 : 39, viewport.width / viewport.height, 0.1, 260);
-    camera.position.set(0, lowPowerDevice ? 54 : 45, lowPowerDevice ? 63 : 52);
+    scene.background = new THREE.Color(rendererProfile.background);
+    scene.fog = new THREE.FogExp2(rendererProfile.fogColor, rendererProfile.fogDensity);
+    environmentRoot = new THREE.Group();
+    environmentRoot.name = "tony-three-scene-environment";
+    scene.add(environmentRoot);
+
+    const cameraPosition = lowPowerDevice ? cameraProfile.lowPowerPosition : cameraProfile.position;
+    camera = new THREE.PerspectiveCamera(
+      lowPowerDevice ? cameraProfile.lowPowerFov : cameraProfile.fov,
+      viewport.width / viewport.height,
+      cameraProfile.near,
+      cameraProfile.far,
+    );
+    camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
     camera.lookAt(0, 0, 0);
 
     if (!lowPowerDevice) {
@@ -436,32 +498,35 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
       pmrem.dispose();
     }
 
-    const hemisphere = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45);
-    scene.add(hemisphere);
-    const flood = new THREE.DirectionalLight(0xffffff, 3.4);
-    flood.position.set(-28, 62, 30);
+    hemisphere = new THREE.HemisphereLight(lighting.hemisphere.skyColor, lighting.hemisphere.groundColor, lighting.hemisphere.intensity);
+    environmentRoot.add(hemisphere);
+    flood = new THREE.DirectionalLight(lighting.flood.color, lighting.flood.intensity);
+    flood.position.set(lighting.flood.position.x, lighting.flood.position.y, lighting.flood.position.z);
     flood.castShadow = true;
-    flood.shadow.mapSize.set(lowPowerDevice ? 512 : 2048, lowPowerDevice ? 512 : 2048);
-    flood.shadow.camera.left = -72;
-    flood.shadow.camera.right = 72;
-    flood.shadow.camera.top = 50;
-    flood.shadow.camera.bottom = -50;
-    flood.shadow.bias = -0.00035;
-    scene.add(flood);
-    const rim = new THREE.DirectionalLight(0x70dcff, 1.4);
-    rim.position.set(48, 25, -35);
-    scene.add(rim);
+    const shadowMapSize = lowPowerDevice ? lighting.flood.lowPowerShadowMapSize : lighting.flood.shadowMapSize;
+    flood.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+    flood.shadow.camera.left = lighting.flood.shadowBounds.left;
+    flood.shadow.camera.right = lighting.flood.shadowBounds.right;
+    flood.shadow.camera.top = lighting.flood.shadowBounds.top;
+    flood.shadow.camera.bottom = lighting.flood.shadowBounds.bottom;
+    flood.shadow.bias = lighting.flood.shadowBias;
+    environmentRoot.add(flood);
+    rim = new THREE.DirectionalLight(lighting.rim.color, lighting.rim.intensity);
+    rim.position.set(lighting.rim.position.x, lighting.rim.position.y, lighting.rim.position.z);
+    environmentRoot.add(rim);
 
-    const pitchResources = createPitch({ scene, document, renderer, style: currentPitchStyle });
+    const pitchResources = createPitch({ scene: environmentRoot, document, renderer, style: currentPitchStyle, profile: activeProfile });
     pitch = pitchResources.pitch;
     dryPitchColor = pitchResources.dryColor;
     wetPitchColor = pitchResources.wetColor;
-    grass = createGrass({ scene, style: currentPitchStyle, lowPowerDevice });
-    crowd = createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLights });
-    createGoal({ scene, x: worldX(FIELD.left), side: -1, nets: goalNetViews });
-    createGoal({ scene, x: worldX(FIELD.right), side: 1, nets: goalNetViews });
-    rain = createAtmosphere({ scene, lowPowerDevice });
+    grass = createGrass({ scene: environmentRoot, style: currentPitchStyle, lowPowerDevice, profile: activeProfile });
+    crowd = createStadium({ scene: environmentRoot, document, lowPowerDevice, ledViews, stadiumLights });
+    createGoal({ scene: environmentRoot, x: worldX(geometry.field.left, geometry), side: -1, nets: goalNetViews, profile: activeProfile });
+    createGoal({ scene: environmentRoot, x: worldX(geometry.field.right, geometry), side: 1, nets: goalNetViews, profile: activeProfile });
+    rain = createAtmosphere({ scene: environmentRoot, lowPowerDevice });
     composer = createComposer({ renderer, scene, camera, viewport, lowPowerDevice });
+    applyEnvironmentStyle(currentPitchStyle);
+    return true;
   }
 
   function resize(nextViewport) {
@@ -476,19 +541,23 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
   }
 
   function applyPitchStyle(style) {
-    if (!renderer || !scene || !pitch || !grass || style === currentPitchStyle) return;
-    currentPitchStyle = PITCH_STYLES[style] ? style : "classic";
-    const theme = PITCH_STYLES[currentPitchStyle];
-    pitch.material.map?.dispose?.();
-    pitch.material.map = createPitchTexture({ document, renderer, style: currentPitchStyle });
-    pitch.material.needsUpdate = true;
-    grass.material.color.set(theme.grass);
-    dryPitchColor.set(theme.tint);
-    wetPitchColor.set(theme.wet);
+    if (!renderer || !scene || !pitch || !grass) return;
+    const nextStyle = activeProfile.pitchStyles[style] ? style : "classic";
+    if (nextStyle !== currentPitchStyle) {
+      currentPitchStyle = nextStyle;
+      const theme = activeProfile.pitchStyles[currentPitchStyle];
+      pitch.material.map?.dispose?.();
+      pitch.material.map = createPitchTexture({ document, renderer, style: currentPitchStyle, profile: activeProfile });
+      pitch.material.needsUpdate = true;
+      grass.material.color.set(theme.grass);
+      dryPitchColor.set(theme.tint);
+      wetPitchColor.set(theme.wet);
+    }
+    applyEnvironmentStyle(currentPitchStyle);
   }
 
   function updateAtmosphere(frame) {
-    const settings = frame?.snapshot?.settings ?? {};
+    const settings = frame?.snapshot?.match?.settings ?? frame?.snapshot?.settings ?? {};
     applyPitchStyle(settings.pitchStyle ?? "classic");
     currentWeather = settings.weather === "rain" ? "rain" : "clear";
     if (!rain || !pitch) return;
@@ -524,9 +593,29 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
     lastNow = now;
   }
 
+  function updateCelebration(frame) {
+    const active = Boolean(frame?.snapshot?.match?.replay?.active);
+    const now = Number(frame?.nowMilliseconds ?? 0);
+    const pulse = active ? 1 + Math.sin(now * 0.018) * 0.45 : 1;
+    if (crowd) {
+      crowd.material.size = (lowPowerDevice ? 0.3 : 0.34) * pulse;
+      crowd.material.opacity = active ? 0.98 : 0.88;
+    }
+    for (const led of ledViews) {
+      led.board.material.emissiveIntensity = active ? 0.75 + 0.3 * Math.sin(now * 0.022) : 0.32;
+      led.label.material.opacity = active ? 0.8 + 0.2 * Math.sin(now * 0.018) : 1;
+    }
+    for (const net of goalNetViews) {
+      const impact = active ? Math.sin(now * 0.022) * 0.12 : 0;
+      net.scale.x = 1 + Math.abs(impact);
+      net.material.opacity = 0.34 + Math.abs(impact) * 2;
+    }
+  }
+
   function render(frame) {
     if (!renderer || !scene || !camera) return false;
     updateAtmosphere(frame);
+    updateCelebration(frame);
     if (composer) composer.render();
     else renderer.render(scene, camera);
     return true;
@@ -543,19 +632,27 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
     const attempt = (operation) => {
       try { operation(); } catch (error) { errors.push(error); }
     };
-    attempt(() => disposeObject(scene));
+    for (const object of foreignObjects) attempt(() => scene?.remove?.(object));
+    attempt(() => scene?.remove?.(environmentRoot));
+    if (scene) scene.environment = null;
+    attempt(() => disposeObject(environmentRoot));
     attempt(() => safeDispose(environmentTexture));
     attempt(() => composer?.dispose?.());
     attempt(() => renderer?.dispose?.());
     attempt(() => renderer?.forceContextLoss?.());
+    foreignObjects.clear();
     renderer = null;
     composer = null;
     scene = null;
+    environmentRoot = null;
     camera = null;
     pitch = null;
     grass = null;
     crowd = null;
     rain = null;
+    hemisphere = null;
+    flood = null;
+    rim = null;
     dryPitchColor = null;
     wetPitchColor = null;
     environmentTexture = null;
@@ -572,11 +669,13 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
     addObject: (object) => {
       if (!scene || !object) return false;
       scene.add(object);
+      foreignObjects.add(object);
       return true;
     },
     removeObject: (object) => {
       if (!scene || !object) return false;
       scene.remove(object);
+      foreignObjects.delete(object);
       return true;
     },
     setCameraPose: (pose) => {
@@ -590,14 +689,27 @@ export function createBrowserThreeSceneEnvironmentHost({ canvas, target, documen
       destination.copy(camera.quaternion);
       return true;
     },
-    requestRender: () => render(Object.freeze({ snapshot: Object.freeze({ settings: Object.freeze({ pitchStyle: currentPitchStyle, weather: currentWeather }) }), nowMilliseconds: lastNow ?? 0 })),
+    requestRender: () => render(Object.freeze({
+      snapshot: Object.freeze({
+        match: Object.freeze({
+          settings: Object.freeze({ pitchStyle: currentPitchStyle, weather: currentWeather }),
+          replay: Object.freeze({ active: false }),
+        }),
+      }),
+      nowMilliseconds: lastNow ?? 0,
+    })),
     diagnostics: () => Object.freeze({
+      owner: "clean-host",
       renderer: renderer ? "webgl" : "unavailable",
       composer: Boolean(composer),
       lowPowerDevice: Boolean(lowPowerDevice),
+      profile: activeProfile.id,
       pitchStyle: currentPitchStyle,
       weather: currentWeather,
       sceneObjects: scene?.children?.length ?? 0,
+      environmentObjects: environmentRoot?.children?.length ?? 0,
+      foreignObjects: foreignObjects.size,
+      maxAnisotropy: renderer?.capabilities?.getMaxAnisotropy?.() ?? 1,
     }),
   });
 
