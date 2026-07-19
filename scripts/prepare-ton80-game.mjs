@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { normalizeTon80GameSource } from "./normalize-ton80-game.mjs";
 
 const PREPARED_MARKERS = Object.freeze([
   "let threeScenePort = null;",
@@ -27,40 +30,39 @@ export function classifyTon80GameSource(source) {
 function runStep(run, command, args, cwd) {
   const result = run(command, args, { cwd, stdio: "inherit" });
   if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} exited with status ${result.status}`);
-  }
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} exited with status ${result.status}`);
 }
 
 export function prepareTon80Game({ cwd = process.cwd(), run = spawnSync } = {}) {
-  const gamePath = resolve(cwd, "game.js");
-  const initialState = classifyTon80GameSource(readFileSync(gamePath, "utf8"));
-
-  if (initialState === "prepared") {
-    console.log("TON-80 game artifact already prepared");
-    return Object.freeze({ state: "prepared", changed: false });
-  }
-  if (initialState !== "legacy") {
-    throw new Error("TON-80 game artifact is partially migrated; refusing to overwrite an inconsistent source");
+  const sourcePath = resolve(cwd, "game.js");
+  const outputPath = resolve(cwd, "generated/game.js");
+  const source = readFileSync(sourcePath, "utf8");
+  if (classifyTon80GameSource(source) !== "legacy") {
+    throw new Error("Tracked game.js must remain the canonical legacy migration input");
   }
 
-  runStep(run, "python3", ["scripts/ton-80-migrate-game.py"], cwd);
-  runStep(run, process.execPath, ["scripts/normalize-ton80-game.mjs"], cwd);
-
-  const finalState = classifyTon80GameSource(readFileSync(gamePath, "utf8"));
-  if (finalState !== "prepared") {
-    throw new Error(`TON-80 game artifact preparation ended in unexpected state: ${finalState}`);
+  const workdir = mkdtempSync(join(tmpdir(), "ton80-generate-"));
+  try {
+    copyFileSync(sourcePath, join(workdir, "game.js"));
+    runStep(run, "python3", [resolve(cwd, "scripts/ton-80-migrate-game.py")], workdir);
+    const generated = normalizeTon80GameSource(readFileSync(join(workdir, "game.js"), "utf8"));
+    if (classifyTon80GameSource(generated) !== "prepared") {
+      throw new Error("TON-80 generation ended in an unexpected state");
+    }
+    mkdirSync(dirname(outputPath), { recursive: true });
+    const previous = (() => { try { return readFileSync(outputPath, "utf8"); } catch { return null; } })();
+    writeFileSync(outputPath, generated, "utf8");
+    if (readFileSync(sourcePath, "utf8") !== source) throw new Error("TON-80 generation mutated tracked game.js");
+    console.log(previous === generated ? "TON-80 generated artifact unchanged" : "TON-80 generated artifact prepared");
+    return Object.freeze({ state: "prepared", changed: previous !== generated, outputPath });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
   }
-
-  console.log("TON-80 clean-host game artifact prepared");
-  return Object.freeze({ state: "prepared", changed: true });
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;
 if (invokedPath === fileURLToPath(import.meta.url)) {
-  try {
-    prepareTon80Game();
-  } catch (error) {
+  try { prepareTon80Game(); } catch (error) {
     console.error(error?.stack ?? error);
     process.exitCode = 1;
   }
