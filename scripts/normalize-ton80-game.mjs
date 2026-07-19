@@ -13,4 +13,11 @@ for (const [duplicate, normalized] of replacements) {
   source = source.replace(duplicate, normalized);
 }
 
+const closingBoundary = "\n})();\n";
+const closingOccurrences = source.split(closingBoundary).length - 1;
+if (closingOccurrences !== 1) {
+  throw new Error(`Expected one generated IIFE closing boundary, found ${closingOccurrences}`);
+}
+source = source.replace(closingBoundary, "\n}\n})();\n");
+
 writeFileSync(path, source, "utf8");
