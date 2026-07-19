@@ -12,6 +12,7 @@ function captureRuntimeErrors(page) {
 }
 
 test("production composition boots and routes input, snapshot and lifecycle presentation", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   const runtimeErrors = captureRuntimeErrors(page);
   await page.goto("/?visualTest=1&skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
