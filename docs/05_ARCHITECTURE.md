@@ -1,9 +1,10 @@
 # Architecture
 
 ## Current constraint
-Gameplay, AI, rendering, animation, replay, much of the UI projection, and asset loading are concentrated in `game.js`.
 
-The fixed 60 Hz clock, browser input, application actions, engine contracts, and several gameplay/presentation helpers are extracted. Goal, replay, match-ended, kick, tackle, and lifecycle presentation facts cross an immutable browser event bridge. The compatibility runtime publishes previous/current immutable snapshots; pure presentation controllers derive interpolated entity transforms, camera framing, HUD/radar facts, and replay playback from those snapshots. Authoritative compatibility gameplay state and the remaining Three.js, Canvas, DOM, audio, and particle callback implementations still share one runtime closure. R1 is the approved sprint that establishes the enforceable boundary; it does not replace the existing fixed-timestep work.
+Gameplay and AI authority have been extracted from `game.js` into the deterministic `MatchEngine` under `src/game/engine/`. The deployed browser consumes immutable snapshots and ordered events; temporary objects in `game.js` are outward-only presentation mirrors and cannot progress gameplay.
+
+The remaining constraint is presentation ownership. Three.js/WebGL, Canvas fallback, model animation, settings, direct settings-preview tones, particles, trails and several overlay callbacks are still co-located in `game.js`. Pure snapshot/event projections already exist for render state, camera, replay, HUD, radar and feedback. `BrowserPresentationComposition` is the lifecycle owner for presentation adapters; `DomHudAdapter` and `RadarSnapshotAdapter` own snapshot-driven HUD/radar output, while `BrowserAudioAdapter` now owns match-event Web Audio and delegates non-audio particles through the compatibility feedback bridge. This allows each remaining implementation to be extracted behind explicit attach/render/reset/teardown contracts without re-entering engine authority.
 
 Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
 
@@ -14,16 +15,19 @@ Input --> Commands
 Commands --> Simulation
 AI --> Simulation
 Simulation --> State
-State --> Render
-State --> UI
-State --> Debug
+State --> PresentationComposition
+PresentationComposition --> WebGL
+PresentationComposition --> Canvas
+PresentationComposition --> UI
+PresentationComposition --> Audio
+PresentationComposition --> Debug
 ```
 
 ## Target modules
 `src/game/core`, `engine`, `application`, `config`, `input`, `entities`, `movement`, `ball`, `actions`, `ai`, `rules`, `render`, `presentation`, and `debug`.
 
 ## Dependency direction
-Core has no DOM or Three.js dependency. Renderers and UI read authoritative state but do not own physics or AI decisions.
+Core and engine modules have no DOM, Three.js, Canvas or Web Audio dependency. Browser composition connects immutable engine contracts to presentation adapters. Renderers and UI read authoritative state but do not own physics, lifecycle or AI decisions.
 
 ## Runtime contracts
 
@@ -32,16 +36,20 @@ Core has no DOM or Three.js dependency. Renderers and UI read authoritative stat
 - Commands with a future `targetTick` remain buffered until that tick is reached.
 - The engine owns players, ball, score, statistics, match lifecycle, and gameplay event ordering.
 - The engine publishes read-only snapshots for rendering and typed events for presentation feedback.
+- `BrowserPresentationComposition` owns presentation adapter creation, best-effort startup rollback, reset and reverse-order teardown. Cleanup attempts every adapter, always clears composition state and reports any collected failures after resources have been released.
+- Presentation factories and reset hooks receive only the browser-safe `target` and `document` lifecycle context. Runtime and snapshot mutation capabilities are not exposed; gameplay facts arrive only through immutable render frames and ordered events.
+- After-render presentation failures are isolated from the fixed simulation loop. Remaining listeners still run and the next frame is scheduled while the loop remains active.
 - Three.js, Canvas fallback, radar, HUD, audio, and presentation flows may consume snapshots and events but may not mutate engine state.
+- Browser match-event audio is owned by `BrowserAudioAdapter` only while its Web Audio backend remains usable. Context or node creation failure releases ownership during the event so the compatibility callback can provide the required fallback; direct settings-preview tones remain a named `game.js` bridge until the settings adapter slice.
 - Render interpolation may blend previous and current snapshots without changing authoritative positions.
 - Start, restart, and kickoff resets are snapshot discontinuities; their first render frame uses `previous === current` and never blends entities across matches or kickoffs.
 - Application commands own navigation and match lifecycle requests; DOM clicks are not an integration API.
 
 ## Source-of-truth rule
 
-The engine state is authoritative. Scene nodes, animation mixers, canvas coordinates, DOM text, CSS classes, replay badges, and HUD values are projections. Presentation must never infer a gameplay fact from a rendered projection when the engine can publish that fact directly.
+The engine state is authoritative. Scene nodes, animation mixers, canvas coordinates, DOM text, CSS classes, replay badges, audio nodes and HUD values are projections. Presentation must never infer a gameplay fact from a rendered projection when the engine can publish that fact directly.
 
 ## Migration rule
 Extract the smallest complete subsystem per sprint and retain adapters to the current game.
 
-R1 uses parity-first migration: establish contracts, move one complete responsibility at a time, keep compatibility adapters only while needed, and remove each bridge after equivalent contract coverage exists. A full rewrite, framework migration, or gameplay retuning is not permitted.
+R1 uses parity-first migration: establish contracts, move one complete responsibility at a time, keep compatibility adapters only while needed, and remove each bridge after equivalent contract coverage exists. A full rewrite, framework migration, visual redesign or gameplay retuning is not permitted.

@@ -1,12 +1,20 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const claimedContexts = new WeakSet();
 
-export function renderRadarSnapshot(context, snapshot, {
+function requireContext(context) {
+  if (!context || (typeof context !== "object" && typeof context !== "function")) {
+    throw new TypeError("radar renderer requires a context");
+  }
+}
+
+function drawRadarSnapshot(context, snapshot, {
   width,
   height,
   field,
-  config
+  config,
 }) {
-  if (!context || !snapshot) throw new TypeError("radar renderer requires a context and snapshot");
+  requireContext(context);
+  if (!snapshot) throw new TypeError("radar renderer requires a snapshot");
   const pad = config.plotPadding;
   const plotWidth = width - pad * 2;
   const plotHeight = height - pad * 2;
@@ -50,4 +58,29 @@ export function renderRadarSnapshot(context, snapshot, {
   context.arc(mapX(snapshot.ball.x), mapY(snapshot.ball.y), config.ballRadius, 0, Math.PI * 2);
   context.fill();
   context.stroke();
+  return true;
+}
+
+export function claimRadarSnapshotContext(context) {
+  requireContext(context);
+  if (claimedContexts.has(context)) {
+    throw new Error("radar context is already owned by a presentation adapter");
+  }
+  claimedContexts.add(context);
+  let released = false;
+  return () => {
+    if (released) return false;
+    released = true;
+    return claimedContexts.delete(context);
+  };
+}
+
+export function renderOwnedRadarSnapshot(context, snapshot, options) {
+  return drawRadarSnapshot(context, snapshot, options);
+}
+
+export function renderRadarSnapshot(context, snapshot, options) {
+  requireContext(context);
+  if (claimedContexts.has(context)) return false;
+  return drawRadarSnapshot(context, snapshot, options);
 }

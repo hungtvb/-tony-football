@@ -27,8 +27,9 @@ Before modifying code:
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, HUD, menus and overlays | Loads the guarded browser entry; never gameplay authority |
 | `browser-entry.js` | Sanitizes browser URL state before loading `game.js` | Removes compatibility/debug gameplay mutation switches and guarantees deployed engine authority |
-| `game.js` | Render implementations, DOM callbacks, settings/effects, presentation-only fixed-step decay and temporary snapshot-projected legacy objects | Deployed `simulationStep` invokes only presentation updates and engine snapshot capture; isolated legacy gameplay helpers have a zero-invocation browser guard |
-| `src/game/application/BrowserBootstrapComposition.js` | Named browser composition root for runtime target, application/input adapters, simulation loop, snapshot adapter and presentation-feedback subscription | Owns deterministic start, reset, pause/resume requests and teardown without changing deployed entry behavior |
+| `game.js` | Remaining WebGL/Canvas, DOM, settings, audio/effects implementations, presentation-only fixed-step decay and temporary snapshot-projected legacy objects | Deployed `simulationStep` invokes only presentation updates and engine snapshot capture; isolated legacy gameplay helpers have a zero-invocation browser guard |
+| `src/game/application/BrowserBootstrapComposition.js` | Named browser composition root for runtime target, application/input adapters, simulation loop, snapshot adapter and presentation composition | Owns deterministic start, reset, pause/resume requests and teardown without changing deployed entry behavior |
+| `src/game/presentation/BrowserPresentationComposition.js` | Owns presentation adapter creation, startup rollback, render fan-out, reset and reverse-order teardown | Browser-only lifecycle boundary; adapter factories receive frozen composition context and may consume snapshots/events only |
 | `src/game/application/BrowserRuntimeComposition.js` | Owns live browser runtime configuration, fixed source ticks, lifecycle/input routing and browser event publication | Deployed browser always resolves to engine authority; compatibility construction is isolated and cannot progress application lifecycle |
 | `src/game/application/BrowserMatchRuntime.js` | Owns one `MatchEngine`, deterministic command scheduling, fixed steps, immutable snapshots, ordered events and action intents | Browser-facing wrapper only; it publishes engine results and never infers score/replay transitions |
 | `src/game/engine/MatchEngine.js`, `GoalSequenceTimeline.js` | MatchEngine lifecycle plus deterministic goal phases `native-highlight → goal-card → score-card → replay → kickoff` | Headless authority for phase order, replay clock and post-goal reset; transitions occur before snapshot capture |
@@ -59,16 +60,16 @@ BrowserBootstrapComposition
   ├→ BrowserApplicationAdapter        ├→ BrowserRuntimeComposition
   ├→ SimulationLoop start/stop/reset  ├→ BrowserMatchRuntime → MatchEngine at fixed 60 Hz
   ├→ CompatibilitySnapshotAdapter     │                    ├→ immutable previous/current snapshots
-  └→ presentation feedback lifetime ──┘                    ├→ ordered gameplay events
-                                                           └→ action intents
+  └→ BrowserPresentationComposition ──┘                    ├→ ordered gameplay events
+         └→ presentation adapter lifecycle                 └→ action intents
 
 Natural goal → MatchEngine goal timeline
              → native-highlight → goal-card → score-card → replay → kickoff
              → phase/replay events and same-step snapshots
 
 Snapshots → CompatibilitySnapshotAdapter outward projection
-          → camera, replay frame cache, WebGL/Canvas transforms, HUD and radar
-Events    → BrowserGameEventBridge → audio, particles and phase-driven overlays
+          → BrowserPresentationComposition → camera, replay frame cache, WebGL/Canvas transforms, HUD and radar
+Events    → BrowserGameEventBridge          → audio, particles and phase-driven overlays
 ```
 
 The deployed browser has no compatibility runtime switch. Legacy mutable objects in
@@ -94,7 +95,8 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Subsystem | Source and owner | Focused validation | Direction |
 | --- | --- | --- | --- |
 | Fixed timestep and render cadence | `src/game/core/FixedClock.js`, `SimulationLoop.js` | `tests/simulation/`, ADR-001 | Retain fixed 60 Hz and interpolation |
-| Browser bootstrap lifecycle | `BrowserBootstrapComposition.js` | `tests/application/browserBootstrapComposition.test.mjs` | One explicit owner attaches listeners/subscriptions, starts the loop and resets or tears all of them down |
+| Browser bootstrap lifecycle | `BrowserBootstrapComposition.js` | `tests/application/browserBootstrapComposition.test.mjs` | One explicit owner attaches runtime/input/application services, starts the presentation composition and loop, and resets or tears them down |
+| Browser presentation lifecycle | `BrowserPresentationComposition.js` | `tests/presentation/browserPresentationComposition.test.mjs` | Creates adapters from frozen browser context, rolls back partial startup, fans out render/reset and disposes in reverse order |
 | Browser runtime authority | `browser-entry.js`, `BrowserRuntimeComposition.js`, `BrowserMatchRuntime.js`, `MatchEngine.js` | entry/runtime authority guards and deterministic snapshot tests | One live MatchEngine owns browser commands/snapshots/events; no URL or application fallback can progress compatibility gameplay |
 | Commands, events and snapshots | `src/game/engine/` | Engine contract, ordering and immutability tests | Plain serializable immutable contracts, including transient `SET_ATTACK_INTENT` and typed goal phases |
 | Goal announcement, replay and kickoff | `GoalSequenceTimeline.js`, `MatchEngine.js` | measured-tick timeline, runtime event/snapshot agreement, natural-goal integration | Engine owns one ordered timeline; presentation only projects current phase/progress |
@@ -104,10 +106,10 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Match lifecycle, score, stats and clock | `MatchEngine.js`, `MatchState.js` | MatchEngine/application tests plus `tests/scenarios/` | Live snapshots supply browser facts; direct legacy mirror writes cannot alter them |
 | FO4 keyboard mapping | `BrowserInputAdapter.js`, `FO4Controls.js` | `tests/input/`, browser controls flows | Immutable human commands; attack intent is always paired across release/cancellation paths |
 | AI and goalkeeper behavior | `AIDecisionSystem.js`, `MatchEngine.js`, engine systems | Deterministic AI/engine tests | Engine-only decisions; MatchEngine gates selected-owner takeover behind neutral controls, no attack intent and expired idle grace |
-| WebGL and models | `game.js`, `SnapshotRenderState.js`, assets | Asset validation and desktop Playwright | Presentation consumes snapshot poses |
-| Canvas fallback | `game.js`, `SnapshotRenderState.js` | Engine-backed Canvas smoke and narrow Playwright | Same immutable snapshot transforms as WebGL |
-| Camera, radar and HUD | presentation snapshot modules plus `game.js` DOM binding | presentation tests and browser flows | Read-only snapshot consumers |
-| Audio, particles and overlays | browser event/presentation adapters | presentation tests and event browser flows | Ordered event/phase consumers |
+| WebGL and models | `game.js`, `SnapshotRenderState.js`, assets; pending registration as explicit presentation adapters | Asset validation and desktop Playwright | Presentation consumes snapshot poses; implementation extraction remains TON-64 work |
+| Canvas fallback | `game.js`, `SnapshotRenderState.js`; pending registration as an explicit presentation adapter | Engine-backed Canvas smoke and narrow Playwright | Same immutable snapshot transforms as WebGL; implementation extraction remains TON-64 work |
+| Camera, radar and HUD | presentation snapshot modules plus `game.js` DOM binding; pending explicit adapter ownership | presentation tests and browser flows | Read-only snapshot consumers |
+| Audio, particles and overlays | browser event/presentation adapters plus remaining `game.js` implementations | presentation tests and event browser flows | Ordered event/phase consumers; lifecycle moves under presentation composition |
 | Main menu and setup navigation | application adapters and `BrowserBootstrapComposition` navigation callbacks | application and Playwright flows | Bootstrap reset boundary owns navigation cleanup; match lifecycle remains engine commands |
 | Static deployment | `package.json`, `scripts/build-static.mjs`, `vercel.json` | build and deployment contracts | Preserve static hosting |
 | Workflow safety | `scripts/check-workflow-policy.mjs`, `.github/workflow-policy-allowlist.json`, `docs/12_WORKFLOW_SECURITY_POLICY.md` | actual repository scan plus positive/negative tooling fixtures | CI validates reviewed source; workflows cannot become a source-publishing transport |
@@ -116,23 +118,24 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 
 These are temporary migration points, not patterns to copy:
 
+- `BrowserPresentationComposition` now owns presentation service lifecycle, but the concrete WebGL, Canvas, DOM/HUD, settings, audio, particles and trail implementations still need to be moved or registered as explicit adapters during TON-64.
 - `game.js` still contains isolated legacy implementation helpers because renderer, DOM and settings extraction belongs to TON-64; deployed fixed steps have a tested zero-invocation boundary for those helpers.
 - `CompatibilitySnapshotAdapter` mirrors immutable engine facts into legacy player/ball objects only where existing presentation implementations still read those objects.
 - `CompatibilitySnapshotAdapter` / `SnapshotReplayController` retain an outward-only replay-frame cache. The adapter synchronizes playback elapsed from authoritative engine snapshots, starts on `replay.active` false→true and stops only on true→false; the browser fixed step never advances or ends replay.
-- Browser presentation implementation extraction and removal of now-dead co-located helpers belongs to TON-64; new gameplay logic must never be added to `game.js`.
+- New presentation implementations must be registered through the presentation composition rather than added as new browser responsibilities inside `game.js`; new gameplay logic must never be added to `game.js`.
 
 ## Dependency rules
 
 Engine and core modules may depend on pure JavaScript data/math, deterministic clocks/random sources, gameplay configuration and engine contracts. They must not depend on `window`, `document`, DOM, CSS, Three.js, Canvas, Web Audio, `requestAnimationFrame`, presentation modules or rendered values.
 
-Browser composition may connect input, application, engine and presentation adapters. Presentation may consume engine contracts and read-only snapshots/events, but may not mutate engine-owned players, ball, score, statistics, clock, possession, AI decisions, goal phases, replay lifecycle or match lifecycle.
+Browser composition may connect input, application, engine and presentation adapters. `BrowserPresentationComposition` may own adapter lifecycle but must not interpret or mutate gameplay facts. Presentation adapters may consume engine contracts and read-only snapshots/events, but may not mutate engine-owned players, ball, score, statistics, clock, possession, AI decisions, goal phases, replay lifecycle or match lifecycle.
 
 Workflow validation may read repository workflow YAML and the exact exception registry. It must not modify workflows, source, branches or refs.
 
 ## Validation pyramid
 
 - `npm run test:engine:fast` owns simulation, engine, gameplay, input/application contracts and deterministic scenarios.
-- `npm run test:presentation:fast` owns pure snapshot/event/phase projection and presentation state.
+- `npm run test:presentation:fast` owns pure snapshot/event/phase projection, presentation state and synthetic adapter lifecycle tests without starting gameplay simulation.
 - `npm run test:workflow-policy` scans the actual workflow directory against the exact path-scoped exception registry.
 - `npm run test:tooling` runs the actual workflow scan plus tooling fixtures and authority guards.
 - `npm run test:ci:fast` adds syntax, assets, tooling, authority guards and static build without installing a browser.
@@ -145,7 +148,8 @@ Gameplay correctness never depends on Playwright. Browser tests never inject sco
 
 | Change type | Minimum validation |
 | --- | --- |
-| Browser bootstrap/composition lifecycle | focused bootstrap/runtime/snapshot reset and teardown tests, `test:ci:fast`, and minimal desktop/narrow smoke |
+| Browser bootstrap/composition lifecycle | focused bootstrap/runtime/snapshot/presentation reset and teardown tests, `test:ci:fast`, and minimal desktop/narrow smoke |
+| Browser presentation adapter lifecycle | synthetic adapter creation/rollback/render/reset/reverse-teardown tests without gameplay simulation, plus browser smoke when concrete adapters are registered |
 | Browser runtime authority | entry/runtime guards, direct-mirror-mutation isolation, deterministic snapshot parity, `test:ci:fast`, and minimal desktop/narrow smoke |
 | Core clock or loop | simulation tests plus 30/60/120 FPS equivalence |
 | Movement, ball or possession | focused gameplay/engine tests and deterministic reset coverage |
