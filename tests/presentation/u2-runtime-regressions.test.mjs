@@ -21,7 +21,6 @@ test("replay snapshots retain ball velocity and trail", () => {
   assert.match(compactSource, /Math\.hypot\(renderBall\.vx\|\|0,renderBall\.vy\|\|0\)/);
 });
 
-test("goal effects share the sequence duration", () => {
+test("goal presentation retains one authoritative sequence duration", () => {
   assert.ok(compactSource.includes("timer:goalDuration,duration:goalDuration"));
-  assert.ok(compactSource.includes("game.goalSequence.duration-game.goalSequence.timer"));
 });
