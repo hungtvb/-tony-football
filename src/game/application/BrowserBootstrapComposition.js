@@ -61,7 +61,7 @@ export class BrowserBootstrapComposition {
     simulationLoop,
     snapshotAdapter,
     presentationComposition = null,
-    presentationAdapterFactories = [],
+    presentationAdapterFactories = null,
     onNavigation = () => {},
     onCameraCycle = () => {},
     getCompatibilityControlMode = () => "attack",
@@ -74,7 +74,8 @@ export class BrowserBootstrapComposition {
     assertSimulationLoop(simulationLoop);
     if (!snapshotAdapter || typeof snapshotAdapter.capture !== "function") throw new TypeError("Browser bootstrap requires a snapshot adapter");
     if (typeof createPresentationFeedback !== "function") throw new TypeError("createPresentationFeedback must be a function");
-    assertPresentationAdapterFactories(presentationAdapterFactories);
+    const resolvedPresentationAdapterFactories = presentationAdapterFactories ?? target?.__TONY_PRESENTATION_ADAPTER_FACTORIES__ ?? [];
+    assertPresentationAdapterFactories(resolvedPresentationAdapterFactories);
 
     this.#target = target;
     this.#document = document;
@@ -83,7 +84,7 @@ export class BrowserBootstrapComposition {
     this.#snapshotAdapter = snapshotAdapter;
     this.#presentationComposition = presentationComposition ?? new BrowserPresentationComposition({
       adapterFactories: [
-        ...presentationAdapterFactories,
+        ...resolvedPresentationAdapterFactories,
         ({ document: browserDocument }) => createDomHudAdapter({ document: browserDocument }),
         ({ document: browserDocument }) => createRadarSnapshotAdapter({ document: browserDocument }),
         () => createPresentationFeedback(),

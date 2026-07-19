@@ -1,3 +1,9 @@
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+
+import { createBrowserThreeSceneEnvironmentAdapter } from "./src/game/presentation/BrowserThreeSceneEnvironmentAdapterFactory.js";
+import { installLegacyThreeSceneTracking } from "./src/game/presentation/LegacyThreeSceneRegistry.js";
+
 const BLOCKED_GAMEPLAY_PARAMS = Object.freeze([
   "runtime",
   "debugScenario",
@@ -25,6 +31,11 @@ export function removeBrowserGameplayDebugMutators(debug = null) {
 }
 
 if (typeof globalThis.window !== "undefined") {
+  installLegacyThreeSceneTracking({ THREE, EffectComposer });
+  globalThis.window.__TONY_PRESENTATION_ADAPTER_FACTORIES__ = Object.freeze([
+    ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({ target, document }),
+  ]);
+
   const sanitized = sanitizeBrowserRuntimeSearch(globalThis.location.search);
   if (sanitized.changed) {
     globalThis.history.replaceState(
