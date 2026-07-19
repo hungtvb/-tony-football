@@ -61,6 +61,6 @@ if (typeof globalThis.window !== "undefined") {
       `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`,
     );
   }
-  await import("./game.js?v=20.0.1");
+  await import("./game.js?v=20.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
 }
