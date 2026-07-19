@@ -18,6 +18,12 @@ function assertPresentationComposition(composition) {
   }
 }
 
+function assertPresentationAdapterFactories(factories) {
+  if (!Array.isArray(factories) || factories.some((factory) => typeof factory !== "function")) {
+    throw new TypeError("presentationAdapterFactories must be an array of functions");
+  }
+}
+
 function collectLifecycleErrors(steps) {
   const errors = [];
   for (const step of steps) {
@@ -45,16 +51,34 @@ export class BrowserBootstrapComposition {
   #applicationRuntime;
   #inputAdapter;
   #applicationAdapter;
+  #onPresentationReady;
   #unsubscribeAfterRender = null;
   #started = false;
 
-  constructor({ target, document, runtimeComposition, simulationLoop, snapshotAdapter, presentationComposition = null, onNavigation = () => {}, onCameraCycle = () => {}, getCompatibilityControlMode = () => "attack", getCompatibilityMatchState = () => "menu", createPresentationFeedback = () => null }) {
+  constructor({
+    target,
+    document,
+    runtimeComposition,
+    simulationLoop,
+    snapshotAdapter,
+    presentationComposition = null,
+    presentationAdapterFactories = null,
+    onNavigation = () => {},
+    onCameraCycle = () => {},
+    getCompatibilityControlMode = () => "attack",
+    getCompatibilityMatchState = () => "menu",
+    createPresentationFeedback = () => null,
+    onPresentationReady = () => {},
+  }) {
     if (!target || typeof target.addEventListener !== "function") throw new TypeError("Browser bootstrap requires an event target");
     if (!document || typeof document.getElementById !== "function") throw new TypeError("Browser bootstrap requires a document");
     if (!runtimeComposition || typeof runtimeComposition.attachTarget !== "function" || typeof runtimeComposition.teardown !== "function") throw new TypeError("Browser bootstrap requires a runtime composition");
     assertSimulationLoop(simulationLoop);
     if (!snapshotAdapter || typeof snapshotAdapter.capture !== "function") throw new TypeError("Browser bootstrap requires a snapshot adapter");
     if (typeof createPresentationFeedback !== "function") throw new TypeError("createPresentationFeedback must be a function");
+    if (typeof onPresentationReady !== "function") throw new TypeError("onPresentationReady must be a function");
+    const resolvedPresentationAdapterFactories = presentationAdapterFactories ?? target?.__TONY_PRESENTATION_ADAPTER_FACTORIES__ ?? [];
+    assertPresentationAdapterFactories(resolvedPresentationAdapterFactories);
 
     this.#target = target;
     this.#document = document;
@@ -63,6 +87,7 @@ export class BrowserBootstrapComposition {
     this.#snapshotAdapter = snapshotAdapter;
     this.#presentationComposition = presentationComposition ?? new BrowserPresentationComposition({
       adapterFactories: [
+        ...resolvedPresentationAdapterFactories,
         ({ document: browserDocument }) => createDomHudAdapter({ document: browserDocument }),
         ({ document: browserDocument }) => createRadarSnapshotAdapter({ document: browserDocument }),
         () => createPresentationFeedback(),
@@ -72,6 +97,7 @@ export class BrowserBootstrapComposition {
     this.#applicationRuntime = new ApplicationRuntime({ onNavigation, getMatchState: getCompatibilityMatchState, runtimeComposition, resetRuntime: () => this.reset() });
     this.#inputAdapter = new BrowserInputAdapter({ target, onCommand: () => false, onApplicationRequest: (type) => this.#applicationRuntime.request(type), onCameraCycle, getControlMode: getCompatibilityControlMode, getMatchState: getCompatibilityMatchState, runtimeComposition });
     this.#applicationAdapter = new BrowserApplicationAdapter({ target, document, runtime: this.#applicationRuntime, runtimeComposition });
+    this.#onPresentationReady = onPresentationReady;
   }
 
   get started() { return this.#started; }
@@ -92,6 +118,7 @@ export class BrowserBootstrapComposition {
       this.#inputAdapter.attach();
       this.#applicationAdapter.attach();
       this.#presentationComposition.start(this.#presentationLifecycleContext());
+      this.#onPresentationReady(this.#presentationLifecycleContext());
       if (typeof this.#simulationLoop.subscribeAfterRender === "function") {
         this.#unsubscribeAfterRender = this.#simulationLoop.subscribeAfterRender((timing) => this.#renderPresentation(timing));
       }

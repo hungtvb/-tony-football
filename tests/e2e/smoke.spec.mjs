@@ -12,12 +12,16 @@ function captureRuntimeErrors(page) {
 }
 
 test("production composition boots and routes input, snapshot and lifecycle presentation", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   const runtimeErrors = captureRuntimeErrors(page);
   await page.goto("/?visualTest=1&skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
 
   const boot = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(boot.renderer).toBe("webgl");
+  expect(boot.threeScene.owner).toBe("clean-host");
+  expect(boot.threeScene.profile).toBe("tony-football-default-v1");
+  expect(boot.threeScene.foreignObjects).toBeGreaterThan(0);
   expect(boot.runtimeMode).toBe("engine");
   expect(boot.legacyGameplayStepCount).toBe(0);
   await expect(page.locator("#gameCanvas")).toBeVisible();

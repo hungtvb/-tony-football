@@ -23,7 +23,11 @@ test("browser entry cannot restore compatibility gameplay authority", async () =
   assert.match(entry, /"debugScenario"/);
   assert.match(entry, /removeBrowserGameplayDebugMutators/);
   assert.match(entry, /delete debug\.applyScenario/);
-  assert.match(entry, /await import\("\.\/game\.js\?v=/);
+  assert.match(entry, /createRebindableThreeSceneHostPort/);
+  assert.match(entry, /getPort: \(\) => sceneFacade\.bound \? sceneFacade\.port : null/);
+  assert.match(entry, /onHostChanged: \(port\) => sceneFacade\.bind\(port\)/);
+  assert.match(entry, /await import\("\.\/generated\/game\.js\?v=/);
+  assert.doesNotMatch(entry, /await import\("\.\/game\.js\?v=/);
   assert.doesNotMatch(runtime, /params\.get\("runtime"\)/);
   assert.doesNotMatch(runtime, /params\.has\("debugScenario"\)/);
   assert.match(application, /require live engine authority/);
