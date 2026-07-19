@@ -88,10 +88,11 @@ test("browser bootstrap subscribes presentation after primary rendering and unsu
   assert.equal(composition.start(), true);
   assert.deepEqual(calls, ["presentation:start", "presentation:subscribe", "loop:start"]);
   assert.equal(composition.teardown(), true);
-  assert.deepEqual(calls.slice(-3), [
+  assert.deepEqual(calls.slice(-4), [
     "loop:stop",
     "presentation:unsubscribe",
     "presentation:teardown",
+    "snapshot:reset",
   ]);
 });
 
