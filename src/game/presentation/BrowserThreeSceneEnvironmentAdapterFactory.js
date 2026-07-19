@@ -1,12 +1,5 @@
 import { createBrowserThreeSceneEnvironmentHost } from "./BrowserThreeSceneEnvironmentHost.js";
-import { createLegacyAdoptedThreeSceneHost } from "./LegacyAdoptedThreeSceneHost.js";
-import {
-  activateLegacyThreeSceneOwnership,
-  deactivateLegacyThreeSceneOwnership,
-  legacyThreeSceneSnapshot,
-  withLegacyThreeOwnedMutation,
-  withLegacyThreeOwnedRender,
-} from "./LegacyThreeSceneRegistry.js";
+import { DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE } from "./ThreeSceneEnvironmentProfile.js";
 import { createThreeSceneEnvironmentAdapter } from "./ThreeSceneEnvironmentAdapter.js";
 
 function requestCanvasFallback(target, fallback) {
@@ -24,39 +17,11 @@ function defaultLowPowerDevice(target) {
   return visualTestMode || coarsePointer || constrainedMemory;
 }
 
-function createMigratingHost(context, { lowPowerDevice }) {
-  const legacy = legacyThreeSceneSnapshot();
-  const host = legacy
-    ? createLegacyAdoptedThreeSceneHost({
-      legacyResources: legacy,
-      lowPowerDevice,
-      renderScope: withLegacyThreeOwnedRender,
-      mutationScope: withLegacyThreeOwnedMutation,
-    })
-    : createBrowserThreeSceneEnvironmentHost({ ...context, lowPowerDevice });
-
-  if (!legacy) return host;
-  return Object.freeze({
-    port: host.port,
-    start() {
-      host.start();
-      activateLegacyThreeSceneOwnership(host.port);
-      return true;
-    },
-    resize: (viewport) => host.resize(viewport),
-    render: (frame) => host.render(frame),
-    reset: (contextValue) => host.reset(contextValue),
-    dispose() {
-      deactivateLegacyThreeSceneOwnership();
-      return host.dispose();
-    },
-  });
-}
-
 export function createBrowserThreeSceneEnvironmentAdapter({
   target,
   document,
   lowPowerDevice = defaultLowPowerDevice(target),
+  profile = DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE,
   onHostChanged = () => {},
   onFallback = (fallback) => requestCanvasFallback(target, fallback),
 } = {}) {
@@ -65,6 +30,10 @@ export function createBrowserThreeSceneEnvironmentAdapter({
     document,
     onHostChanged,
     onFallback,
-    createSceneHost: (context) => createMigratingHost(context, { lowPowerDevice }),
+    createSceneHost: (context) => createBrowserThreeSceneEnvironmentHost({
+      ...context,
+      lowPowerDevice,
+      profile,
+    }),
   });
 }
