@@ -1,0 +1,45 @@
+name: TON-80 clean-host migration
+
+on:
+  push:
+    branches:
+      - feature/ton-80-three-scene-environment-adapter
+    paths:
+      - .github/workflows/ton-80-dev-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feature/ton-80-three-scene-environment-adapter
+          fetch-depth: 0
+
+      - name: Verify reviewed base is an ancestor
+        run: git merge-base --is-ancestor b035a000f43dda55b94610a82458fd21d6139d6f HEAD
+
+      - name: Apply deterministic game migration
+        run: python3 scripts/ton-80-migrate-game.py
+
+      - name: Validate syntax and focused contracts
+        run: |
+          npm ci
+          node --check browser-entry.js
+          node --check game.js
+          node --check src/game/application/BrowserBootstrapComposition.js
+          node --check src/game/presentation/BrowserThreeSceneEnvironmentHost.js
+          node --check src/game/presentation/ThreeSceneEnvironmentProfile.js
+          node --test tests/application/browserBootstrapPresentationFactories.test.mjs tests/presentation/threeSceneEnvironmentAdapter.test.mjs tests/presentation/browserThreeSceneEnvironmentHostContract.test.mjs
+
+      - name: Publish migration commit
+        run: |
+          git config user.name "Tony Football DEV"
+          git config user.email "actions@users.noreply.github.com"
+          git add game.js
+          git commit -m "fix(ton-80): make clean scene host production owner"
+          git push origin HEAD:feature/ton-80-three-scene-environment-adapter
