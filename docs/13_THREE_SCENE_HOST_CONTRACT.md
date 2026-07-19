@@ -42,9 +42,24 @@ Later TON-81 and TON-83 work may connect through the frozen scene-host port only
 
 The port does not expose raw `scene`, `camera`, `renderer` or `composer` references. It cannot dispatch gameplay commands, reset runtime state or mutate snapshots.
 
+## Stable rebind contract
+
+`browser-entry.js` exposes one `RebindableThreeSceneHostPort` façade for the lifetime of the page. Compatibility views receive that stable port once after initial presentation startup; they never retain a concrete host port.
+
+The façade:
+
+- retains foreign object identity registrations and the latest immutable camera pose;
+- delegates operations to the currently bound clean-host port;
+- stays stable while the adapter unbinds and disposes a lost or failed host;
+- transactionally replays retained objects and camera pose when a fresh host is bound;
+- rolls back candidate registrations if replay fails and lets adapter startup select explicit fallback;
+- never disposes foreign resources.
+
+This makes `webglcontextrestored` a real host replacement rather than a renderer-only restart. Player, ball, trail and effect objects remain owned by their registering compatibility views and are reattached without recreation or disposal. Camera decisions remain TON-83; the façade only replays the last already-authorized immutable pose.
+
 ## Startup order
 
-`BrowserBootstrapComposition` attaches presentation adapters before starting the simulation loop. It then invokes the presentation-ready hook so temporary player, ball and effect views can register through the already-active scene-host port. `game.js` must not create a renderer, scene, camera, composer, environment map, lights, pitch, stadium, goals or weather resources.
+`BrowserBootstrapComposition` attaches presentation adapters before starting the simulation loop. It then invokes the presentation-ready hook so temporary player, ball and effect views can register through the already-active stable scene-host port. `game.js` must not create a renderer, scene, camera, composer, environment map, lights, pitch, stadium, goals or weather resources.
 
 ## Fallback contract
 
@@ -59,7 +74,7 @@ Expected fallback reasons are stable strings:
 - `webgl-render-failed`;
 - `webgl-reset-failed`.
 
-Fallback details are immutable and contain `reason`, `message` and `recoverable`. Context restoration may create a fresh host after a recoverable failure. Forced Canvas and missing canvas are non-recoverable for the current attachment.
+Fallback details are immutable and contain `reason`, `message` and `recoverable`. Context restoration may create a fresh host after a recoverable failure. The stable façade remains detached during fallback and rebinds only after the new host has started and resized successfully. Forced Canvas and missing canvas are non-recoverable for the current attachment.
 
 ## Validation
 
@@ -68,6 +83,8 @@ TON-80 requires:
 - synthetic adapter lifecycle and fallback coverage;
 - executable clean-host start, render, dispose and restart coverage;
 - a regression proving foreign geometry/material resources survive host teardown;
+- an integration regression proving context loss, fresh-host creation, foreign-object reattachment, camera-pose replay and subsequent port/render operations;
+- a failed-rebind regression proving candidate rollback does not dispose foreign resources;
 - frozen profile validation and profile diagnostics;
 - source guards proving `game.js` no longer constructs the Three.js environment;
 - production WebGL smoke proving `owner === "clean-host"`;

@@ -1,4 +1,5 @@
 import { createBrowserThreeSceneEnvironmentAdapter } from "./src/game/presentation/BrowserThreeSceneEnvironmentAdapterFactory.js";
+import { createRebindableThreeSceneHostPort } from "./src/game/presentation/RebindableThreeSceneHostPort.js";
 
 const BLOCKED_GAMEPLAY_PARAMS = Object.freeze(["runtime", "debugScenario"]);
 
@@ -21,12 +22,10 @@ export function removeBrowserGameplayDebugMutators(debug = null) {
 }
 
 if (typeof globalThis.window !== "undefined") {
-  const sceneState = { port: null };
+  const sceneFacade = createRebindableThreeSceneHostPort();
   const sceneBridge = Object.freeze({
-    getPort: () => sceneState.port,
-    diagnostics: () => sceneState.port?.diagnostics?.() ?? Object.freeze({
-      owner: "canvas-fallback", renderer: "canvas", profile: null, foreignObjects: 0,
-    }),
+    getPort: () => sceneFacade.bound ? sceneFacade.port : null,
+    diagnostics: () => sceneFacade.port.diagnostics(),
   });
 
   Object.defineProperty(globalThis.window, "__TONY_THREE_SCENE_BRIDGE__", {
@@ -35,7 +34,7 @@ if (typeof globalThis.window !== "undefined") {
 
   globalThis.window.__TONY_PRESENTATION_ADAPTER_FACTORIES__ = Object.freeze([
     ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({
-      target, document, onHostChanged: (port) => { sceneState.port = port; },
+      target, document, onHostChanged: (port) => sceneFacade.bind(port),
     }),
   ]);
 
