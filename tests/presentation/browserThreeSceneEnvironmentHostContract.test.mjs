@@ -57,6 +57,8 @@ test("generated game composition no longer constructs the Three environment whil
     "createAtmosphere3D",
     "createGoals3D",
   ]) assert.equal(generatedSource.includes(forbidden), false, `generated/game.js must not own ${forbidden}`);
+  assert.match(generatedSource, /from "\.\.\/src\//);
+  assert.doesNotMatch(generatedSource, /from "\.\/src\//);
   assert.match(generatedSource, /__TONY_THREE_SCENE_BRIDGE__/);
   assert.match(generatedSource, /onPresentationReady:\s*init3D/);
 });
