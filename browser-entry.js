@@ -1,8 +1,4 @@
-import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-
 import { createBrowserThreeSceneEnvironmentAdapter } from "./src/game/presentation/BrowserThreeSceneEnvironmentAdapterFactory.js";
-import { installLegacyThreeSceneTracking } from "./src/game/presentation/LegacyThreeSceneRegistry.js";
 
 const BLOCKED_GAMEPLAY_PARAMS = Object.freeze([
   "runtime",
@@ -31,9 +27,30 @@ export function removeBrowserGameplayDebugMutators(debug = null) {
 }
 
 if (typeof globalThis.window !== "undefined") {
-  installLegacyThreeSceneTracking({ THREE, EffectComposer });
+  const sceneState = { port: null };
+  const sceneBridge = Object.freeze({
+    getPort: () => sceneState.port,
+    diagnostics: () => sceneState.port?.diagnostics?.() ?? Object.freeze({
+      owner: "canvas-fallback",
+      renderer: "canvas",
+      profile: null,
+      foreignObjects: 0,
+    }),
+  });
+
+  Object.defineProperty(globalThis.window, "__TONY_THREE_SCENE_BRIDGE__", {
+    value: sceneBridge,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+
   globalThis.window.__TONY_PRESENTATION_ADAPTER_FACTORIES__ = Object.freeze([
-    ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({ target, document }),
+    ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({
+      target,
+      document,
+      onHostChanged: (port) => { sceneState.port = port; },
+    }),
   ]);
 
   const sanitized = sanitizeBrowserRuntimeSearch(globalThis.location.search);
@@ -44,6 +61,6 @@ if (typeof globalThis.window !== "undefined") {
       `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`,
     );
   }
-  await import("./game.js?v=20.0.0");
+  await import("./game.js?v=20.0.1");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
 }
