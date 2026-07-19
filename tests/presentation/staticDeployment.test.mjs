@@ -5,6 +5,7 @@ import test from "node:test";
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
 const vercel = JSON.parse(await readFile(new URL("../../vercel.json", import.meta.url), "utf8"));
+const pagesWorkflow = await readFile(new URL("../../.github/workflows/deploy-pages.yml", import.meta.url), "utf8");
 
 test("static deployment does not reference node_modules URLs", () => {
   assert.doesNotMatch(index, /["']\/node_modules\//);
@@ -22,4 +23,16 @@ test("Vercel publishes the prepared static bundle instead of the Node developmen
   assert.equal(vercel.framework, null);
   assert.equal(vercel.buildCommand, "npm run build");
   assert.equal(vercel.outputDirectory, "dist");
+});
+
+test("GitHub Pages builds and uploads the explicit generated static bundle", () => {
+  const installIndex = pagesWorkflow.indexOf("run: npm ci");
+  const buildIndex = pagesWorkflow.indexOf("run: npm run build");
+  const uploadIndex = pagesWorkflow.indexOf("actions/upload-pages-artifact@");
+  assert.ok(installIndex >= 0, "Pages workflow must install locked dependencies");
+  assert.ok(buildIndex > installIndex, "Pages workflow must build after dependency installation");
+  assert.ok(uploadIndex > buildIndex, "Pages workflow must upload only after the static build");
+  assert.match(pagesWorkflow, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/);
+  assert.match(pagesWorkflow, /path:\s+dist(?:\s|$)/);
+  assert.doesNotMatch(pagesWorkflow, /path:\s+\.(?:\s|$)/);
 });
