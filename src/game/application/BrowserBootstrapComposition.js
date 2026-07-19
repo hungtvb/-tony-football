@@ -51,6 +51,7 @@ export class BrowserBootstrapComposition {
   #applicationRuntime;
   #inputAdapter;
   #applicationAdapter;
+  #onPresentationReady;
   #unsubscribeAfterRender = null;
   #started = false;
 
@@ -67,6 +68,7 @@ export class BrowserBootstrapComposition {
     getCompatibilityControlMode = () => "attack",
     getCompatibilityMatchState = () => "menu",
     createPresentationFeedback = () => null,
+    onPresentationReady = () => {},
   }) {
     if (!target || typeof target.addEventListener !== "function") throw new TypeError("Browser bootstrap requires an event target");
     if (!document || typeof document.getElementById !== "function") throw new TypeError("Browser bootstrap requires a document");
@@ -74,6 +76,7 @@ export class BrowserBootstrapComposition {
     assertSimulationLoop(simulationLoop);
     if (!snapshotAdapter || typeof snapshotAdapter.capture !== "function") throw new TypeError("Browser bootstrap requires a snapshot adapter");
     if (typeof createPresentationFeedback !== "function") throw new TypeError("createPresentationFeedback must be a function");
+    if (typeof onPresentationReady !== "function") throw new TypeError("onPresentationReady must be a function");
     const resolvedPresentationAdapterFactories = presentationAdapterFactories ?? target?.__TONY_PRESENTATION_ADAPTER_FACTORIES__ ?? [];
     assertPresentationAdapterFactories(resolvedPresentationAdapterFactories);
 
@@ -94,6 +97,7 @@ export class BrowserBootstrapComposition {
     this.#applicationRuntime = new ApplicationRuntime({ onNavigation, getMatchState: getCompatibilityMatchState, runtimeComposition, resetRuntime: () => this.reset() });
     this.#inputAdapter = new BrowserInputAdapter({ target, onCommand: () => false, onApplicationRequest: (type) => this.#applicationRuntime.request(type), onCameraCycle, getControlMode: getCompatibilityControlMode, getMatchState: getCompatibilityMatchState, runtimeComposition });
     this.#applicationAdapter = new BrowserApplicationAdapter({ target, document, runtime: this.#applicationRuntime, runtimeComposition });
+    this.#onPresentationReady = onPresentationReady;
   }
 
   get started() { return this.#started; }
@@ -114,6 +118,7 @@ export class BrowserBootstrapComposition {
       this.#inputAdapter.attach();
       this.#applicationAdapter.attach();
       this.#presentationComposition.start(this.#presentationLifecycleContext());
+      this.#onPresentationReady(this.#presentationLifecycleContext());
       if (typeof this.#simulationLoop.subscribeAfterRender === "function") {
         this.#unsubscribeAfterRender = this.#simulationLoop.subscribeAfterRender((timing) => this.#renderPresentation(timing));
       }
