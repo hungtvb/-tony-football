@@ -63,14 +63,17 @@ Expected fallback reasons are stable strings:
 
 Fallback details are immutable and contain `reason`, `message` and `recoverable`.
 
-Production fallback routing is reason-aware:
+Production fallback routing is deliberately minimal:
 
+- forced Canvas starts through the existing Canvas path;
 - recoverable startup, resize, render and reset failures route to Canvas immediately;
-- `webgl-context-lost` stays on the current page for a bounded restore grace window;
-- a successful fresh-host bind cancels the pending Canvas route and replays retained views/camera pose;
-- expiry of the grace window routes to Canvas;
-- adapter teardown cancels any pending context-loss route;
-- forced Canvas and missing canvas are non-recoverable for the current attachment.
+- `webgl-context-lost` remains on the current page and waits for one browser `webglcontextrestored` event;
+- the restoration event attempts one fresh clean-host startup using the existing stable façade;
+- successful startup rebinds retained views and the latest immutable camera pose;
+- failed fresh-host startup publishes `webgl-startup-failed` and routes to Canvas;
+- TON-80 introduces no timeout, retry orchestration, hot WebGL-to-Canvas takeover, dual-renderer synchronization or live match-state migration.
+
+A Canvas reload may restart the current match. In-place Canvas snapshot parity and any future renderer switching belong to TON-82.
 
 ## Validation
 
@@ -80,7 +83,8 @@ TON-80 requires:
 - executable clean-host start, render, dispose and restart coverage;
 - a regression proving foreign geometry/material resources survive host teardown;
 - stable façade replay and failed-rebind rollback coverage;
-- production factory/browser integration proving context loss does not navigate immediately, context restoration cancels the route, fresh-host binding reattaches live views and subsequent camera/quaternion/render operations reach the fresh host;
+- production factory/browser integration proving context loss does not navigate immediately, one restoration event creates a fresh host, retained views/camera pose replay and subsequent camera/quaternion/render operations reach the fresh host;
+- a production-factory regression proving failed fresh-host startup routes to Canvas without timer/retry orchestration;
 - frozen profile validation and profile diagnostics;
 - source guards proving `game.js` no longer constructs the Three.js environment;
 - production WebGL smoke proving `owner === "clean-host"`;

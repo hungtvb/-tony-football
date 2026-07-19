@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures.mjs";
 
-test("production browser factory defers context-loss fallback and restores the stable facade", async ({ page }, testInfo) => {
+test("production browser factory keeps context loss on-page and restores the stable facade", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one representative browser lifecycle integration is sufficient");
   await page.goto("/?visualTest=1&skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
@@ -39,7 +39,6 @@ test("production browser factory defers context-loss fallback and restores the s
       target,
       document: { getElementById: () => canvas },
       onHostChanged: (port) => facade.bind(port),
-      contextRestoreGraceMilliseconds: 60,
       createSceneHost: () => {
         generation += 1;
         const calls = [];
@@ -63,7 +62,6 @@ test("production browser factory defers context-loss fallback and restores the s
     canvas.dispatchEvent(lost);
     const immediateReplacements = replacements.length;
     canvas.dispatchEvent(new Event("webglcontextrestored"));
-    await new Promise((resolve) => setTimeout(resolve, 90));
     const quaternionTarget = { copied: false, copy() { this.copied = true; } };
     const quaternionResult = runtimePort.copyCameraQuaternion(quaternionTarget);
     const renderResult = runtimePort.requestRender();
