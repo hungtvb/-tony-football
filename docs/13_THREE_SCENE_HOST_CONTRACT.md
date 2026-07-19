@@ -40,22 +40,9 @@ Later TON-81 and TON-83 work may connect through the frozen scene-host port only
 - `requestRender()`;
 - `diagnostics()` returning a frozen plain object.
 
+The page-lifetime `RebindableThreeSceneHostPort` façade retains foreign object identities and the latest immutable camera pose while the concrete clean host is replaceable. Fresh-host binding replays those facts transactionally. Failed replay rolls candidate registrations back and leaves the façade detached; neither the host nor the façade may dispose foreign resources.
+
 The port does not expose raw `scene`, `camera`, `renderer` or `composer` references. It cannot dispatch gameplay commands, reset runtime state or mutate snapshots.
-
-## Stable rebind contract
-
-`browser-entry.js` exposes one `RebindableThreeSceneHostPort` façade for the lifetime of the page. Compatibility views receive that stable port once after initial presentation startup; they never retain a concrete host port.
-
-The façade:
-
-- retains foreign object identity registrations and the latest immutable camera pose;
-- delegates operations to the currently bound clean-host port;
-- stays stable while the adapter unbinds and disposes a lost or failed host;
-- transactionally replays retained objects and camera pose when a fresh host is bound;
-- rolls back candidate registrations if replay fails and lets adapter startup select explicit fallback;
-- never disposes foreign resources.
-
-This makes `webglcontextrestored` a real host replacement rather than a renderer-only restart. Player, ball, trail and effect objects remain owned by their registering compatibility views and are reattached without recreation or disposal. Camera decisions remain TON-83; the façade only replays the last already-authorized immutable pose.
 
 ## Startup order
 
@@ -74,7 +61,16 @@ Expected fallback reasons are stable strings:
 - `webgl-render-failed`;
 - `webgl-reset-failed`.
 
-Fallback details are immutable and contain `reason`, `message` and `recoverable`. Context restoration may create a fresh host after a recoverable failure. The stable façade remains detached during fallback and rebinds only after the new host has started and resized successfully. Forced Canvas and missing canvas are non-recoverable for the current attachment.
+Fallback details are immutable and contain `reason`, `message` and `recoverable`.
+
+Production fallback routing is reason-aware:
+
+- recoverable startup, resize, render and reset failures route to Canvas immediately;
+- `webgl-context-lost` stays on the current page for a bounded restore grace window;
+- a successful fresh-host bind cancels the pending Canvas route and replays retained views/camera pose;
+- expiry of the grace window routes to Canvas;
+- adapter teardown cancels any pending context-loss route;
+- forced Canvas and missing canvas are non-recoverable for the current attachment.
 
 ## Validation
 
@@ -83,8 +79,8 @@ TON-80 requires:
 - synthetic adapter lifecycle and fallback coverage;
 - executable clean-host start, render, dispose and restart coverage;
 - a regression proving foreign geometry/material resources survive host teardown;
-- an integration regression proving context loss, fresh-host creation, foreign-object reattachment, camera-pose replay and subsequent port/render operations;
-- a failed-rebind regression proving candidate rollback does not dispose foreign resources;
+- stable façade replay and failed-rebind rollback coverage;
+- production factory/browser integration proving context loss does not navigate immediately, context restoration cancels the route, fresh-host binding reattaches live views and subsequent camera/quaternion/render operations reach the fresh host;
 - frozen profile validation and profile diagnostics;
 - source guards proving `game.js` no longer constructs the Three.js environment;
 - production WebGL smoke proving `owner === "clean-host"`;
