@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeTon80GameSource } from "./normalize-ton80-game.mjs";
+import { normalizeTon80GameSource } from "../../scripts/normalize-ton80-game.mjs";
 
 const generatedWithMigrationBoundaries = `(() => {
   function createLabelSprite  function createLabelSprite(player, accent) {}
