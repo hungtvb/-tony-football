@@ -15,7 +15,7 @@ This contract belongs to TON-80. It moves browser WebGL scene and environment li
 - explicit fallback publication through `tony:three-scene-fallback`;
 - immutable after-render frame delivery to the active scene host.
 
-The concrete Three.js host will own renderer/composer, scene, environment map, lights, pitch, grass, stadium, crowd and weather resources.
+`BrowserThreeSceneEnvironmentHost` owns renderer/composer, scene, environment map, lights, pitch, grass, stadium, crowd and weather resources. `BrowserThreeSceneEnvironmentAdapterFactory` binds that host to the lifecycle adapter without adding Three.js imports to application modules.
 
 ## Port boundary
 
@@ -46,8 +46,8 @@ Fallback details are immutable and contain `reason`, `message` and `recoverable`
 
 ## Delivery sequence
 
-1. Land and validate the lifecycle/port contract.
-2. Move the concrete Three.js renderer/composer and environment resources from `game.js` into the host factory.
+1. Land and validate the lifecycle/port contract. **Complete.**
+2. Move the concrete Three.js renderer/composer and environment resources from `game.js` into the host factory. **Complete as an isolated presentation host.**
 3. Register the adapter through `BrowserBootstrapComposition.presentationAdapterFactories`.
 4. Rewire legacy player/ball/camera implementations to the port without moving their ownership.
 5. Prove WebGL success and forced Canvas fallback in browser smoke.
