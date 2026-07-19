@@ -19,7 +19,7 @@ const REQUIRED_BOUNDARIES = Object.freeze([
 function rebaseGeneratedModuleImports(source) {
   return source
     .replace(/(\bfrom\s+["'])\.\/src\//g, "$1../src/")
-    .replace(/(\bimport\s*\(\s*[#'])\.\/src\//g, "$1../src/");
+    .replace(/(\bimport\s*\(\s*["'])\.\/src\//g, "$1../src/");
 }
 
 export function normalizeTon80GameSource(source) {
@@ -50,7 +50,7 @@ export function normalizeTon80GameSource(source) {
   if (normalized.includes("\n}\n})();\n")) {
     throw new Error("Generated bootstrap remains nested behind an extra closing brace");
   }
-  if (/\bfrom\s+[#']\.\/src\//.test(normalized) || /\bimport\s*\(\s*["']\.\/src\//.test(normalized)) {
+  if (/\bfrom\s+["']\.\/src\//.test(normalized) || /\bimport\s*\(\s*["']\.\/src\//.test(normalized)) {
     throw new Error("Generated module imports still resolve beneath the generated directory");
   }
   return normalized;
