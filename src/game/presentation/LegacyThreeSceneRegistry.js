@@ -14,6 +14,7 @@ function registry() {
       environmentObjects: new Set(),
       ownershipActive: false,
       ownedRenderDepth: 0,
+      ownedMutationDepth: 0,
       activePort: null,
       restore: [],
     };
@@ -45,6 +46,7 @@ export function installLegacyThreeSceneTracking({ THREE, EffectComposer } = {}) 
   patchMethod(THREE.Scene.prototype, "add", (original) => function trackedSceneAdd(...objects) {
     if (!state.scene) state.scene = this;
     else if (this !== state.scene) state.ownedScene = this;
+    if (state.ownedMutationDepth > 0) return original.apply(this, objects);
     const stack = new Error().stack ?? "";
     const forwarded = [];
     for (const object of objects) {
@@ -126,6 +128,17 @@ export function withLegacyThreeOwnedRender(callback) {
   }
 }
 
+export function withLegacyThreeOwnedMutation(callback) {
+  if (typeof callback !== "function") throw new TypeError("owned mutation callback must be a function");
+  const state = registry();
+  state.ownedMutationDepth += 1;
+  try {
+    return callback();
+  } finally {
+    state.ownedMutationDepth -= 1;
+  }
+}
+
 export function resetLegacyThreeSceneRegistryForTests() {
   const state = registry();
   while (state.restore.length > 0) state.restore.pop()();
@@ -140,4 +153,5 @@ export function resetLegacyThreeSceneRegistryForTests() {
   state.ownershipActive = false;
   state.activePort = null;
   state.ownedRenderDepth = 0;
+  state.ownedMutationDepth = 0;
 }

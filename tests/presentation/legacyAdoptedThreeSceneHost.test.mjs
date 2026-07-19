@@ -65,11 +65,18 @@ test("adopted host falls back to the existing renderer when no composer exists",
 
 test("adopted host port keeps object identity and immutable diagnostics", () => {
   const { resources } = createResources();
-  const host = createLegacyAdoptedThreeSceneHost({ legacyResources: resources, lowPowerDevice: true });
+  let mutations = 0;
+  const host = createLegacyAdoptedThreeSceneHost({
+    legacyResources: resources,
+    lowPowerDevice: true,
+    mutationScope: (callback) => { mutations += 1; return callback(); },
+  });
   host.start();
   const object = {};
   assert.equal(host.port.addObject(object), true);
   assert.equal(resources.scene.children[0], object);
+  assert.equal(host.port.removeObject(object), true);
+  assert.equal(mutations, 2);
   const destination = { copy: (value) => { destination.value = value; } };
   assert.equal(host.port.copyCameraQuaternion(destination), true);
   assert.equal(destination.value, resources.camera.quaternion);

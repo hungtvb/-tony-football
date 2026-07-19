@@ -22,6 +22,7 @@ export function createLegacyAdoptedThreeSceneHost({
   legacyResources,
   lowPowerDevice = false,
   renderScope = (callback) => callback(),
+  mutationScope = (callback) => callback(),
 } = {}) {
   const resources = requireLegacyResources(legacyResources);
   let started = false;
@@ -69,12 +70,12 @@ export function createLegacyAdoptedThreeSceneHost({
   const port = createThreeSceneHostPort({
     addObject: (object) => {
       if (!started || disposed || !object) return false;
-      resources.scene.add(object);
+      mutationScope(() => resources.scene.add(object));
       return true;
     },
     removeObject: (object) => {
       if (!started || disposed || !object) return false;
-      resources.scene.remove(object);
+      mutationScope(() => resources.scene.remove(object));
       return true;
     },
     setCameraPose: (pose) => {

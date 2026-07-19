@@ -8,6 +8,7 @@ import {
   legacyThreeSceneSnapshot,
   ownedThreeSceneSnapshot,
   resetLegacyThreeSceneRegistryForTests,
+  withLegacyThreeOwnedMutation,
   withLegacyThreeOwnedRender,
 } from "../../src/game/presentation/LegacyThreeSceneRegistry.js";
 
@@ -76,6 +77,23 @@ test("active ownership forwards later legacy scene objects through the host port
   scene.add(late);
   assert.deepEqual(forwarded, [late]);
   assert.equal(scene.children.includes(late), false);
+});
+
+test("owned mutation scope bypasses forwarding recursion on an adopted scene", () => {
+  installLegacyThreeSceneTracking({ THREE: { Scene, PerspectiveCamera: Camera, WebGLRenderer: Renderer }, EffectComposer: Composer });
+  const scene = new Scene();
+  const camera = new Camera();
+  const renderer = new Renderer();
+  scene.add({ name: "existing" });
+  camera.lookAt(0, 0, 0);
+  renderer.setSize(1200, 700);
+  const port = Object.freeze({
+    addObject: (object) => withLegacyThreeOwnedMutation(() => scene.add(object)),
+  });
+  activateLegacyThreeSceneOwnership(port);
+  const late = { name: "late-model" };
+  scene.add(late);
+  assert.equal(scene.children.filter((object) => object === late).length, 1);
 });
 
 test("legacy registry distinguishes the adapter-owned scene and renderer", () => {

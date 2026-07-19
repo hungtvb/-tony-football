@@ -4,6 +4,7 @@ import {
   activateLegacyThreeSceneOwnership,
   deactivateLegacyThreeSceneOwnership,
   legacyThreeSceneSnapshot,
+  withLegacyThreeOwnedMutation,
   withLegacyThreeOwnedRender,
 } from "./LegacyThreeSceneRegistry.js";
 import { createThreeSceneEnvironmentAdapter } from "./ThreeSceneEnvironmentAdapter.js";
@@ -30,6 +31,7 @@ function createMigratingHost(context, { lowPowerDevice }) {
       legacyResources: legacy,
       lowPowerDevice,
       renderScope: withLegacyThreeOwnedRender,
+      mutationScope: withLegacyThreeOwnedMutation,
     })
     : createBrowserThreeSceneEnvironmentHost({ ...context, lowPowerDevice });
 
