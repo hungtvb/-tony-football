@@ -12,6 +12,31 @@ function disposeAdapter(adapter) {
   else if (typeof adapter.dispose === "function") adapter.dispose();
 }
 
+function collectErrors(items, callback) {
+  const errors = [];
+  for (const item of items) {
+    try {
+      callback(item);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+function throwCollected(errors, message, primaryError = null) {
+  if (errors.length === 0) {
+    if (primaryError) throw primaryError;
+    return;
+  }
+  if (!primaryError && errors.length === 1) throw errors[0];
+  throw new AggregateError(
+    primaryError ? [primaryError, ...errors] : errors,
+    message,
+    primaryError ? { cause: primaryError } : undefined,
+  );
+}
+
 export class BrowserPresentationComposition {
   #adapterFactories;
   #adapters = [];
@@ -47,30 +72,35 @@ export class BrowserPresentationComposition {
       this.#started = true;
       return true;
     } catch (error) {
-      for (const adapter of created.reverse()) disposeAdapter(adapter);
+      const cleanupErrors = collectErrors([...created].reverse(), disposeAdapter);
       this.#adapters = [];
-      throw error;
+      this.#started = false;
+      throwCollected(cleanupErrors, "presentation startup failed and rollback reported errors", error);
     }
   }
 
   render(frame) {
     if (!this.#started) return false;
-    for (const adapter of this.#adapters) adapter?.render?.(frame);
+    const errors = collectErrors(this.#adapters, (adapter) => adapter?.render?.(frame));
+    throwCollected(errors, "presentation render failed");
     return true;
   }
 
   reset(context = {}) {
     if (!this.#started) return false;
     const stableContext = Object.freeze({ ...context });
-    for (const adapter of this.#adapters) adapter?.reset?.(stableContext);
+    const errors = collectErrors(this.#adapters, (adapter) => adapter?.reset?.(stableContext));
+    throwCollected(errors, "presentation reset failed");
     return true;
   }
 
   teardown() {
     if (!this.#started) return false;
-    for (const adapter of [...this.#adapters].reverse()) disposeAdapter(adapter);
+    const adapters = [...this.#adapters].reverse();
     this.#adapters = [];
     this.#started = false;
+    const errors = collectErrors(adapters, disposeAdapter);
+    throwCollected(errors, "presentation teardown failed");
     return true;
   }
 }

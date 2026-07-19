@@ -12,10 +12,12 @@ export function createSimulationLoop({
   clockOptions,
   requestFrame = globalThis.requestAnimationFrame?.bind(globalThis),
   cancelFrame = globalThis.cancelAnimationFrame?.bind(globalThis),
+  onAfterRenderError = () => {},
 } = {}) {
   if (typeof update !== "function") throw new TypeError("update must be a function");
   if (typeof render !== "function") throw new TypeError("render must be a function");
   if (typeof requestFrame !== "function") throw new TypeError("requestFrame must be a function");
+  if (typeof onAfterRenderError !== "function") throw new TypeError("onAfterRenderError must be a function");
 
   const clock = new FixedClock(clockOptions);
   const afterRenderListeners = new Set();
@@ -34,38 +36,41 @@ export function createSimulationLoop({
       frameDeltaSeconds: result.frameDeltaSeconds,
       droppedSeconds: result.droppedSeconds,
     });
-    for (const listener of afterRenderListeners) listener(renderFrame);
+    for (const listener of afterRenderListeners) {
+      try {
+        listener(renderFrame);
+      } catch (error) {
+        try {
+          onAfterRenderError(error, listener, renderFrame);
+        } catch {
+          // Presentation diagnostics must never stop frame scheduling.
+        }
+      }
+    }
     frameHandle = requestFrame(frame);
   }
 
   return {
     clock,
-
     start() {
       if (running) return;
       running = true;
       clock.reset(null);
       frameHandle = requestFrame(frame);
     },
-
     stop() {
       running = false;
       if (frameHandle !== null && typeof cancelFrame === "function") cancelFrame(frameHandle);
       frameHandle = null;
     },
-
     reset(nowMilliseconds = null) {
       clock.reset(nowMilliseconds === null ? null : nowMilliseconds / 1000);
     },
-
     subscribeAfterRender(listener) {
       assertAfterRenderListener(listener);
       afterRenderListeners.add(listener);
       return () => afterRenderListeners.delete(listener);
     },
-
-    get running() {
-      return running;
-    },
+    get running() { return running; },
   };
 }

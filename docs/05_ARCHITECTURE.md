@@ -36,9 +36,11 @@ Core and engine modules have no DOM, Three.js, Canvas or Web Audio dependency. B
 - Commands with a future `targetTick` remain buffered until that tick is reached.
 - The engine owns players, ball, score, statistics, match lifecycle, and gameplay event ordering.
 - The engine publishes read-only snapshots for rendering and typed events for presentation feedback.
-- `BrowserPresentationComposition` owns presentation adapter creation, startup rollback, reset and reverse-order teardown.
+- `BrowserPresentationComposition` owns presentation adapter creation, best-effort startup rollback, reset and reverse-order teardown. Cleanup attempts every adapter, always clears composition state and reports any collected failures after resources have been released.
+- Presentation factories and reset hooks receive only the browser-safe `target` and `document` lifecycle context. Runtime and snapshot mutation capabilities are not exposed; gameplay facts arrive only through immutable render frames and ordered events.
+- After-render presentation failures are isolated from the fixed simulation loop. Remaining listeners still run and the next frame is scheduled while the loop remains active.
 - Three.js, Canvas fallback, radar, HUD, audio, and presentation flows may consume snapshots and events but may not mutate engine state.
-- Browser match-event audio is owned by `BrowserAudioAdapter`; the temporary feedback bridge may still emit particles and direct settings-preview tones remain a named `game.js` bridge until the settings adapter slice.
+- Browser match-event audio is owned by `BrowserAudioAdapter` only while its Web Audio backend remains usable. Context or node creation failure releases ownership during the event so the compatibility callback can provide the required fallback; direct settings-preview tones remain a named `game.js` bridge until the settings adapter slice.
 - Render interpolation may blend previous and current snapshots without changing authoritative positions.
 - Start, restart, and kickoff resets are snapshot discontinuities; their first render frame uses `previous === current` and never blends entities across matches or kickoffs.
 - Application commands own navigation and match lifecycle requests; DOM clicks are not an integration API.
