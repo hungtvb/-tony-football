@@ -43,6 +43,7 @@ test("browser bootstrap registers injected presentation factories before built-i
       createRenderFrame: () => Object.freeze({ previous: snapshot, current: snapshot, alpha: 0 }),
       reset: () => {},
     },
+    onPresentationReady: () => calls.push("presentation:ready"),
     presentationAdapterFactories: [
       (context) => {
         calls.push(["custom:create", Object.keys(context).sort()]);
@@ -61,6 +62,7 @@ test("browser bootstrap registers injected presentation factories before built-i
 
   assert.deepEqual(calls[0], ["custom:create", ["document", "target"]]);
   assert.equal(calls.includes("custom:attach"), true);
+  assert.equal(calls.indexOf("presentation:ready") < calls.indexOf("loop:start"), true);
   assert.equal(calls.some((entry) => Array.isArray(entry) && entry[0] === "custom:render"), true);
   assert.equal(calls.includes("custom:teardown"), true);
 });
