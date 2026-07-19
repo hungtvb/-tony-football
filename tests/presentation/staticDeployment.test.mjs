@@ -15,9 +15,10 @@ test("Three.js import map uses browser-accessible HTTPS modules", () => {
   assert.match(index, /"three\/addons\/":"https:\/\/cdn\.jsdelivr\.net\/npm\/three@0\.185\.1\/examples\/jsm\/"/);
 });
 
-test("Vercel publishes the generated static bundle instead of the Node development server", () => {
-  assert.equal(packageJson.scripts.start, "node scripts/dev-server.mjs");
-  assert.equal(packageJson.scripts.build, "node scripts/build-static.mjs");
+test("Vercel publishes the prepared static bundle instead of the Node development server", () => {
+  assert.equal(packageJson.scripts["prepare:ton80-game"], "node scripts/prepare-ton80-game.mjs");
+  assert.equal(packageJson.scripts.start, "npm run prepare:ton80-game && node scripts/dev-server.mjs");
+  assert.equal(packageJson.scripts.build, "npm run prepare:ton80-game && node scripts/build-static.mjs");
   assert.equal(vercel.framework, null);
   assert.equal(vercel.buildCommand, "npm run build");
   assert.equal(vercel.outputDirectory, "dist");
