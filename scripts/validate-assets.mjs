@@ -24,9 +24,7 @@ if (character.bytes.length > 750_000) throw new Error(`${characterPath}: exceeds
 if (animation.bytes.length > 750_000) throw new Error(`${animationPath}: exceeds 750 KB budget`);
 const unsupportedCharacterExtensions = (character.json.extensionsRequired || []).filter((extension) => extension !== "KHR_mesh_quantization");
 if (unsupportedCharacterExtensions.length) throw new Error(`${characterPath}: unsupported required extensions: ${unsupportedCharacterExtensions.join(", ")}`);
-if (!character.json.images?.every((image) => ["image/jpeg", "image/png"].includes(image.mimeType))) {
-  throw new Error(`${characterPath}: textures must have JPEG or PNG fallback`);
-}
+if (!character.json.images?.every((image) => ["image/jpeg", "image/png"].includes(image.mimeType))) throw new Error(`${characterPath}: textures must have JPEG or PNG fallback`);
 
 const characterNodes = new Set((character.json.nodes || []).map((node) => node.name).filter(Boolean));
 const expectedKitBones = ["Head", "spine_01", "spine_02", "spine_03", "pelvis", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "hand_l", "hand_r", "SuperHero_Male"];
@@ -35,13 +33,9 @@ if (missingKitBones.length) throw new Error(`${characterPath}: missing football 
 const bodyNode = character.json.nodes.find((node) => node.name === "SuperHero_Male");
 const bodyPrimitive = character.json.meshes?.[bodyNode?.mesh]?.primitives?.[0];
 const bodyPosition = character.json.accessors?.[bodyPrimitive?.attributes?.POSITION];
-if (!bodyPosition || bodyPosition.componentType !== 5122 || !bodyPosition.normalized || bodyPosition.count < 7000) {
-  throw new Error(`${characterPath}: integrated kit requires the normalized high-detail body position stream`);
-}
+if (!bodyPosition || bodyPosition.componentType !== 5122 || !bodyPosition.normalized || bodyPosition.count < 7000) throw new Error(`${characterPath}: integrated kit requires the normalized high-detail body position stream`);
 const animationTargets = new Set();
-for (const clip of animation.json.animations || []) {
-  for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name);
-}
+for (const clip of animation.json.animations || []) for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name);
 const missingTargets = [...animationTargets].filter((name) => !characterNodes.has(name));
 if (missingTargets.length) throw new Error(`${animationPath}: missing character targets: ${missingTargets.join(", ")}`);
 
@@ -49,40 +43,17 @@ const expectedClips = ["Idle_Loop", "Jog_Fwd_Loop", "Sprint_Loop", "Hit_Chest", 
 const clipNames = new Set((animation.json.animations || []).map((clip) => clip.name));
 const missingClips = expectedClips.filter((clip) => !clipNames.has(clip));
 if (missingClips.length) throw new Error(`${animationPath}: missing clips: ${missingClips.join(", ")}`);
-if (!animation.json.extensionsRequired?.includes("EXT_meshopt_compression")) {
-  throw new Error(`${animationPath}: expected Meshopt-compressed animation data`);
-}
+if (!animation.json.extensionsRequired?.includes("EXT_meshopt_compression")) throw new Error(`${animationPath}: expected Meshopt-compressed animation data`);
 
 for (const contract of [
-  "loader.setMeshoptDecoder(MeshoptDecoder)",
-  "football-character-v2.glb?v=16.0.0",
-  "football-animations-v2.glb?v=16.0.0",
-  "installPlayerAnimations(motion.animations||[])",
-  "applyFootballActionPose(rig,pose,actionProgress,dt)",
-  "createRigSquadNumber(player,home&&!keeper",
-  "createIntegratedKitMaterial(source,player,palette,skinColor)",
-  "applyIntegratedFootballKit(model,player)",
-  "createBallSurfaceTextures(style)",
-  "new THREE.SphereGeometry(.56,48,32)",
-  "WEBGL · 2D FALLBACK"
-]) {
-  if (!gameSource.includes(contract)) throw new Error(`game.js: missing player loader contract: ${contract}`);
-}
-for (const legacyPrimitive of ["attach(\"spine_01\"", "patchGeometry", "new THREE.SphereGeometry(.82,20,16)"]) {
-  if (gameSource.includes(legacyPrimitive)) throw new Error(`game.js: legacy primitive player/ball rendering returned: ${legacyPrimitive}`);
-}
+  "loader.setMeshoptDecoder(MeshoptDecoder)", "football-character-v2.glb?v=16.0.0", "football-animations-v2.glb?v=16.0.0",
+  "installPlayerAnimations(motion.animations||[])", "applyFootballActionPose(rig,pose,actionProgress,dt)", "createRigSquadNumber(player,home&&!keeper",
+  "createIntegratedKitMaterial(source,player,palette,skinColor)", "applyIntegratedFootballKit(model,player)", "createBallSurfaceTextures(style)",
+  "new THREE.SphereGeometry(.56,48,32)", "WEBGL · 2D FALLBACK"
+]) if (!gameSource.includes(contract)) throw new Error(`game.js: missing player loader contract: ${contract}`);
+for (const legacyPrimitive of ["attach(\"spine_01\"", "patchGeometry", "new THREE.SphereGeometry(.82,20,16)"]) if (gameSource.includes(legacyPrimitive)) throw new Error(`game.js: legacy primitive player/ball rendering returned: ${legacyPrimitive}`);
 
-for (const pageContract of [
-  "u1-match-experience.css",
-  "browser-entry.js?v=1.0.0",
-  "class=\"match-hud\"",
-  "class=\"overlay-card pre-match-card\"",
-  "class=\"overlay-card pause-card\""
-]) {
-  if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
-}
-if (!entrySource.includes('await import("./game.js?v=20.0.0")')) {
-  throw new Error("browser-entry.js: missing versioned game entry import");
-}
+for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
+if (!entrySource.includes('await import("./generated/game.js?v=20.0.0")')) throw new Error("browser-entry.js: missing versioned generated game entry import");
 
 console.log(`Player assets and U1 page contract valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
