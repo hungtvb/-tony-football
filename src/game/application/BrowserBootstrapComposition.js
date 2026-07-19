@@ -18,6 +18,12 @@ function assertPresentationComposition(composition) {
   }
 }
 
+function assertPresentationAdapterFactories(factories) {
+  if (!Array.isArray(factories) || factories.some((factory) => typeof factory !== "function")) {
+    throw new TypeError("presentationAdapterFactories must be an array of functions");
+  }
+}
+
 function collectLifecycleErrors(steps) {
   const errors = [];
   for (const step of steps) {
@@ -48,13 +54,27 @@ export class BrowserBootstrapComposition {
   #unsubscribeAfterRender = null;
   #started = false;
 
-  constructor({ target, document, runtimeComposition, simulationLoop, snapshotAdapter, presentationComposition = null, onNavigation = () => {}, onCameraCycle = () => {}, getCompatibilityControlMode = () => "attack", getCompatibilityMatchState = () => "menu", createPresentationFeedback = () => null }) {
+  constructor({
+    target,
+    document,
+    runtimeComposition,
+    simulationLoop,
+    snapshotAdapter,
+    presentationComposition = null,
+    presentationAdapterFactories = [],
+    onNavigation = () => {},
+    onCameraCycle = () => {},
+    getCompatibilityControlMode = () => "attack",
+    getCompatibilityMatchState = () => "menu",
+    createPresentationFeedback = () => null,
+  }) {
     if (!target || typeof target.addEventListener !== "function") throw new TypeError("Browser bootstrap requires an event target");
     if (!document || typeof document.getElementById !== "function") throw new TypeError("Browser bootstrap requires a document");
     if (!runtimeComposition || typeof runtimeComposition.attachTarget !== "function" || typeof runtimeComposition.teardown !== "function") throw new TypeError("Browser bootstrap requires a runtime composition");
     assertSimulationLoop(simulationLoop);
     if (!snapshotAdapter || typeof snapshotAdapter.capture !== "function") throw new TypeError("Browser bootstrap requires a snapshot adapter");
     if (typeof createPresentationFeedback !== "function") throw new TypeError("createPresentationFeedback must be a function");
+    assertPresentationAdapterFactories(presentationAdapterFactories);
 
     this.#target = target;
     this.#document = document;
@@ -63,6 +83,7 @@ export class BrowserBootstrapComposition {
     this.#snapshotAdapter = snapshotAdapter;
     this.#presentationComposition = presentationComposition ?? new BrowserPresentationComposition({
       adapterFactories: [
+        ...presentationAdapterFactories,
         ({ document: browserDocument }) => createDomHudAdapter({ document: browserDocument }),
         ({ document: browserDocument }) => createRadarSnapshotAdapter({ document: browserDocument }),
         () => createPresentationFeedback(),
