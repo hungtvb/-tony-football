@@ -168,3 +168,68 @@ test("fallback-to-rig upgrade commits the detached candidate atomically", () => 
   assert.equal(view.rigged, true); assert.equal(proceduralBody.visible, false); assert.equal(candidate.parent, view.root); assert.equal(view.diagnostics().installError, "");
   assert.equal(view.teardown(), true); assert.equal(port.objects.size, 0);
 });
+
+function mixerOwnershipSpy() {
+  const mixers = []; let failingClipName = "";
+  class Mixer {
+    constructor(model) {
+      this.model = model; this.cached = new Set(); this.scheduled = new Set(); this.uncacheRootCalls = 0;
+      mixers.push(this);
+    }
+    clipAction(clip) {
+      if (clip.name === failingClipName) throw new Error(`clip action failed for ${clip.name}`);
+      const mixer = this;
+      const action = {
+        clip, enabled: false, clampWhenFinished: false, timeScale: 1,
+        reset() { return this; },
+        setLoop() { return this; },
+        fadeIn() { return this; },
+        fadeOut() { return this; },
+        play() { mixer.scheduled.add(this); return this; },
+        stop() { mixer.scheduled.delete(this); return this; },
+      };
+      this.cached.add(action); return action;
+    }
+    stopAllAction() { this.scheduled.clear(); return this; }
+    uncacheRoot(root) {
+      assert.equal(root, this.model);
+      this.uncacheRootCalls += 1; this.cached.clear(); this.scheduled.clear();
+    }
+    update() {}
+  }
+  return {
+    three: { ...THREE, AnimationMixer: Mixer },
+    mixers,
+    failOnClip(name) { failingClipName = name; },
+  };
+}
+
+test("animation refresh swaps an isolated mixer and reset never accumulates scheduled actions", () => {
+  const ownership = mixerOwnershipSpy(); const candidate = candidateModel();
+  const view = createPlayerModelView({
+    player: descriptor, scenePort: scenePort(), document: documentStub(),
+    worldX: (value) => value, worldZ: (value) => value,
+    three: ownership.three, cloneModel: () => candidate,
+  });
+
+  assert.equal(view.installAsset({ characterScene: new THREE.Group(), animations: [{ name: "Idle_Loop" }] }), true);
+  assert.equal(ownership.mixers.length, 1); assert.equal(ownership.mixers[0].scheduled.size, 1);
+
+  assert.equal(view.reset(), true); assert.equal(view.reset(), true);
+  assert.equal(ownership.mixers[0].scheduled.size, 1);
+
+  assert.equal(view.installAnimations([{ name: "Idle_Loop" }, { name: "Jog_Fwd_Loop" }]), true);
+  assert.equal(ownership.mixers.length, 2);
+  assert.equal(ownership.mixers[0].scheduled.size, 0); assert.equal(ownership.mixers[0].cached.size, 0); assert.equal(ownership.mixers[0].uncacheRootCalls, 1);
+  assert.equal(ownership.mixers[1].scheduled.size, 1); assert.equal(ownership.mixers[1].cached.size, 2);
+
+  ownership.failOnClip("Broken");
+  assert.equal(view.installAnimations([{ name: "Idle_Loop" }, { name: "Broken" }]), false);
+  assert.equal(ownership.mixers.length, 3);
+  assert.equal(ownership.mixers[1].scheduled.size, 1); assert.equal(ownership.mixers[1].cached.size, 2);
+  assert.equal(ownership.mixers[2].scheduled.size, 0); assert.equal(ownership.mixers[2].cached.size, 0); assert.equal(ownership.mixers[2].uncacheRootCalls, 1);
+  assert.match(view.diagnostics().installError, /clip action failed for Broken/);
+
+  assert.equal(view.teardown(), true);
+  assert.equal(ownership.mixers[1].scheduled.size, 0); assert.equal(ownership.mixers[1].cached.size, 0); assert.equal(ownership.mixers[1].uncacheRootCalls, 1);
+});
