@@ -152,8 +152,10 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   if (!scenePort || typeof scenePort.addObject !== "function" || typeof scenePort.removeObject !== "function") throw new TypeError("PlayerModelView requires a scene port");
   if (!document || typeof document.createElement !== "function") throw new TypeError("PlayerModelView requires a document");
   if (typeof worldX !== "function" || typeof worldZ !== "function") throw new TypeError("PlayerModelView requires world projection functions");
-  const THREE = three; const view = createProceduralPlayer({ THREE, document, player, lowPowerDevice }); let attached = false; let disposed = false; let installError = ""; const retiredAnimationSets = [];
-  function attach() { if (attached || disposed) return false; if (scenePort.addObject(view.root) === false) return false; attached = true; return true; }
+  const THREE = three; const view = createProceduralPlayer({ THREE, document, player, lowPowerDevice });
+  let attached = false; let disposed = false; let terminating = false; let rootDisposed = false; let currentAnimationReleased = false; let installError = ""; const retiredAnimationSets = [];
+  function unavailable() { return disposed || terminating; }
+  function attach() { if (attached || unavailable()) return false; if (scenePort.addObject(view.root) === false) return false; attached = true; return true; }
   function retryRetiredAnimationSets(errors = null) {
     for (let index = retiredAnimationSets.length - 1; index >= 0; index -= 1) {
       try {
@@ -165,16 +167,16 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     }
   }
   function installAsset({ characterScene, animations = [] } = {}) {
-    if (disposed || !characterScene || view.rig) return false;
+    if (unavailable() || !characterScene || view.rig) return false;
     try {
       const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations });
-      commitRig(view, candidate); installError = ""; return true;
+      commitRig(view, candidate); currentAnimationReleased = false; installError = ""; return true;
     } catch (error) {
       installError = error?.message ?? String(error); return false;
     }
   }
   function installAnimations(nextAnimations = []) {
-    if (disposed || !view.rig || !Array.isArray(nextAnimations)) return false;
+    if (unavailable() || !view.rig || !Array.isArray(nextAnimations)) return false;
     const rig = view.rig; let candidate = null;
     try {
       candidate = prepareAnimationSet({ THREE, model: rig.model, animations: nextAnimations });
@@ -183,6 +185,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     }
     const previous = { model: rig.model, mixer: rig.mixer, actions: rig.actions, clips: rig.clips, state: rig.state, active: rig.active };
     rig.mixer = candidate.mixer; rig.actions = candidate.actions; rig.clips = candidate.clips; rig.state = candidate.state; rig.active = candidate.active; rig.lastTime = null;
+    currentAnimationReleased = false;
     retiredAnimationSets.push(previous);
     try {
       releaseAnimationSet(previous);
@@ -194,7 +197,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     return true;
   }
   function render({ player: pose, ball, selectedPlayerId, replayActive = false, controlMode = "attack", pressedCodes = Object.freeze([]), nowMilliseconds = 0 } = {}) {
-    assertImmutable(pose, "player render facts"); assertImmutable(ball, "ball render facts"); if (disposed) return false;
+    assertImmutable(pose, "player render facts"); assertImmutable(ball, "ball render facts"); if (unavailable()) return false;
     const speed = Math.hypot(pose.vx || 0, pose.vy || 0); const running = speed > 30; const stride = running ? Math.sin(pose.stepPhase || 0) * clamp(speed / 185, .35, 1.25) : 0;
     view.root.position.set(worldX(pose.x), 0, worldZ(pose.y));
     if (view.rig) {
@@ -212,7 +215,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     view.label.visible = !replayActive && (selected || speed < 10); return true;
   }
   function reset() {
-    if (disposed) return false;
+    if (unavailable()) return false;
     view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0);
     retryRetiredAnimationSets();
     if (view.rig) {
@@ -228,17 +231,42 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   function teardown() {
     if (disposed) return false;
     const errors = [];
+    terminating = true;
     if (attached) {
-      try { scenePort.removeObject(view.root); } catch (error) { errors.push(error); }
+      try { scenePort.removeObject(view.root); attached = false; } catch (error) { errors.push(error); }
     }
-    attached = false; disposed = true;
-    releaseAnimationSet(view.rig, errors);
+    if (view.rig && !currentAnimationReleased) {
+      try {
+        releaseAnimationSet(view.rig);
+        currentAnimationReleased = true;
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     retryRetiredAnimationSets(errors);
-    try { disposeOwned(view.root); } catch (error) { errors.push(error); }
-    view.rig = null; retiredAnimationSets.length = 0;
+    const animationOwnershipReleased = (!view.rig || currentAnimationReleased) && retiredAnimationSets.length === 0;
+    if (!attached && animationOwnershipReleased && !rootDisposed) {
+      try { disposeOwned(view.root); rootDisposed = true; } catch (error) { errors.push(error); }
+    }
+    if (!attached && animationOwnershipReleased && rootDisposed) {
+      view.rig = null;
+      disposed = true;
+      terminating = false;
+      installError = "";
+    }
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1) throw new AggregateError(errors, `player model view ${player.id} teardown reported errors`);
-    return true;
+    return disposed;
   }
-  return Object.freeze({ get id() { return player.id; }, get root() { return view.root; }, get attached() { return attached; }, get rigged() { return Boolean(view.rig); }, attach, installAsset, installAnimations, render, reset, teardown, diagnostics: () => Object.freeze({ id: player.id, attached, rigged: Boolean(view.rig), disposed, installError, retiredAnimationSetCount: retiredAnimationSets.length }) });
+  return Object.freeze({
+    get id() { return player.id; },
+    get root() { return view.root; },
+    get attached() { return attached; },
+    get rigged() { return Boolean(view.rig); },
+    attach, installAsset, installAnimations, render, reset, teardown,
+    diagnostics: () => Object.freeze({
+      id: player.id, attached, rigged: Boolean(view.rig), disposed, terminating, installError,
+      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed,
+    }),
+  });
 }
