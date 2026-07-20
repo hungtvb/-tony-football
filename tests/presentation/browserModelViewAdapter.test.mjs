@@ -19,6 +19,15 @@ function fakeDocument() {
   const status = { className: "", textContent: "", title: "" };
   return { status, getElementById: (id) => id === "assetStatus" ? status : null, createElement: () => ({ width: 0, height: 0, getContext: () => ({}) }) };
 }
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => { resolve = resolvePromise; reject = rejectPromise; });
+  return { promise, resolve, reject };
+}
+function disposableScene(onDispose) {
+  return { traverse(visitor) { visitor({ geometry: { dispose: onDispose }, material: null }); } };
+}
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 test("model adapter lazily attaches after the scene binds and renders immutable snapshot facts", async () => {
@@ -38,7 +47,7 @@ test("model adapter lazily attaches after the scene binds and renders immutable 
   assert.equal(adapter.render(frame(previous, current)), true); await flush(); await flush();
   assert.deepEqual(calls.slice(0, 4), ["ball:attach", "player:attach", ["player:render", 110], ["ball:render", 150]]);
   assert.equal(calls.includes("player:asset"), true); assert.equal(calls.includes("player:animations"), true); assert.equal(adapter.diagnostics().playerCount, 1); assert.equal(adapter.diagnostics().assetState, "ready"); assert.equal(document.status.textContent, "PLAYER RIG · READY");
-  assert.equal(adapter.reset(), true); assert.equal(adapter.teardown(), true); assert.equal(calls.includes("player:reset"), true); assert.equal(calls.includes("ball:reset"), true); assert.equal(calls.includes("player:teardown"), true); assert.equal(calls.includes("ball:teardown"), true);
+  assert.equal(adapter.reset(), true); await flush(); await flush(); assert.equal(adapter.teardown(), true); assert.equal(calls.includes("player:reset"), true); assert.equal(calls.includes("ball:reset"), true); assert.equal(calls.includes("player:teardown"), true); assert.equal(calls.includes("ball:teardown"), true);
 });
 
 test("character loading failure keeps procedural views active", async () => {
@@ -46,6 +55,45 @@ test("character loading failure keeps procedural views active", async () => {
   const adapter = createBrowserModelViewAdapter({ target, document, getScenePort: () => ({ addObject() { return true; }, removeObject() { return true; } }), isSceneBound: () => true, assetLoader: { loadCharacter: async () => { throw new Error("character unavailable"); }, loadAnimations: async () => { throw new Error("must not load"); } }, createPlayerView: () => ({ attach() {}, render() { calls.push("procedural:render"); }, teardown() {} }), createBallView: () => ({ attach() {}, render() {}, teardown() {}, diagnostics: () => Object.freeze({ attached: true }) }) });
   assert.equal(adapter.attach(), true); const current = snapshot(); adapter.render(frame(current, current, { activeCharge: null, pressedCodes: Object.freeze([]) })); await flush();
   assert.equal(calls.includes("procedural:render"), true); assert.equal(adapter.diagnostics().assetState, "error"); assert.match(adapter.diagnostics().assetDetail, /character unavailable/); assert.equal(document.status.textContent, "MODEL · FALLBACK"); adapter.teardown();
+});
+
+test("reset invalidates deferred character work and restarts one fresh generation", async () => {
+  const first = deferred(); const second = deferred(); const animation = deferred(); const installed = []; let disposedLate = 0; let loadCount = 0;
+  const adapter = createBrowserModelViewAdapter({
+    target: { location: { search: "" }, navigator: {}, matchMedia: () => ({ matches: false }) },
+    document: fakeDocument(),
+    getScenePort: () => ({ addObject() { return true; }, removeObject() { return true; } }),
+    isSceneBound: () => true,
+    assetLoader: { loadCharacter: () => (++loadCount === 1 ? first.promise : second.promise), loadAnimations: () => animation.promise },
+    createPlayerView: () => ({ attach() {}, render() {}, reset() {}, installAsset: ({ characterScene }) => installed.push(characterScene), installAnimations() {}, teardown() {} }),
+    createBallView: () => ({ attach() {}, render() {}, reset() {}, teardown() {}, diagnostics: () => Object.freeze({ attached: true }) }),
+  });
+  adapter.attach(); const current = snapshot(); adapter.render(frame(current, current));
+  assert.equal(adapter.reset(), true);
+  const staleScene = disposableScene(() => { disposedLate += 1; });
+  first.resolve({ scene: staleScene }); await flush(); await flush();
+  assert.equal(disposedLate, 1); assert.equal(installed.includes(staleScene), false);
+  const freshScene = disposableScene(() => {});
+  second.resolve({ scene: freshScene }); await flush();
+  animation.resolve({ animations: [{ name: "Idle_Loop" }], scene: disposableScene(() => {}) }); await flush(); await flush();
+  assert.deepEqual(installed, [freshScene]); assert.equal(adapter.diagnostics().animationClips, 1);
+  adapter.teardown();
+});
+
+test("teardown disposes deferred character completion without reattaching it", async () => {
+  const character = deferred(); let disposedLate = 0; let installed = 0;
+  const adapter = createBrowserModelViewAdapter({
+    target: { location: { search: "" }, navigator: {}, matchMedia: () => ({ matches: false }) },
+    document: fakeDocument(),
+    getScenePort: () => ({ addObject() { return true; }, removeObject() { return true; } }),
+    isSceneBound: () => true,
+    assetLoader: { loadCharacter: () => character.promise, loadAnimations: async () => ({ animations: [] }) },
+    createPlayerView: () => ({ attach() {}, render() {}, installAsset() { installed += 1; }, teardown() {} }),
+    createBallView: () => ({ attach() {}, render() {}, teardown() {}, diagnostics: () => Object.freeze({ attached: true }) }),
+  });
+  adapter.attach(); const current = snapshot(); adapter.render(frame(current, current)); adapter.teardown();
+  character.resolve({ scene: disposableScene(() => { disposedLate += 1; }) }); await flush(); await flush();
+  assert.equal(disposedLate, 1); assert.equal(installed, 0); assert.equal(adapter.diagnostics().disposed, true);
 });
 
 test("model adapter rejects mutable presentation frames", () => {

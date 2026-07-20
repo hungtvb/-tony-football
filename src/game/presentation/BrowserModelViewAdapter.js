@@ -49,8 +49,12 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     try {
       const character = await assetLoader.loadCharacter();
       if (disposed || generation !== loadGeneration) { disposePlayerAssetTemplate(character?.scene); return false; }
-      characterScene = character?.scene ?? null; if (!characterScene) throw new Error("character asset has no scene");
+      const nextCharacterScene = character?.scene ?? null;
+      if (!nextCharacterScene) throw new Error("character asset has no scene");
+      const previousCharacterScene = characterScene;
+      characterScene = nextCharacterScene;
       for (const view of playerViews.values()) view.installAsset?.({ characterScene, animations });
+      if (previousCharacterScene && previousCharacterScene !== characterScene) disposePlayerAssetTemplate(previousCharacterScene);
       setAssetStatus("ready", "MODEL · READY", "Character loaded; animation loading in background");
     } catch (error) {
       if (disposed || generation !== loadGeneration) return false;
@@ -58,22 +62,28 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     }
     try {
       const motion = await assetLoader.loadAnimations();
-      if (disposed || generation !== loadGeneration) return false;
+      if (disposed || generation !== loadGeneration) { disposePlayerAssetTemplate(motion?.scene); return false; }
       animations = Object.freeze([...(motion?.animations ?? [])]);
       for (const view of playerViews.values()) view.installAnimations?.(animations);
+      disposePlayerAssetTemplate(motion?.scene);
       setAssetStatus("ready", "PLAYER RIG · READY", `${animations.length} animation clips`); return true;
     } catch (error) {
       if (disposed || generation !== loadGeneration) return false;
       setAssetStatus("warning", "MODEL READY · BASIC MOTION", error?.message ?? String(error)); return false;
     }
   }
+  function startAssetLoad() {
+    loadGeneration += 1;
+    const generation = loadGeneration;
+    if (visualTestMode) setAssetStatus("ready", "VISUAL TEST · MODEL VIEWS", "Snapshot-driven procedural model validation");
+    else void loadAssets(generation);
+  }
   function attach() {
     if (attached || disposed || !isSceneBound()) return false;
     scenePort = getScenePort(); if (!scenePort || typeof scenePort.addObject !== "function") return false;
     ballView = createBallView({ scenePort, document, worldX: world.worldX, worldZ: world.worldZ });
     if (ballView.attach?.() === false) { ballView.teardown?.(); ballView = null; return false; }
-    attached = true; loadGeneration += 1;
-    if (visualTestMode) setAssetStatus("ready", "VISUAL TEST · MODEL VIEWS", "Snapshot-driven procedural model validation"); else void loadAssets(loadGeneration);
+    attached = true; startAssetLoad();
     return true;
   }
   function render(frame) {
@@ -87,7 +97,14 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     ballView?.render?.({ ball: renderState.ball, selectedPlayer, selectedPlayerOwnsBall: Boolean(selectedPlayer && snapshot.ball.ownerId === selectedPlayer.id), activeCharge: frame.activeCharge ?? null, ballStyle: snapshot.match.settings?.ballStyle ?? "classic" });
     return true;
   }
-  function reset() { if (!attached || disposed) return false; for (const view of playerViews.values()) view.reset?.(); ballView?.reset?.(); return true; }
+  function reset() {
+    if (!attached || disposed) return false;
+    loadGeneration += 1;
+    for (const view of playerViews.values()) view.reset?.();
+    ballView?.reset?.();
+    startAssetLoad();
+    return true;
+  }
   function teardown() {
     if (disposed) return false; loadGeneration += 1; disposed = true; attached = false; const errors = [];
     for (const view of [...playerViews.values()].reverse()) { try { view.teardown?.(); } catch (error) { errors.push(error); } }
@@ -95,5 +112,5 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     ballView = null; disposePlayerAssetTemplate(characterScene); characterScene = null; animations = Object.freeze([]); scenePort = null;
     if (errors.length === 1) throw errors[0]; if (errors.length > 1) throw new AggregateError(errors, "model view teardown reported errors"); return true;
   }
-  return Object.freeze({ attach, render, reset, teardown, diagnostics: () => Object.freeze({ owner: "browser-model-views", attached, disposed, sceneBound: Boolean(isSceneBound()), playerCount: playerViews.size, ballAttached: Boolean(ballView?.diagnostics?.().attached), assetState, assetDetail, animationClips: animations.length }) });
+  return Object.freeze({ attach, render, reset, teardown, diagnostics: () => Object.freeze({ owner: "browser-model-views", attached, disposed, sceneBound: Boolean(isSceneBound()), playerCount: playerViews.size, ballAttached: Boolean(ballView?.diagnostics?.().attached), assetState, assetDetail, animationClips: animations.length, loadGeneration }) });
 }
