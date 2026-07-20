@@ -11,17 +11,22 @@ function captureRuntimeErrors(page) {
   return errors;
 }
 
-test("production composition boots and routes input, snapshot and lifecycle presentation", async ({ page }, testInfo) => {
+test("production composition boots snapshot-driven model views and routes input, snapshot and lifecycle presentation", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const runtimeErrors = captureRuntimeErrors(page);
   await page.goto("/?visualTest=1&skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true);
+  await expect.poll(() => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().modelViews.playerCount)).toBe(12);
 
   const boot = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(boot.renderer).toBe("webgl");
   expect(boot.threeScene.owner).toBe("clean-host");
   expect(boot.threeScene.profile).toBe("tony-football-default-v1");
   expect(boot.threeScene.foreignObjects).toBeGreaterThan(0);
+  expect(boot.modelViews.owner).toBe("browser-model-view-adapter");
+  expect(boot.modelViews.playerCount).toBe(12);
+  expect(boot.modelViews.ballReady).toBe(true);
+  expect(boot.modelViews.assetState).toBe("procedural");
   expect(boot.runtimeMode).toBe("engine");
   expect(boot.legacyGameplayStepCount).toBe(0);
   await expect(page.locator("#gameCanvas")).toBeVisible();
@@ -43,6 +48,10 @@ test("production composition boots and routes input, snapshot and lifecycle pres
   }, before)).toBe(true);
   await page.keyboard.up("ArrowRight");
 
+  await page.keyboard.down("KeyD");
+  await expect.poll(() => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().modelViews.lastTick)).toBeGreaterThan(before.tick);
+  await page.keyboard.up("KeyD");
+
   await page.keyboard.press("Escape");
   await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
   await expect.poll(() => page.evaluate(() => window.__TONY_DEBUG__.diagnostics().state)).toBe("paused");
@@ -58,7 +67,7 @@ test("production composition boots and routes input, snapshot and lifecycle pres
   expect(runtimeErrors).toEqual([]);
 });
 
-test("Canvas fallback boots engine snapshot-backed HUD without runtime errors", async ({ page }, testInfo) => {
+test("Canvas fallback boots engine snapshot-backed HUD without WebGL model objects", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one representative Canvas boot is sufficient");
   const runtimeErrors = captureRuntimeErrors(page);
   await page.goto("/?visualTest=1&renderer=canvas&skipIntro=1", {
@@ -68,6 +77,8 @@ test("Canvas fallback boots engine snapshot-backed HUD without runtime errors", 
   const diagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(diagnostics.renderer).toBe("canvas");
   expect(diagnostics.runtimeMode).toBe("engine");
+  expect(diagnostics.modelViews.playerCount).toBe(0);
+  expect(diagnostics.modelViews.ballReady).toBe(false);
   expect(Number.isInteger(diagnostics.engineSnapshot.tick)).toBe(true);
   expect(diagnostics.renderState.selectedPlayerId).toMatch(/^home-/);
   await expect(page.locator("#radarCanvas")).toBeVisible();
