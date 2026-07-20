@@ -76,24 +76,49 @@ function disposeCandidateMaterials(materials) {
     try { disposeMaterial(material); } catch {}
   }
 }
-function releaseRigCandidate(rig) {
-  try { rig?.mixer?.stopAllAction?.(); } catch {}
+function releaseAnimationSet(animationSet, errors = null) {
+  if (!animationSet?.mixer) return;
+  const collected = errors ?? [];
+  for (const action of new Set(Object.values(animationSet.actions ?? {}).filter(Boolean))) {
+    try { action.stop?.(); } catch (error) { collected.push(error); }
+  }
+  try { animationSet.mixer.stopAllAction?.(); } catch (error) { collected.push(error); }
+  try { animationSet.mixer.uncacheRoot?.(animationSet.model); } catch (error) { collected.push(error); }
+  if (!errors && collected.length === 1) throw collected[0];
+  if (!errors && collected.length > 1) throw new AggregateError(collected, "animation-set release reported errors");
+}
+function prepareAnimationSet({ THREE, model, animations = [] }) {
+  const mixer = new THREE.AnimationMixer(model); const actions = {};
+  try {
+    for (const clip of animations) actions[clip.name] = mixer.clipAction(clip, model);
+    const candidate = { model, mixer, actions, clips: Object.freeze([...animations]), state: "", active: null };
+    switchRigAnimation(THREE, candidate, "Idle_Loop", true);
+    return candidate;
+  } catch (error) {
+    try { releaseAnimationSet({ model, mixer, actions }); } catch {}
+    throw error;
+  }
+}
+function releaseRigCandidate(rig, errors = null) {
+  try { releaseAnimationSet(rig, errors); } catch (error) {
+    if (errors) errors.push(error);
+  }
   disposeCandidateMaterials(rig?.ownedMaterials);
 }
 function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }) {
-  let model = null; let mixer = null; const ownedMaterials = [];
+  let model = null; let animationSet = null; const ownedMaterials = [];
   try {
     model = cloneModel(characterScene); model.scale.set(2.96, 3.28, 2.96); model.rotation.y = 0;
     model.traverse((node) => {
       if (!node.isMesh) return; node.castShadow = true; node.receiveShadow = true; node.frustumCulled = false; node.userData.tonySharedGeometry = true;
       const source = Array.isArray(node.material) ? node.material : [node.material]; const mapped = source.map((material) => createIntegratedKitMaterial(THREE, material, player, ownedMaterials)); node.material = Array.isArray(node.material) ? mapped : mapped[0];
     });
-    mixer = new THREE.AnimationMixer(model); const actions = {}; for (const clip of animations ?? []) actions[clip.name] = mixer.clipAction(clip);
-    const rig = { model, mixer, actions, ownedMaterials, state: "", active: null, lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
-    switchRigAnimation(THREE, rig, "Idle_Loop", true);
-    return rig;
+    animationSet = prepareAnimationSet({ THREE, model, animations: animations ?? [] });
+    return { model, ...animationSet, ownedMaterials, lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
   } catch (error) {
-    try { mixer?.stopAllAction?.(); } catch {}
+    if (animationSet) {
+      try { releaseAnimationSet(animationSet); } catch {}
+    }
     disposeCandidateMaterials(ownedMaterials);
     throw error;
   }
@@ -140,12 +165,17 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   }
   function installAnimations(nextAnimations = []) {
     if (disposed || !view.rig || !Array.isArray(nextAnimations)) return false;
-    const rig = view.rig; const previous = { actions: rig.actions, state: rig.state, active: rig.active };
+    const rig = view.rig; let candidate = null;
     try {
-      const actions = {}; for (const clip of nextAnimations) actions[clip.name] = rig.mixer.clipAction(clip, rig.model);
-      rig.actions = actions; rig.state = ""; rig.active = null; switchRigAnimation(THREE, rig, "Idle_Loop", true); installError = ""; return true;
+      candidate = prepareAnimationSet({ THREE, model: rig.model, animations: nextAnimations });
+      const previous = { model: rig.model, mixer: rig.mixer, actions: rig.actions, clips: rig.clips, state: rig.state, active: rig.active };
+      rig.mixer = candidate.mixer; rig.actions = candidate.actions; rig.clips = candidate.clips; rig.state = candidate.state; rig.active = candidate.active; rig.lastTime = null;
+      releaseAnimationSet(previous);
+      installError = ""; return true;
     } catch (error) {
-      rig.actions = previous.actions; rig.state = previous.state; rig.active = previous.active;
+      if (candidate && candidate.mixer !== rig.mixer) {
+        try { releaseAnimationSet(candidate); } catch {}
+      }
       installError = error?.message ?? String(error); return false;
     }
   }
@@ -167,7 +197,19 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     if (selected) { view.marker.scale.setScalar(1 + Math.sin(nowMilliseconds * .006) * .08); view.marker.material.color.set(controlMode === "defense" && pressedCodes.length ? 0x47c9d4 : 0xffd86b); }
     view.label.visible = !replayActive && (selected || speed < 10); return true;
   }
-  function reset() { if (disposed) return false; view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0); if (view.rig) { view.rig.lastTime = null; view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true); } return true; }
+  function reset() {
+    if (disposed) return false;
+    view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0);
+    if (view.rig) {
+      view.rig.lastTime = null;
+      try {
+        view.rig.mixer.stopAllAction?.(); view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true);
+      } catch (error) {
+        installError = error?.message ?? String(error); return false;
+      }
+    }
+    return true;
+  }
   function teardown() {
     if (disposed) return false;
     const errors = [];
@@ -175,7 +217,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
       try { scenePort.removeObject(view.root); } catch (error) { errors.push(error); }
     }
     attached = false; disposed = true;
-    try { view.rig?.mixer?.stopAllAction?.(); } catch (error) { errors.push(error); }
+    releaseAnimationSet(view.rig, errors);
     try { disposeOwned(view.root); } catch (error) { errors.push(error); }
     view.rig = null;
     if (errors.length === 1) throw errors[0];
