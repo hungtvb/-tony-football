@@ -10,18 +10,19 @@ const PREPARED_MARKERS = Object.freeze([
   "let threeScenePort = null;",
   "onPresentationReady: init3D,",
   "window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.()",
+  "window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.()",
 ]);
 
 const LEGACY_MARKERS = Object.freeze([
   "new THREE.WebGLRenderer",
   "new EffectComposer(",
   "new RoomEnvironment(",
+  "new THREE.AnimationMixer",
 ]);
 
 export function classifyTon80GameSource(source) {
   const preparedCount = PREPARED_MARKERS.filter((marker) => source.includes(marker)).length;
   const legacyCount = LEGACY_MARKERS.filter((marker) => source.includes(marker)).length;
-
   if (preparedCount === PREPARED_MARKERS.length && legacyCount === 0) return "prepared";
   if (preparedCount === 0 && legacyCount === LEGACY_MARKERS.length) return "legacy";
   return "inconsistent";
@@ -41,19 +42,19 @@ export function prepareTon80Game({ cwd = process.cwd(), run = spawnSync } = {}) 
     throw new Error("Tracked game.js must remain the canonical legacy migration input");
   }
 
-  const workdir = mkdtempSync(join(tmpdir(), "ton80-generate-"));
+  const workdir = mkdtempSync(join(tmpdir(), "ton81-generate-"));
   try {
     copyFileSync(sourcePath, join(workdir, "game.js"));
     runStep(run, "python3", [resolve(cwd, "scripts/ton-80-migrate-game.py")], workdir);
     const generated = normalizeTon80GameSource(readFileSync(join(workdir, "game.js"), "utf8"));
     if (classifyTon80GameSource(generated) !== "prepared") {
-      throw new Error("TON-80 generation ended in an unexpected state");
+      throw new Error("presentation generation ended in an unexpected state");
     }
     mkdirSync(dirname(outputPath), { recursive: true });
     const previous = (() => { try { return readFileSync(outputPath, "utf8"); } catch { return null; } })();
     writeFileSync(outputPath, generated, "utf8");
-    if (readFileSync(sourcePath, "utf8") !== source) throw new Error("TON-80 generation mutated tracked game.js");
-    console.log(previous === generated ? "TON-80 generated artifact unchanged" : "TON-80 generated artifact prepared");
+    if (readFileSync(sourcePath, "utf8") !== source) throw new Error("presentation generation mutated tracked game.js");
+    console.log(previous === generated ? "Presentation generated artifact unchanged" : "Presentation generated artifact prepared");
     return Object.freeze({ state: "prepared", changed: previous !== generated, outputPath });
   } finally {
     rmSync(workdir, { recursive: true, force: true });
