@@ -15,6 +15,7 @@ test("browser entry registers model views before scene rendering", async () => {
   assert.match(entry, /getStablePort: \(\) => sceneFacade\.port/);
   assert.match(entry, /getScenePort: \(\) => sceneFacade\.port/);
   assert.match(entry, /isSceneBound: \(\) => sceneFacade\.bound/);
+  assert.match(entry, /exposeBrowserPresentationDiagnostics\(globalThis\.window\.__TONY_DEBUG__, modelViewBridge\)/);
   assert.match(bootstrap, /const activeCharge = this\.#inputAdapter\.activeCharge/);
   assert.match(bootstrap, /const pressedCodes = this\.#inputAdapter\.pressedCodes/);
   assert.match(bootstrap, /activeCharge, pressedCodes/);

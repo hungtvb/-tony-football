@@ -22,6 +22,18 @@ export function removeBrowserGameplayDebugMutators(debug = null) {
   return removed;
 }
 
+export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge) {
+  if (!debug || typeof debug !== "object" || !Object.isExtensible(debug)) return false;
+  const descriptor = Object.getOwnPropertyDescriptor(debug, "modelViews");
+  if (descriptor && descriptor.configurable === false) return false;
+  Object.defineProperty(debug, "modelViews", {
+    configurable: true,
+    enumerable: true,
+    get: () => modelViewBridge.diagnostics(),
+  });
+  return true;
+}
+
 if (typeof globalThis.window !== "undefined") {
   const sceneFacade = createRebindableThreeSceneHostPort();
   let modelViewAdapter = null;
@@ -68,4 +80,5 @@ if (typeof globalThis.window !== "undefined") {
   }
   await import("./generated/game.js?v=21.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
+  exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge);
 }
