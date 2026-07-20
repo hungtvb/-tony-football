@@ -96,6 +96,51 @@ test("teardown disposes deferred character completion without reattaching it", a
   assert.equal(disposedLate, 1); assert.equal(installed, 0); assert.equal(adapter.diagnostics().disposed, true);
 });
 
+test("model adapter retains a player view whose teardown needs a later retry", () => {
+  let playerTeardownAttempts = 0; let ballTeardownAttempts = 0; let recovered = false;
+  const adapter = createBrowserModelViewAdapter({
+    target: { location: { search: "?visualTest=1" }, navigator: {}, matchMedia: () => ({ matches: false }) },
+    document: fakeDocument(),
+    getScenePort: () => ({ addObject() { return true; }, removeObject() { return true; } }),
+    isSceneBound: () => true,
+    createPlayerView: () => ({
+      attach() {}, render() {},
+      teardown() {
+        playerTeardownAttempts += 1;
+        if (!recovered) throw new Error("player cleanup failed");
+        return true;
+      },
+    }),
+    createBallView: () => ({
+      attach() {}, render() {},
+      teardown() { ballTeardownAttempts += 1; return true; },
+      diagnostics: () => Object.freeze({ attached: true }),
+    }),
+    assetLoader: { loadCharacter: async () => ({}), loadAnimations: async () => ({}) },
+  });
+  adapter.attach(); const current = snapshot(); adapter.render(frame(current, current));
+
+  assert.throws(() => adapter.teardown(), /player cleanup failed/);
+  assert.equal(adapter.diagnostics().terminating, true);
+  assert.equal(adapter.diagnostics().disposed, false);
+  assert.equal(adapter.diagnostics().playerCount, 1);
+  assert.equal(ballTeardownAttempts, 0);
+  assert.equal(adapter.render(frame(current, current)), false);
+
+  assert.throws(() => adapter.teardown(), /player cleanup failed/);
+  assert.equal(playerTeardownAttempts, 2);
+  assert.equal(adapter.diagnostics().playerCount, 1);
+
+  recovered = true;
+  assert.equal(adapter.teardown(), true);
+  assert.equal(playerTeardownAttempts, 3);
+  assert.equal(ballTeardownAttempts, 1);
+  assert.equal(adapter.diagnostics().playerCount, 0);
+  assert.equal(adapter.diagnostics().disposed, true);
+  assert.equal(adapter.diagnostics().terminating, false);
+  assert.equal(adapter.teardown(), false);
+});
+
 test("model adapter rejects mutable presentation frames", () => {
   const adapter = createBrowserModelViewAdapter({ target: { location: { search: "?visualTest=1" }, navigator: {}, matchMedia: () => ({ matches: false }) }, document: fakeDocument(), getScenePort: () => ({ addObject() { return true; }, removeObject() { return true; } }), isSceneBound: () => true, createPlayerView: () => ({ attach() {}, render() {}, teardown() {} }), createBallView: () => ({ attach() {}, render() {}, teardown() {}, diagnostics: () => Object.freeze({ attached: true }) }), assetLoader: { loadCharacter: async () => ({}), loadAnimations: async () => ({}) } });
   adapter.attach(); assert.throws(() => adapter.render({}), /immutable snapshots/); adapter.teardown();
