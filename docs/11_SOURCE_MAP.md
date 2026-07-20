@@ -24,10 +24,10 @@ Before modifying code:
 | Entry point | Responsibility | Ownership note |
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, canvas, HUD, menus and overlays | Loads guarded `browser-entry.js`; never gameplay authority |
-| `browser-entry.js` | Removes blocked runtime/debug URL seams, exposes frozen scene/model diagnostics bridges, registers browser presentation factories, then imports generated runtime | Entry composition only; no mutable gameplay state |
-| `game.js` | Canonical compatibility input used to generate remaining Canvas/settings/particles/trails/preview-tone/camera/replay presentation bridges | Does not own WebGL environment or player/ball model views; fixed steps capture immutable engine snapshots |
+| `browser-entry.js` | Removes blocked runtime/debug URL seams, exposes frozen scene/model/Canvas diagnostics bridges, registers browser presentation factories, then imports generated runtime | Entry composition only; no mutable gameplay state |
+| `game.js` | Canonical compatibility input used to generate remaining settings/particles/trails/preview-tone/camera/replay presentation bridges | Does not own WebGL environment, player/ball model views or match Canvas drawing; fixed steps capture immutable engine snapshots |
 | `generated/game.js` | Deterministic compatibility artifact created from tracked `game.js` | Never edited directly; contains only still-deferred presentation bridges |
-| `src/game/application/BrowserBootstrapComposition.js` | Browser runtime/input/application/snapshot/presentation composition root | Attaches adapters and publishes immutable presentation frames before starting the loop; never imports Three.js |
+| `src/game/application/BrowserBootstrapComposition.js` | Browser runtime/input/application/snapshot/presentation composition root | Attaches adapters and publishes immutable presentation frames before starting the loop; never imports Three.js or Canvas APIs |
 | `src/game/presentation/BrowserPresentationComposition.js` | Adapter creation, startup rollback, render/reset fan-out and reverse teardown | Factories receive frozen browser lifecycle context; facts arrive through immutable frames/events |
 | `src/game/application/BrowserRuntimeComposition.js` | Live browser runtime configuration and browser event publication | Deployed browser always uses engine authority |
 | `src/game/application/BrowserMatchRuntime.js` | One `MatchEngine`, deterministic command scheduling, fixed steps, immutable snapshots and ordered events | Browser wrapper only; never infers gameplay facts from presentation |
@@ -37,13 +37,14 @@ Before modifying code:
 | `src/game/application/BrowserApplicationAdapter.js` | Browser buttons/events and immediate lifecycle UI projection | Listener lifecycle only |
 | `src/game/presentation/CompatibilitySnapshotAdapter.js` | Mirrors immutable live-engine facts into temporary compatibility objects | Outward-only mirror; writes never become engine inputs |
 | `src/game/presentation/SnapshotRenderState.js` | Immutable previous/current player and ball interpolation | Shared projection contract for WebGL and Canvas |
+| `src/game/presentation/CanvasMatchRenderer.js` | Explicit forced-Canvas session lifecycle, viewport observation and snapshot-driven pitch/player/ball/selection/charge/weather projection | Sole owner of the match Canvas 2D context; inactive during WebGL sessions |
 | `src/game/presentation/SnapshotCameraController.js`, `SnapshotReplayController.js` | Snapshot-driven camera/replay projections | Camera/replay extraction remains TON-83 |
 | `src/game/presentation/DomHudAdapter.js`, `HudSnapshotProjection.js` | Browser HUD ownership and snapshot projection | Read-only snapshot consumer |
 | `src/game/presentation/RadarSnapshotAdapter.js`, `RadarSnapshotRenderer.js` | Radar Canvas ownership and drawing | Read-only snapshot consumer with duplicate-owner transition guard |
 | `src/game/presentation/BrowserAudioAdapter.js` | Usable match-event Web Audio ownership | Releases ownership on backend failure so compatibility fallback remains audible |
 | `src/game/presentation/BrowserGameEventBridge.js` | Immutable ordered event transport | Transport only |
 | `src/game/core/SimulationLoop.js` | Fixed simulation/render cadence and isolated after-render listeners | Presentation failures cannot stop later frames |
-| `scripts/prepare-ton80-game.mjs`, `scripts/ton-80-migrate-game.py` | Deterministic compatibility-artifact generation | Tracked source stays byte-identical; generated output fails closed on forbidden ownership |
+| `scripts/prepare-ton80-game.mjs`, `scripts/ton-80-migrate-game.py`, `scripts/ton-82-migrate-canvas.py` | Deterministic compatibility-artifact generation | Tracked source stays byte-identical; generated output fails closed on forbidden ownership |
 | `scripts/build-static.mjs`, `vercel.json` | Static build/deployment contract | Preserve Vercel and GitHub Pages compatibility |
 
 ## Three.js scene and environment ownership
@@ -71,7 +72,15 @@ The deployed WebGL path uses one renderer, one scene, one camera and one compose
 
 Character loading failure preserves procedural players. Animation loading failure preserves a static model with safe basic motion. The adapter tears down all views before disposing shared source assets. Context restoration replays retained roots through the stable scene port.
 
-Canvas rendering remains TON-82. Camera/replay decisions remain TON-83. Settings, particles, trails and preview tones remain TON-84. TON-85 removes final compatibility bridges.
+## Canvas match ownership
+
+| Source | Responsibility | Boundary |
+| --- | --- | --- |
+| `CanvasMatchRenderer.js` | Forced-Canvas activation, 2D context ownership, immutable snapshot interpolation, match drawing, resize/reset/teardown and diagnostics | Never reads mutable compatibility game/player/ball/input objects |
+| `docs/15_CANVAS_MATCH_RENDERER_CONTRACT.md` | Activation, facts, parity, lifecycle and validation rules | Architecture contract for TON-82 and successor slices |
+| `scripts/ton-82-migrate-canvas.py` | Removes generated match Canvas drawing and adds diagnostics bridge evidence | Generated compatibility runtime retains no match Canvas context |
+
+Camera/replay decisions remain TON-83. Settings, particles, trails and preview tones remain TON-84. TON-85 removes final compatibility bridges.
 
 ## Browser runtime flow
 
@@ -79,7 +88,7 @@ Canvas rendering remains TON-82. Camera/replay decisions remain TON-83. Settings
 index.html
   → browser-entry.js engine-only URL guard
   → create page-lifetime stable scene façade
-  → register model adapter then scene adapter factories
+  → register model, scene and Canvas match adapter factories
   → import generated compatibility runtime
   → BrowserBootstrapComposition
       ├→ BrowserInputAdapter → immutable commands + frozen presentation input facts
@@ -88,6 +97,7 @@ index.html
       └→ BrowserPresentationComposition
           ├→ BrowserModelViewAdapter (lazy attach after scene bind; updates before scene render)
           ├→ ThreeSceneEnvironmentAdapter → clean BrowserThreeSceneEnvironmentHost
+          ├→ CanvasMatchRenderer (active only for renderer=canvas page sessions)
           ├→ DomHudAdapter
           ├→ RadarSnapshotAdapter
           └→ event-audio/feedback adapters
@@ -113,7 +123,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | AI/goalkeeper | engine AI systems | deterministic AI/engine tests | Engine-only decisions |
 | Three.js renderer/environment | clean scene adapter/factory/host/profile/port | lifecycle, teardown, profile, source guards and browser smoke | Host owns environment; foreign views retain disposal ownership |
 | Player/ball models and animation | `BrowserModelViewAdapter`, `PlayerModelView`, `BallModelView` | loading success/failure, animation projection, reset/teardown, source guard and browser smoke | Snapshot-only projection through stable scene port |
-| Canvas fallback renderer | generated compatibility runtime, `SnapshotRenderState.js` | required engine-backed Canvas smoke | Pending TON-82 extraction |
+| Canvas fallback renderer | `CanvasMatchRenderer`, `SnapshotRenderState` | immutable lifecycle/parity tests, generated ownership guard, forced-Canvas browser smoke | One explicit Canvas page-session owner |
 | Camera/replay | snapshot controllers plus scene-port camera pose | presentation and browser flows | Pending TON-83 extraction |
 | Settings/particles/trails | remaining generated runtime implementations | presentation/event/browser tests | Pending TON-84 extraction |
 | Final bridge cleanup | remaining duplicate callbacks and composition helpers | architecture/source-map and parity gates | TON-85 |
@@ -125,7 +135,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 These are temporary migration points, not patterns to copy:
 
 - `CompatibilitySnapshotAdapter` mirrors immutable engine facts into compatibility objects only where remaining presentation implementations still read them.
-- Generated runtime owns trail, particles, Canvas, settings/preview tones and camera/replay projection but no longer owns player/ball models or model assets.
+- Generated runtime owns trail, particles, settings/preview tones and camera/replay projection but no longer owns WebGL environment, player/ball models or match Canvas drawing.
 - Camera decisions remain in snapshot camera/replay controllers and are projected through immutable `setCameraPose` calls.
 - New presentation implementations must register through `BrowserPresentationComposition`; new gameplay logic must never be added to `game.js`.
 
@@ -135,12 +145,12 @@ Engine and core modules may depend on pure JavaScript data/math, deterministic c
 
 Browser composition may connect input, application, engine and presentation adapters. Presentation adapters may consume immutable snapshots/events and browser-safe services, but may not mutate engine-owned players, ball, score, statistics, clock, possession, AI, goal phases, replay or match lifecycle.
 
-Three.js imports belong under presentation. Application modules accept factories/ports and do not import Three.js.
+Three.js and Canvas context ownership belong under presentation. Application modules accept factories/ports and do not import renderer implementations.
 
 ## Validation pyramid
 
 - `npm run test:engine:fast`: simulation, engine, gameplay, input/application and deterministic scenarios.
-- `npm run test:presentation:fast`: snapshot/event projections, adapter lifecycle, scene/model lifecycle and profile validation without gameplay simulation.
+- `npm run test:presentation:fast`: snapshot/event projections, adapter lifecycle, scene/model/Canvas lifecycle and profile validation without gameplay simulation.
 - `npm run test:tooling`: workflow policy, source/authority/ownership guards and architecture contracts.
 - `npm run test:ci:fast`: syntax, assets, engine, presentation, tooling and static build.
 - `npm run test:e2e:smoke`: clean-host WebGL, forced Canvas, model views, input, pause/resume and context restoration.
@@ -153,7 +163,7 @@ Three.js imports belong under presentation. Application modules accept factories
 | Browser bootstrap/composition | focused lifecycle tests, `test:ci:fast`, desktop/narrow smoke |
 | Three scene lifecycle or host | startup/fallback/context-loss/teardown, foreign-resource preservation, profile, WebGL/Canvas smoke |
 | Player/ball model animation | immutable-frame, asset success/failure, animation state, reset/teardown, source guard, WebGL/Canvas smoke |
-| Canvas fallback | engine-backed Canvas smoke and coordinate parity |
+| Canvas fallback | immutable lifecycle/parity, missing-context and coordinate tests, generated ownership guard, engine-backed Canvas smoke |
 | Camera/HUD/overlays | pure presentation tests; broad browser evidence for visual changes |
 | Engine contract | deterministic headless contracts, ordering and immutability |
 | Workflow/CI policy | actual workflow scan, positive/negative fixtures and required CI gate |
