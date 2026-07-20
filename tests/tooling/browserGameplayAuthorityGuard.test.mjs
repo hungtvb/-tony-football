@@ -8,13 +8,14 @@ async function read(path) {
   return readFile(new URL(path, rootUrl), "utf8");
 }
 
-test("browser entry cannot restore compatibility gameplay authority", async () => {
-  const [index, entry, runtime, application, smoke] = await Promise.all([
+test("browser entry cannot restore compatibility gameplay or model-view ownership", async () => {
+  const [index, entry, runtime, application, smoke, generated] = await Promise.all([
     read("index.html"),
     read("browser-entry.js"),
     read("src/game/application/BrowserRuntimeComposition.js"),
     read("src/game/application/ApplicationRuntime.js"),
     read("tests/e2e/smoke.spec.mjs"),
+    read("generated/game.js"),
   ]);
 
   assert.match(index, /src="browser-entry\.js\?v=/);
@@ -24,15 +25,31 @@ test("browser entry cannot restore compatibility gameplay authority", async () =
   assert.match(entry, /removeBrowserGameplayDebugMutators/);
   assert.match(entry, /delete debug\.applyScenario/);
   assert.match(entry, /createRebindableThreeSceneHostPort/);
+  assert.match(entry, /createBrowserModelViewAdapter/);
+  assert.match(entry, /__TONY_MODEL_VIEW_BRIDGE__/);
   assert.match(entry, /getPort: \(\) => sceneFacade\.bound \? sceneFacade\.port : null/);
+  assert.match(entry, /getScenePort: \(\) => sceneFacade\.bound \? sceneFacade\.port : null/);
   assert.match(entry, /onHostChanged: \(port\) => sceneFacade\.bind\(port\)/);
-  assert.match(entry, /await import\("\.\/generated\/game\.js\?v=/);
+  assert.ok(entry.indexOf("createBrowserModelViewAdapter") < entry.indexOf("createBrowserThreeSceneEnvironmentAdapter({"));
+  assert.match(entry, /await import\("\.\/generated\/game\.js\?v=21\.0\.0"\)/);
   assert.doesNotMatch(entry, /await import\("\.\/game\.js\?v=/);
   assert.doesNotMatch(runtime, /params\.get\("runtime"\)/);
   assert.doesNotMatch(runtime, /params\.has\("debugScenario"\)/);
   assert.match(application, /require live engine authority/);
   assert.doesNotMatch(application, /dispatchGameCommand/);
   assert.match(smoke, /runtime=compatibility&debugScenario=low-stamina/);
-  assert.match(smoke, /hasApplyScenario/);
+  assert.match(smoke, /modelViews/);
   assert.match(smoke, /runtimeMode\)\.toBe\("engine"\)/);
+
+  for (const forbidden of [
+    "GLTFLoader",
+    "cloneSkeleton",
+    "MeshoptDecoder",
+    "new THREE.AnimationMixer",
+    "createPlayerView",
+    "createBall3D",
+    "chargeView",
+  ]) {
+    assert.doesNotMatch(generated, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
