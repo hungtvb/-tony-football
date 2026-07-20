@@ -16,9 +16,14 @@ const characterPath = "assets/models/football-character-v2.glb";
 const animationPath = "assets/models/football-animations-v2.glb";
 const character = await readGLB(characterPath);
 const animation = await readGLB(animationPath);
-const gameSource = await readFile("game.js", "utf8");
-const entrySource = await readFile("browser-entry.js", "utf8");
-const indexSource = await readFile("index.html", "utf8");
+const [entrySource, indexSource, playerSource, ballSource, loaderSource, generatedSource] = await Promise.all([
+  readFile("browser-entry.js", "utf8"),
+  readFile("index.html", "utf8"),
+  readFile("src/game/presentation/PlayerModelView.js", "utf8"),
+  readFile("src/game/presentation/BallModelView.js", "utf8"),
+  readFile("src/game/presentation/BrowserPlayerAssetLoader.js", "utf8"),
+  readFile("generated/game.js", "utf8"),
+]);
 
 if (character.bytes.length > 750_000) throw new Error(`${characterPath}: exceeds 750 KB budget`);
 if (animation.bytes.length > 750_000) throw new Error(`${animationPath}: exceeds 750 KB budget`);
@@ -34,8 +39,11 @@ const bodyNode = character.json.nodes.find((node) => node.name === "SuperHero_Ma
 const bodyPrimitive = character.json.meshes?.[bodyNode?.mesh]?.primitives?.[0];
 const bodyPosition = character.json.accessors?.[bodyPrimitive?.attributes?.POSITION];
 if (!bodyPosition || bodyPosition.componentType !== 5122 || !bodyPosition.normalized || bodyPosition.count < 7000) throw new Error(`${characterPath}: integrated kit requires the normalized high-detail body position stream`);
+
 const animationTargets = new Set();
-for (const clip of animation.json.animations || []) for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name);
+for (const clip of animation.json.animations || []) {
+  for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name);
+}
 const missingTargets = [...animationTargets].filter((name) => !characterNodes.has(name));
 if (missingTargets.length) throw new Error(`${animationPath}: missing character targets: ${missingTargets.join(", ")}`);
 
@@ -46,14 +54,48 @@ if (missingClips.length) throw new Error(`${animationPath}: missing clips: ${mis
 if (!animation.json.extensionsRequired?.includes("EXT_meshopt_compression")) throw new Error(`${animationPath}: expected Meshopt-compressed animation data`);
 
 for (const contract of [
-  "loader.setMeshoptDecoder(MeshoptDecoder)", "football-character-v2.glb?v=16.0.0", "football-animations-v2.glb?v=16.0.0",
-  "installPlayerAnimations(motion.animations||[])", "applyFootballActionPose(rig,pose,actionProgress,dt)", "createRigSquadNumber(player,home&&!keeper",
-  "createIntegratedKitMaterial(source,player,palette,skinColor)", "applyIntegratedFootballKit(model,player)", "createBallSurfaceTextures(style)",
-  "new THREE.SphereGeometry(.56,48,32)", "WEBGL · 2D FALLBACK"
-]) if (!gameSource.includes(contract)) throw new Error(`game.js: missing player loader contract: ${contract}`);
-for (const legacyPrimitive of ["attach(\"spine_01\"", "patchGeometry", "new THREE.SphereGeometry(.82,20,16)"]) if (gameSource.includes(legacyPrimitive)) throw new Error(`game.js: legacy primitive player/ball rendering returned: ${legacyPrimitive}`);
+  "new THREE.AnimationMixer(model)",
+  "createIntegratedKitMaterial",
+  "applyIntegratedFootballKit",
+  "selectPlayerRigAnimation",
+  "createRigSquadNumber",
+]) {
+  if (!playerSource.includes(contract)) throw new Error(`PlayerModelView.js: missing contract ${contract}`);
+}
+for (const contract of [
+  "createBallSurfaceTextures",
+  "new THREE.SphereGeometry(0.56, 48, 32)",
+  "projectChargeIndicator",
+]) {
+  if (!ballSource.includes(contract)) throw new Error(`BallModelView.js: missing contract ${contract}`);
+}
+for (const contract of [
+  "loader.setMeshoptDecoder?.(meshoptDecoder)",
+  "football-character-v2.glb?v=16.0.0",
+  "football-animations-v2.glb?v=16.0.0",
+]) {
+  if (!loaderSource.includes(contract)) throw new Error(`BrowserPlayerAssetLoader.js: missing contract ${contract}`);
+}
+for (const forbidden of [
+  "GLTFLoader",
+  "cloneSkeleton",
+  "MeshoptDecoder",
+  "new THREE.AnimationMixer",
+  "createPlayerView",
+  "createBall3D",
+  "chargeView",
+]) {
+  if (generatedSource.includes(forbidden)) throw new Error(`generated/game.js: retained extracted model ownership ${forbidden}`);
+}
+for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) {
+  if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
+}
+for (const entryContract of [
+  'createBrowserModelViewAdapter',
+  '"__TONY_MODEL_VIEW_BRIDGE__"',
+  'await import("./generated/game.js?v=21.0.0")',
+]) {
+  if (!entrySource.includes(entryContract)) throw new Error(`browser-entry.js: missing TON-81 entry contract: ${entryContract}`);
+}
 
-for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
-if (!entrySource.includes('await import("./generated/game.js?v=20.0.0")')) throw new Error("browser-entry.js: missing versioned generated game entry import");
-
-console.log(`Player assets and U1 page contract valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
+console.log(`Player assets and TON-81 ownership valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
