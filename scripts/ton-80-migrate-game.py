@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 path = Path("game.js")
 text = path.read_text(encoding="utf-8")
@@ -13,32 +12,36 @@ def replace_once(old, new, label):
     text = text.replace(old, new, 1)
 
 
-def replace_between(start, end, replacement, label):
+def replace_span(start, end, replacement, label):
     global text
     start_index = text.find(start)
     end_index = text.find(end, start_index + len(start))
     if start_index < 0 or end_index < 0:
         raise RuntimeError(f"{label}: markers missing")
+    if text.find(start, start_index + len(start)) >= 0:
+        raise RuntimeError(f"{label}: start marker repeated")
     text = text[:start_index] + replacement + text[end_index:]
 
-imports = (
-    'import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";\n'
-    'import { RenderPass } from "three/addons/postprocessing/RenderPass.js";\n'
-    'import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";\n'
-    'import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";\n'
-    'import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";\n'
-    'import { OutputPass } from "three/addons/postprocessing/OutputPass.js";\n'
-    'import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";\n'
-)
-replace_once(imports, "", "environment imports")
 
-replace_between(
+for import_line, label in [
+    ('import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";\n', "EffectComposer import"),
+    ('import { RenderPass } from "three/addons/postprocessing/RenderPass.js";\n', "RenderPass import"),
+    ('import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";\n', "SSAOPass import"),
+    ('import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";\n', "UnrealBloomPass import"),
+    ('import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";\n', "SMAAPass import"),
+    ('import { OutputPass } from "three/addons/postprocessing/OutputPass.js";\n', "OutputPass import"),
+    ('import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";\n', "RoomEnvironment import"),
+    ('import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";\n', "GLTFLoader import"),
+    ('import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";\n', "SkeletonUtils import"),
+    ('import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";\n', "Meshopt import"),
+]:
+    replace_once(import_line, "", label)
+
+replace_span(
     "  const playerViews = new Map();",
     "  const PITCH_STYLES = {",
-    '''  const playerViews = new Map();
-  let threeScenePort = null;
-  let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true;
-  let playerAsset = null;
+    '''  let threeScenePort = null;
+  let ballTrailView; let particleView; let screenFx; let ctx; let use3D = true;
   const runtimeParams = new URLSearchParams(location.search);
   const visualTestMode = runtimeParams.get("visualTest") === "1";
   const rendererPreference = runtimeParams.get("renderer");
@@ -51,101 +54,88 @@ replace_between(
     "presentation state",
 )
 
-replace_between(
+replace_span(
     "  function createTeams() {",
     "  function resetMatch() {",
     '''  function createTeams() {
-    for (const view of playerViews.values()) threeScenePort?.removeObject(view.root);
-    playerViews.clear();
     players = [
       ...formations.home.map((spec, index) => new Player(HOME, spec, index)),
       ...formations.away.map((spec, index) => new Player(AWAY, spec, index))
     ];
-    if (threeScenePort) players.forEach(createPlayerView);
     game.selected = players[4];
   }
 
 ''',
-    "team view registration",
+    "team model-view ownership",
 )
 
-replace_between(
+replace_span(
     "  function init3D() {",
-    "  function setAssetStatus",
+    "  function createPitchTexture3D() {",
     '''  function init3D() {
     if (rendererPreference === "canvas") {
       use3D = false;
       ctx = canvas.getContext("2d");
-      setAssetStatus("warning", "CANVAS · FORCED FALLBACK", "Canvas fallback requested for deterministic validation");
       return false;
     }
     threeScenePort = window.__TONY_THREE_SCENE_BRIDGE__?.getPort?.() ?? null;
     if (!threeScenePort) {
       use3D = false;
       ctx = canvas.getContext("2d");
-      setAssetStatus("warning", "WEBGL · 2D FALLBACK", "Clean Three scene host unavailable");
       ui.commentary.textContent = "WebGL không khả dụng · Đang chạy chế độ tương thích 2D";
       return false;
     }
     use3D = true;
-    createBall3D();
     ballTrailView = createBallTrail3D(THREE, { maxPoints: gameFeel.config.ball.trailMaxPoints });
     threeScenePort.addObject(ballTrailView.line);
     createParticleView();
-    createChargeView();
-    players.forEach(createPlayerView);
     screenFx = canvas.parentElement.querySelector(".screen-fx") ?? document.createElement("div");
     if (!screenFx.classList.contains("screen-fx")) {
       screenFx.className = "screen-fx";
       screenFx.innerHTML = "<span>GOAL!</span>";
       canvas.parentElement.appendChild(screenFx);
     }
-    if (!visualTestMode) loadPlayerAsset();
-    else setAssetStatus("ready", "VISUAL TEST · CLEAN HOST", "Adapter-owned deterministic browser validation");
     return true;
   }
 
 ''',
-    "clean host initialization",
+    "clean host and model-view initialization",
 )
 
-replace_between(
+replace_span(
     "  function createPitchTexture3D() {",
-    "  function createLabelSprite",
-    "  function createLabelSprite",
+    "  function createLabelSprite(player, accent) {",
+    "",
     "legacy environment construction",
 )
 
-text = text.replace("scene3D.add(root);", "threeScenePort?.addObject(root);")
-text = text.replace("scene3D.add(ballView);", "threeScenePort?.addObject(ballView);")
-text = text.replace("scene3D.add(particleView);", "threeScenePort?.addObject(particleView);")
-text = text.replace("scene3D.add(chargeView);", "threeScenePort?.addObject(chargeView);")
-text = text.replace("renderer3D?.capabilities?.getMaxAnisotropy?.()||1", "threeScenePort?.diagnostics?.().maxAnisotropy||1")
+replace_span(
+    "  function createLabelSprite(player, accent) {",
+    "  function createParticleView() {",
+    '''  function applyPitchStyle() { return true; }
 
-replace_between(
-    "  function applyPitchStyle() {",
-    "  function applyBallStyle() {",
-    "  function applyPitchStyle() { return true; }\n\n  function applyBallStyle() {",
-    "environment style ownership",
+  function applyBallStyle() { return true; }
+
+''',
+    "player ball and model animation ownership",
 )
 
-replace_between(
+text = text.replace("scene3D.add(particleView);", "threeScenePort?.addObject(particleView);")
+
+replace_span(
+    "  function createChargeView() {",
+    "  function updateParticleView() {",
+    "",
+    "charge and player projection ownership",
+)
+
+replace_span(
     "  function updateAtmosphere3D(now) {",
     "  function drawFallbackPlayerDetail",
     '''  function render3D(now, snapshot, renderState) {
-    if (!threeScenePort || !ballView) return false;
+    if (!threeScenePort) return false;
     const replayFrame = currentReplayFrame();
     const renderBall = replayFrame?.ball || renderState.ball;
-    const ballOwner = snapshot.players.find((player) => player.id === snapshot.ball.ownerId) ?? null;
-    players.forEach((player, index) => updatePlayerView(player, now, replayFrame?.players[index] || renderState.players[index], {
-      ball: renderBall,
-      playerId: snapshot.players[index].id,
-      selectedPlayerId: snapshot.match.selectedPlayerId,
-      ballOwnerId: snapshot.ball.ownerId,
-      ballOwnerTeam: ballOwner?.team ?? null,
-    }));
-    ballView.position.set(worldX(renderBall.x), 0.58 + (renderBall.height || 0), worldZ(renderBall.y));
-    ballView.rotation.set(renderBall.angle * 0.7, renderBall.angle, renderBall.angle * 0.35);
     const renderTrail = replayFrame?.ball.trail || snapshot.ball.trail;
     const visualSpeed = Math.hypot(renderBall.vx || 0, renderBall.vy || 0);
     ballTrailView?.update(renderTrail, {
@@ -155,17 +145,6 @@ replace_between(
       opacityForIndex: (index, count, speed) => gameFeel.trailOpacity(index, count, speed),
     });
     updateParticleView();
-
-    const selectedPose = renderState.players.find((player) => player.id === snapshot.match.selectedPlayerId);
-    if (input.actionStart && selectedPose && snapshot.ball.ownerId === snapshot.match.selectedPlayerId) {
-      chargeView.visible = true;
-      chargeView.position.set(worldX(selectedPose.x), 7.5, worldZ(selectedPose.y));
-      threeScenePort.copyCameraQuaternion(chargeView.quaternion);
-      const fill = chargeView.userData.fill;
-      fill.scale.x = Math.max(0.02, input.actionCharge);
-      fill.position.x = -2.4 + 2.4 * input.actionCharge;
-      fill.material.color.set(input.actionCharge > 0.82 ? 0xff5b45 : 0xffcf58);
-    } else chargeView.visible = false;
 
     const cameraState = cameraController.state;
     const framedX = replayFrame ? renderBall.x : cameraState.x;
@@ -209,7 +188,7 @@ replace_between(
   }
 
   function drawFallbackPlayerDetail''',
-    "clean host render projection",
+    "snapshot model-view and clean-host render projection",
 )
 
 replace_once(
@@ -217,11 +196,13 @@ replace_once(
     "    createPresentationFeedback,\n    onPresentationReady: init3D,\n  });",
     "presentation-ready hook",
 )
+
 replace_once(
     '      renderer: use3D ? "webgl" : "canvas",\n',
-    '      renderer: use3D ? "webgl" : "canvas",\n      threeScene: window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "canvas-fallback", renderer: "canvas", profile: null }),\n',
+    '      renderer: use3D ? "webgl" : "canvas",\n      threeScene: window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "canvas-fallback", renderer: "canvas", profile: null }),\n      modelViews: window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "canvas-fallback", playerCount: 0, ballReady: false }),\n',
     "diagnostics",
 )
+
 replace_once(
     "  init3D(); createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();",
     "  createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();",
@@ -241,8 +222,24 @@ for forbidden in [
     "createStadium3D",
     "createAtmosphere3D",
     "createGoals3D",
+    "GLTFLoader",
+    "cloneSkeleton",
+    "MeshoptDecoder",
+    "playerViews",
+    "playerAsset",
+    "createPlayerView",
+    "upgradePlayerView",
+    "new THREE.AnimationMixer",
+    "createBall3D",
+    "ballView",
+    "chargeView",
+    "createChargeView",
+    "updatePlayerView",
+    "updateRigPlayer",
+    "applyIntegratedFootballKit",
+    "createBallSurfaceTextures",
 ]:
     if forbidden in text:
-        raise RuntimeError(f"forbidden environment ownership remains: {forbidden}")
+        raise RuntimeError(f"extracted presentation ownership remains: {forbidden}")
 
 path.write_text(text, encoding="utf-8")
