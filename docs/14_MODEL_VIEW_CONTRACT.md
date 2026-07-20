@@ -24,9 +24,12 @@ The model adapter is ordered before the scene adapter for frame rendering. Its i
 
 - Character and animation assets load independently.
 - Character failure leaves procedural players active.
+- Fallback-to-rig upgrade is transactional per player: clone, kit material projection, mixer/action construction and initial animation setup complete on a detached candidate before its model root is added and the procedural body is hidden.
+- Any candidate preparation or root-commit failure removes the candidate, disposes candidate-owned materials and preserves the procedural fallback unchanged.
 - Animation failure leaves the loaded rig active with basic motion.
-- Late async results after teardown are ignored.
-- Shared source assets are disposed only after cloned views are torn down.
+- A reset invalidates every earlier character or animation completion. Stale source scenes are disposed and cannot mutate current views.
+- Once a character template has live cloned rigs sharing its geometry, reset retains that template and refreshes animation clips only. Template replacement requires dependent rigs to be torn down first.
+- Shared source geometry is disposed only after all dependent cloned views are torn down.
 - View-owned materials, textures, labels, markers and procedural geometry are disposed by their owner.
 
 ## Ball and charge contract
@@ -35,8 +38,10 @@ Ball style is a read-only projection of `snapshot.match.settings.ballStyle`. The
 
 ## Reset and teardown
 
-Reset restores presentation transforms and hides transient indicators without changing simulation state. Teardown removes every owned root, stops mixers and releases owned resources after loading success or failure.
+Reset restores presentation transforms and hides transient indicators without changing simulation state. It creates one new load generation: when no character template exists it restarts character loading; when a template already owns live shared geometry it retains that template and restarts animation loading only.
+
+Teardown invalidates every pending load generation, tears player views down in reverse order, then releases the shared character template. Late character or animation results are observed, disposed and ignored. Every owned root is removed, mixers are stopped and owner resources are released even when another teardown step reports an error.
 
 ## Validation
 
-TON-81 requires pure animation-state tests, immutable-frame rejection, asset success/failure, reconciliation/reset/teardown, generated-source ownership guards, production browser smoke, full CI and Vercel evidence on one frozen head. No validation may depend on gameplay mutation or visual tuning.
+TON-81 requires pure animation-state tests, immutable-frame rejection, asset success/failure, transactional fallback-to-rig success and rollback, stale character and animation completion after reset/teardown, shared-template disposal ordering, reconciliation/reset/teardown, generated-source ownership guards, production browser smoke, full CI and Vercel evidence on one frozen head. No validation may depend on gameplay mutation or visual tuning.

@@ -44,21 +44,27 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     for (const [id, view] of playerViews) { if (activeIds.has(id)) continue; view.teardown?.(); playerViews.delete(id); }
     for (const player of players) if (!playerViews.has(player.id)) createView(player);
   }
-  async function loadAssets(generation) {
-    setAssetStatus("loading", "MODEL · LOADING", "Loading football-character-v2.glb");
-    try {
-      const character = await assetLoader.loadCharacter();
-      if (disposed || generation !== loadGeneration) { disposePlayerAssetTemplate(character?.scene); return false; }
-      const nextCharacterScene = character?.scene ?? null;
-      if (!nextCharacterScene) throw new Error("character asset has no scene");
-      const previousCharacterScene = characterScene;
-      characterScene = nextCharacterScene;
-      for (const view of playerViews.values()) view.installAsset?.({ characterScene, animations });
-      if (previousCharacterScene && previousCharacterScene !== characterScene) disposePlayerAssetTemplate(previousCharacterScene);
-      setAssetStatus("ready", "MODEL · READY", "Character loaded; animation loading in background");
-    } catch (error) {
-      if (disposed || generation !== loadGeneration) return false;
-      setAssetStatus("error", "MODEL · FALLBACK", error?.message ?? String(error)); return false;
+  async function loadAssets(generation, { reuseCharacterScene = false } = {}) {
+    if (reuseCharacterScene) {
+      setAssetStatus("loading", "MODEL RETAINED · ANIMATION LOADING", "Keeping the live shared character template while refreshing animation clips");
+    } else {
+      setAssetStatus("loading", "MODEL · LOADING", "Loading football-character-v2.glb");
+      try {
+        const character = await assetLoader.loadCharacter();
+        if (disposed || generation !== loadGeneration) { disposePlayerAssetTemplate(character?.scene); return false; }
+        const nextCharacterScene = character?.scene ?? null;
+        if (!nextCharacterScene) throw new Error("character asset has no scene");
+        if (characterScene && characterScene !== nextCharacterScene) {
+          disposePlayerAssetTemplate(nextCharacterScene);
+          throw new Error("character template replacement is blocked while live rigs may share its geometry");
+        }
+        characterScene = nextCharacterScene;
+        for (const view of playerViews.values()) view.installAsset?.({ characterScene, animations });
+        setAssetStatus("ready", "MODEL · READY", "Character loaded; animation loading in background");
+      } catch (error) {
+        if (disposed || generation !== loadGeneration) return false;
+        setAssetStatus("error", "MODEL · FALLBACK", error?.message ?? String(error)); return false;
+      }
     }
     try {
       const motion = await assetLoader.loadAnimations();
@@ -72,11 +78,11 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       setAssetStatus("warning", "MODEL READY · BASIC MOTION", error?.message ?? String(error)); return false;
     }
   }
-  function startAssetLoad() {
+  function startAssetLoad({ reuseCharacterScene = false } = {}) {
     loadGeneration += 1;
     const generation = loadGeneration;
     if (visualTestMode) setAssetStatus("ready", "VISUAL TEST · MODEL VIEWS", "Snapshot-driven procedural model validation");
-    else void loadAssets(generation);
+    else void loadAssets(generation, { reuseCharacterScene });
   }
   function attach() {
     if (attached || disposed || !isSceneBound()) return false;
@@ -99,10 +105,9 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
   }
   function reset() {
     if (!attached || disposed) return false;
-    loadGeneration += 1;
     for (const view of playerViews.values()) view.reset?.();
     ballView?.reset?.();
-    startAssetLoad();
+    startAssetLoad({ reuseCharacterScene: Boolean(characterScene) });
     return true;
   }
   function teardown() {

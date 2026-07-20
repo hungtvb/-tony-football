@@ -60,26 +60,59 @@ function createProceduralPlayer({ THREE, document, player, lowPowerDevice }) {
   const label = canvasLabel({ THREE, document, text: `${player.number} · ${player.name}`, accent: home ? "#e1bb58" : "#47c9d4" }); root.add(label);
   return { root, body, torso, head, leftLeg, rightLeg, leftArm, rightArm, marker, label, rig: null };
 }
-function createIntegratedKitMaterial(THREE, source, player) {
-  const home = player.team === 0; const keeper = player.role === "GK"; const material = source.clone();
+function createIntegratedKitMaterial(THREE, source, player, ownedMaterials) {
+  const home = player.team === 0; const keeper = player.role === "GK"; const material = source.clone(); ownedMaterials.push(material);
   material.map = null; material.color.set(keeper ? (home ? 0x7650d6 : 0xe65348) : (home ? 0xe1bb58 : 0x32b8c8)); material.roughness = .68; material.metalness = 0;
   material.customProgramCacheKey = () => `football-kit-ton81-${player.team}-${player.role}-${player.index % 4}`; material.needsUpdate = true; return material;
-}
-function installRig({ THREE, cloneModel, view, player, characterScene, animations }) {
-  const model = cloneModel(characterScene); model.scale.set(2.96, 3.28, 2.96); model.rotation.y = 0;
-  model.traverse((node) => {
-    if (!node.isMesh) return; node.castShadow = true; node.receiveShadow = true; node.frustumCulled = false; node.userData.tonySharedGeometry = true;
-    const source = Array.isArray(node.material) ? node.material : [node.material]; const mapped = source.map((material) => createIntegratedKitMaterial(THREE, material, player)); node.material = Array.isArray(node.material) ? mapped : mapped[0];
-  });
-  const mixer = new THREE.AnimationMixer(model); const actions = {}; for (const clip of animations ?? []) actions[clip.name] = mixer.clipAction(clip);
-  view.body.visible = false; view.root.add(model);
-  view.rig = { model, mixer, actions, state: "", active: null, lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
 }
 function switchRigAnimation(THREE, rig, state, immediate = false) {
   if (!rig || rig.state === state) return false; const next = rig.actions[state] || rig.actions.Idle_Loop; if (!next) return false;
   const looping = state.endsWith("_Loop") || state === "Dance_Loop"; const fade = immediate ? 0 : looping ? .32 : .16;
   next.reset(); next.enabled = true; next.setLoop(looping ? THREE.LoopRepeat : THREE.LoopOnce, looping ? Infinity : 1); next.clampWhenFinished = !looping; next.fadeIn(fade).play();
   if (rig.active && rig.active !== next) rig.active.fadeOut(fade); rig.active = next; rig.state = state; return true;
+}
+function disposeCandidateMaterials(materials) {
+  for (const material of new Set(materials ?? [])) {
+    try { disposeMaterial(material); } catch {}
+  }
+}
+function releaseRigCandidate(rig) {
+  try { rig?.mixer?.stopAllAction?.(); } catch {}
+  disposeCandidateMaterials(rig?.ownedMaterials);
+}
+function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }) {
+  let model = null; let mixer = null; const ownedMaterials = [];
+  try {
+    model = cloneModel(characterScene); model.scale.set(2.96, 3.28, 2.96); model.rotation.y = 0;
+    model.traverse((node) => {
+      if (!node.isMesh) return; node.castShadow = true; node.receiveShadow = true; node.frustumCulled = false; node.userData.tonySharedGeometry = true;
+      const source = Array.isArray(node.material) ? node.material : [node.material]; const mapped = source.map((material) => createIntegratedKitMaterial(THREE, material, player, ownedMaterials)); node.material = Array.isArray(node.material) ? mapped : mapped[0];
+    });
+    mixer = new THREE.AnimationMixer(model); const actions = {}; for (const clip of animations ?? []) actions[clip.name] = mixer.clipAction(clip);
+    const rig = { model, mixer, actions, ownedMaterials, state: "", active: null, lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
+    switchRigAnimation(THREE, rig, "Idle_Loop", true);
+    return rig;
+  } catch (error) {
+    try { mixer?.stopAllAction?.(); } catch {}
+    disposeCandidateMaterials(ownedMaterials);
+    throw error;
+  }
+}
+function commitRig(view, rig) {
+  const proceduralVisible = view.body.visible; let added = false;
+  try {
+    view.root.add(rig.model); added = true;
+    view.body.visible = false; view.rig = rig;
+    return true;
+  } catch (error) {
+    if (view.rig === rig) view.rig = null;
+    view.body.visible = proceduralVisible;
+    if (added) {
+      try { view.root.remove(rig.model); } catch {}
+    }
+    releaseRigCandidate(rig);
+    throw error;
+  }
 }
 function applyFootballActionPose(rig, player, progress, dt) {
   if (!rig.active) return; const shoot = motionPulse(progress, .24, 1); const pass = motionPulse(progress, .2, 1); const tackle = player.anim === "tackle" ? motionPulse(progress, 0, 1) : 0;
@@ -93,10 +126,28 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   if (!scenePort || typeof scenePort.addObject !== "function" || typeof scenePort.removeObject !== "function") throw new TypeError("PlayerModelView requires a scene port");
   if (!document || typeof document.createElement !== "function") throw new TypeError("PlayerModelView requires a document");
   if (typeof worldX !== "function" || typeof worldZ !== "function") throw new TypeError("PlayerModelView requires world projection functions");
-  const THREE = three; const view = createProceduralPlayer({ THREE, document, player, lowPowerDevice }); let attached = false; let disposed = false;
+  const THREE = three; const view = createProceduralPlayer({ THREE, document, player, lowPowerDevice }); let attached = false; let disposed = false; let installError = "";
   function attach() { if (attached || disposed) return false; if (scenePort.addObject(view.root) === false) return false; attached = true; return true; }
-  function installAsset({ characterScene, animations = [] } = {}) { if (disposed || !characterScene || view.rig) return false; installRig({ THREE, cloneModel, view, player, characterScene, animations }); switchRigAnimation(THREE, view.rig, "Idle_Loop", true); return true; }
-  function installAnimations(animations = []) { if (disposed || !view.rig || !Array.isArray(animations)) return false; view.rig.actions = {}; for (const clip of animations) view.rig.actions[clip.name] = view.rig.mixer.clipAction(clip, view.rig.model); view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true); return true; }
+  function installAsset({ characterScene, animations = [] } = {}) {
+    if (disposed || !characterScene || view.rig) return false;
+    try {
+      const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations });
+      commitRig(view, candidate); installError = ""; return true;
+    } catch (error) {
+      installError = error?.message ?? String(error); return false;
+    }
+  }
+  function installAnimations(nextAnimations = []) {
+    if (disposed || !view.rig || !Array.isArray(nextAnimations)) return false;
+    const rig = view.rig; const previous = { actions: rig.actions, state: rig.state, active: rig.active };
+    try {
+      const actions = {}; for (const clip of nextAnimations) actions[clip.name] = rig.mixer.clipAction(clip, rig.model);
+      rig.actions = actions; rig.state = ""; rig.active = null; switchRigAnimation(THREE, rig, "Idle_Loop", true); installError = ""; return true;
+    } catch (error) {
+      rig.actions = previous.actions; rig.state = previous.state; rig.active = previous.active;
+      installError = error?.message ?? String(error); return false;
+    }
+  }
   function render({ player: pose, ball, selectedPlayerId, replayActive = false, controlMode = "attack", pressedCodes = Object.freeze([]), nowMilliseconds = 0 } = {}) {
     assertImmutable(pose, "player render facts"); assertImmutable(ball, "ball render facts"); if (disposed) return false;
     const speed = Math.hypot(pose.vx || 0, pose.vy || 0); const running = speed > 30; const stride = running ? Math.sin(pose.stepPhase || 0) * clamp(speed / 185, .35, 1.25) : 0;
@@ -116,6 +167,19 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     view.label.visible = !replayActive && (selected || speed < 10); return true;
   }
   function reset() { if (disposed) return false; view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0); if (view.rig) { view.rig.lastTime = null; view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true); } return true; }
-  function teardown() { if (disposed) return false; if (attached) scenePort.removeObject(view.root); attached = false; disposed = true; view.rig?.mixer?.stopAllAction?.(); disposeOwned(view.root); return true; }
-  return Object.freeze({ get id() { return player.id; }, get root() { return view.root; }, get attached() { return attached; }, get rigged() { return Boolean(view.rig); }, attach, installAsset, installAnimations, render, reset, teardown, diagnostics: () => Object.freeze({ id: player.id, attached, rigged: Boolean(view.rig), disposed }) });
+  function teardown() {
+    if (disposed) return false;
+    const errors = [];
+    if (attached) {
+      try { scenePort.removeObject(view.root); } catch (error) { errors.push(error); }
+    }
+    attached = false; disposed = true;
+    try { view.rig?.mixer?.stopAllAction?.(); } catch (error) { errors.push(error); }
+    try { disposeOwned(view.root); } catch (error) { errors.push(error); }
+    view.rig = null;
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, `player model view ${player.id} teardown reported errors`);
+    return true;
+  }
+  return Object.freeze({ get id() { return player.id; }, get root() { return view.root; }, get attached() { return attached; }, get rigged() { return Boolean(view.rig); }, attach, installAsset, installAnimations, render, reset, teardown, diagnostics: () => Object.freeze({ id: player.id, attached, rigged: Boolean(view.rig), disposed, installError }) });
 }
