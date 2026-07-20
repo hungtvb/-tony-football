@@ -179,13 +179,16 @@ export class BrowserBootstrapComposition {
     const snapshotFrame = typeof this.#snapshotAdapter.createRenderFrame === "function" ? this.#snapshotAdapter.createRenderFrame(timing.alpha) : null;
     const snapshot = snapshotFrame?.current ?? this.#snapshotAdapter.snapshot ?? null;
     if (!snapshot) return false;
+    const activeCharge = this.#inputAdapter.activeCharge;
     const frame = Object.freeze({
       snapshot,
       previousSnapshot: snapshotFrame?.previous ?? snapshot,
       alpha: timing.alpha,
       nowMilliseconds: timing.nowMilliseconds,
       controlMode: this.#runtimeComposition.controlMode,
-      hasActiveInput: Boolean(this.#inputAdapter.activeCharge || this.#inputAdapter.pressedCodes?.length),
+      hasActiveInput: Boolean(activeCharge || this.#inputAdapter.pressedCodes?.length),
+      activeCharge,
+      pressedCodes: this.#inputAdapter.pressedCodes,
     });
     return this.#presentationComposition.render(frame);
   }
