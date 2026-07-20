@@ -113,27 +113,44 @@ test("reset retains shared template geometry until dependent rigs are torn down"
   assert.equal(adapter.teardown(), true); assert.equal(geometryDisposals, 1);
 });
 
-test("teardown continues in reverse ownership order and aggregates cleanup failures", async () => {
-  const order = [];
+test("teardown retains failed owners and resumes reverse cleanup after recovery", async () => {
+  const order = []; let playerRecovered = false; let ballRecovered = false; let templateRecovered = false;
   const adapter = createAdapter({
     assetLoader: {
-      loadCharacter: async () => ({ scene: disposableScene(() => { order.push("template"); throw new Error("template cleanup failed"); }) }),
+      loadCharacter: async () => ({ scene: disposableScene(() => { order.push("template"); if (!templateRecovered) throw new Error("template cleanup failed"); }) }),
       loadAnimations: async () => ({ animations: [] }),
     },
     createPlayerView: () => ({
       attach() {}, render() {}, installAsset() {}, installAnimations() {},
-      teardown() { order.push("player"); throw new Error("player cleanup failed"); },
+      teardown() { order.push("player"); if (!playerRecovered) throw new Error("player cleanup failed"); return true; },
     }),
     createBallView: () => ({
       attach() {}, render() {}, reset() {},
-      teardown() { order.push("ball"); throw new Error("ball cleanup failed"); },
+      teardown() { order.push("ball"); if (!ballRecovered) throw new Error("ball cleanup failed"); return true; },
       diagnostics: () => Object.freeze({ attached: true }),
     }),
   });
   adapter.attach(); const current = snapshot(); adapter.render(frame(current)); await flush(); await flush();
-  assert.throws(() => adapter.teardown(), (error) => error instanceof AggregateError && error.errors.length === 3);
-  assert.deepEqual(order, ["player", "ball", "template"]);
+
+  assert.throws(() => adapter.teardown(), /player cleanup failed/);
+  assert.deepEqual(order, ["player"]);
+  assert.equal(adapter.diagnostics().terminating, true); assert.equal(adapter.diagnostics().disposed, false); assert.equal(adapter.diagnostics().playerCount, 1);
+
+  playerRecovered = true;
+  assert.throws(() => adapter.teardown(), /ball cleanup failed/);
+  assert.deepEqual(order, ["player", "player", "ball"]);
+  assert.equal(adapter.diagnostics().playerCount, 0); assert.equal(adapter.diagnostics().disposed, false);
+
+  ballRecovered = true;
+  assert.throws(() => adapter.teardown(), /template cleanup failed/);
+  assert.deepEqual(order, ["player", "player", "ball", "ball", "template"]);
+  assert.equal(adapter.diagnostics().disposed, false);
+
+  templateRecovered = true;
+  assert.equal(adapter.teardown(), true);
+  assert.deepEqual(order, ["player", "player", "ball", "ball", "template", "template"]);
   assert.equal(adapter.diagnostics().disposed, true); assert.equal(adapter.diagnostics().playerCount, 0);
+  assert.equal(adapter.teardown(), false);
 });
 
 test("fallback-to-rig preparation failure disposes candidate materials and preserves procedural fallback", () => {
