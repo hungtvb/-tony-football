@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 path = Path("game.js")
 text = path.read_text(encoding="utf-8")
@@ -39,7 +40,10 @@ model_imports = (
 )
 replace_once(model_imports, "", "model imports")
 
-replace_between("  const playerViews = new Map();", "  const PITCH_STYLES = {", '''  let threeScenePort = null;
+replace_between(
+    "  const playerViews = new Map();",
+    "  const PITCH_STYLES = {",
+    '''  let threeScenePort = null;
   let ballTrailView; let particleView; let screenFx; let ctx; let use3D = true;
   const runtimeParams = new URLSearchParams(location.search);
   const visualTestMode = runtimeParams.get("visualTest") === "1";
@@ -49,9 +53,14 @@ replace_between("  const playerViews = new Map();", "  const PITCH_STYLES = {", 
   const cameraLook = new THREE.Vector3();
   const cameraPosition = new THREE.Vector3(0, lowPowerDevice ? 54 : 45, lowPowerDevice ? 63 : 52);
 
-''', "presentation state")
+''',
+    "presentation state",
+)
 
-replace_between("  function createTeams() {", "  function resetMatch() {", '''  function createTeams() {
+replace_between(
+    "  function createTeams() {",
+    "  function resetMatch() {",
+    '''  function createTeams() {
     players = [
       ...formations.home.map((spec, index) => new Player(HOME, spec, index)),
       ...formations.away.map((spec, index) => new Player(AWAY, spec, index))
@@ -59,9 +68,14 @@ replace_between("  function createTeams() {", "  function resetMatch() {", '''  
     game.selected = players[4];
   }
 
-''', "team model ownership")
+''',
+    "team model ownership",
+)
 
-replace_between("  function init3D() {", "  function setAssetStatus", '''  function init3D() {
+replace_between(
+    "  function init3D() {",
+    "  function setAssetStatus",
+    '''  function init3D() {
     if (rendererPreference === "canvas") {
       use3D = false;
       ctx = canvas.getContext("2d");
@@ -87,13 +101,30 @@ replace_between("  function init3D() {", "  function setAssetStatus", '''  funct
     return true;
   }
 
-''', "clean host initialization")
+''',
+    "clean host initialization",
+)
 
-replace_between("  function createPitchTexture3D() {", "  function createLabelSprite", "", "legacy environment construction")
-replace_between("  function setAssetStatus", "  function createParticleView", "  function applyPitchStyle() { return true; }\n\n  function applyBallStyle() { return true; }\n\n", "legacy model view ownership")
+replace_between(
+    "  function createPitchTexture3D() {",
+    "  function createLabelSprite",
+    "",
+    "legacy environment construction",
+)
+
+replace_between(
+    "  function setAssetStatus",
+    "  function createParticleView",
+    "  function applyPitchStyle() { return true; }\n\n  function applyBallStyle() { return true; }\n\n",
+    "legacy model view ownership",
+)
+
 text = text.replace("scene3D.add(particleView);", "threeScenePort?.addObject(particleView);")
 
-replace_between("  function updateAtmosphere3D(now) {", "  function drawFallbackPlayerDetail", '''  function render3D(now, snapshot, renderState) {
+replace_between(
+    "  function updateAtmosphere3D(now) {",
+    "  function drawFallbackPlayerDetail",
+    '''  function render3D(now, snapshot, renderState) {
     if (!threeScenePort) return false;
     const replayFrame = currentReplayFrame();
     const renderBall = replayFrame?.ball || renderState.ball;
@@ -106,6 +137,7 @@ replace_between("  function updateAtmosphere3D(now) {", "  function drawFallback
       opacityForIndex: (index, count, speed) => gameFeel.trailOpacity(index, count, speed),
     });
     updateParticleView();
+
     const cameraState = cameraController.state;
     const framedX = replayFrame ? renderBall.x : cameraState.x;
     const framedY = replayFrame ? renderBall.y : cameraState.y;
@@ -141,24 +173,67 @@ replace_between("  function updateAtmosphere3D(now) {", "  function drawFallback
       position: Object.freeze({ x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z }),
       lookAt: Object.freeze({ x: cameraLook.x, y: cameraLook.y, z: cameraLook.z }),
     }));
+
     screenFx.style.opacity = String(clamp(game.flash, 0, 1));
     screenFx.classList.toggle("active", game.flash > 0.02);
     return true;
   }
 
-''', "clean host render projection")
+''',
+    "clean host render projection",
+)
 
-replace_once("    createPresentationFeedback,\n  });", "    createPresentationFeedback,\n    onPresentationReady: init3D,\n  });", "presentation-ready hook")
-replace_once('      renderer: use3D ? "webgl" : "canvas",\n', '      renderer: use3D ? "webgl" : "canvas",\n      threeScene: window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "canvas-fallback", renderer: "canvas", profile: null }),\n      modelViews: window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "browser-model-views", attached: false }),\n', "diagnostics")
-replace_once("  init3D(); createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();", "  createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();", "boot order")
+replace_once(
+    "    createPresentationFeedback,\n  });",
+    "    createPresentationFeedback,\n    onPresentationReady: init3D,\n  });",
+    "presentation-ready hook",
+)
+replace_once(
+    '      renderer: use3D ? "webgl" : "canvas",\n',
+    '      renderer: use3D ? "webgl" : "canvas",\n      threeScene: window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "canvas-fallback", renderer: "canvas", profile: null }),\n      modelViews: window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.() ?? Object.freeze({ owner: "browser-model-views", attached: false }),\n',
+    "diagnostics",
+)
+replace_once(
+    "  init3D(); createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();",
+    "  createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();",
+    "boot order",
+)
 
-for forbidden in [
-    "new THREE.WebGLRenderer", "new EffectComposer", "new RoomEnvironment", "scene3D", "renderer3D", "composer3D", "camera3D",
-    "createPitch3D", "createGrass3D", "createStadium3D", "createAtmosphere3D", "createGoals3D",
-    "GLTFLoader", "MeshoptDecoder", "cloneSkeleton", "AnimationMixer", "createPlayerView", "upgradePlayerView", "updatePlayerView",
-    "createBall3D", "ballView", "chargeView", "playerViews", "playerAsset", "loadPlayerAsset", "installPlayerAnimations", "applyIntegratedFootballKit",
-]:
-    if forbidden in text:
-        raise RuntimeError(f"forbidden presentation ownership remains: {forbidden}")
+forbidden_tokens = [
+    "new THREE.WebGLRenderer",
+    "new EffectComposer",
+    "new RoomEnvironment",
+    "scene3D",
+    "renderer3D",
+    "composer3D",
+    "camera3D",
+    "createPitch3D",
+    "createGrass3D",
+    "createStadium3D",
+    "createAtmosphere3D",
+    "createGoals3D",
+    "GLTFLoader",
+    "MeshoptDecoder",
+    "cloneSkeleton",
+    "AnimationMixer",
+    "createPlayerView",
+    "upgradePlayerView",
+    "updatePlayerView",
+    "createBall3D",
+    "ballView",
+    "chargeView",
+    "playerViews",
+    "playerAsset",
+    "loadPlayerAsset",
+    "installPlayerAnimations",
+    "applyIntegratedFootballKit",
+]
+remaining_ownership = []
+for line_number, line in enumerate(text.splitlines(), start=1):
+    for forbidden in forbidden_tokens:
+        if forbidden in line:
+            remaining_ownership.append(f"{forbidden}@{line_number}: {line.strip()[:220]}")
+if remaining_ownership:
+    raise RuntimeError("forbidden presentation ownership remains:\n" + "\n".join(remaining_ownership))
 
 path.write_text(text, encoding="utf-8")
