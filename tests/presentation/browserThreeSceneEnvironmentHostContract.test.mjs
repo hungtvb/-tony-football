@@ -37,7 +37,7 @@ test("browser factory always selects the clean host and entry exposes only a nar
   assert.match(factory, /createBrowserThreeSceneEnvironmentHost/);
   assert.doesNotMatch(factory, /LegacyAdoptedThreeSceneHost|legacyThreeSceneSnapshot/);
   assert.match(entry, /__TONY_THREE_SCENE_BRIDGE__/);
-  assert.match(entry, /\.\/generated\/game\.js\?v=20\.0\.0/);
+  assert.match(entry, /\.\/generated\/game\.js\?v=21\.0\.0/);
   assert.doesNotMatch(entry, /installLegacyThreeSceneTracking|EffectComposer|from "three"/);
 });
 
