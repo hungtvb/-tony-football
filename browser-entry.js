@@ -1,3 +1,4 @@
+import { createBrowserModelViewAdapter } from "./src/game/presentation/BrowserModelViewAdapter.js";
 import { createBrowserThreeSceneEnvironmentAdapter } from "./src/game/presentation/BrowserThreeSceneEnvironmentAdapterFactory.js";
 import { createRebindableThreeSceneHostPort } from "./src/game/presentation/RebindableThreeSceneHostPort.js";
 
@@ -27,14 +28,42 @@ if (typeof globalThis.window !== "undefined") {
     getPort: () => sceneFacade.bound ? sceneFacade.port : null,
     diagnostics: () => sceneFacade.port.diagnostics(),
   });
+  let modelViewAdapter = null;
+  const modelViewBridge = Object.freeze({
+    diagnostics: () => modelViewAdapter?.diagnostics?.() ?? Object.freeze({
+      owner: "browser-model-view-adapter",
+      attached: false,
+      disposed: false,
+      assetState: "pending",
+      assetDetail: "",
+      playerCount: 0,
+      riggedPlayers: 0,
+      ballReady: false,
+      lastTick: null,
+      error: null,
+    }),
+  });
 
   Object.defineProperty(globalThis.window, "__TONY_THREE_SCENE_BRIDGE__", {
     value: sceneBridge, configurable: false, enumerable: false, writable: false,
   });
+  Object.defineProperty(globalThis.window, "__TONY_MODEL_VIEW_BRIDGE__", {
+    value: modelViewBridge, configurable: false, enumerable: false, writable: false,
+  });
 
   globalThis.window.__TONY_PRESENTATION_ADAPTER_FACTORIES__ = Object.freeze([
+    ({ target, document }) => {
+      modelViewAdapter = createBrowserModelViewAdapter({
+        target,
+        document,
+        getScenePort: () => sceneFacade.bound ? sceneFacade.port : null,
+      });
+      return modelViewAdapter;
+    },
     ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({
-      target, document, onHostChanged: (port) => sceneFacade.bind(port),
+      target,
+      document,
+      onHostChanged: (port) => sceneFacade.bind(port),
     }),
   ]);
 
@@ -42,6 +71,6 @@ if (typeof globalThis.window !== "undefined") {
   if (sanitized.changed) {
     globalThis.history.replaceState(globalThis.history.state, "", `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`);
   }
-  await import("./generated/game.js?v=20.0.0");
+  await import("./generated/game.js?v=21.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
 }
