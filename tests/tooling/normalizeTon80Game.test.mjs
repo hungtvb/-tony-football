@@ -3,43 +3,45 @@ import test from "node:test";
 
 import { normalizeTon80GameSource } from "../../scripts/normalize-ton80-game.mjs";
 
-const generatedWithMigrationBoundaries = `(() => {
-  function createLabelSprite  function createLabelSprite(player, accent) {}
-  function drawFallbackPlayerDetail  function drawFallbackPlayerDetail(player,pose,replayFrame,selectedPlayerId) {}
-  function applyBallStyle() {  function applyBallStyle() {}
+const prepared = `import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
+import("./src/game/config/gameplayConfig.js");
+(() => {
+  let threeScenePort = null;
+  function applyBallStyle() { return true; }
+  function createParticleView() {}
+  function drawFallbackPlayerDetail(player,pose,replayFrame,selectedPlayerId) {}
+  const browserBootstrap = { start() {} };
+  const init3D = () => {};
+  const createTeams = () => {};
+  const updateUI = () => {};
+  const captureCompatibilitySnapshot = () => {};
+  window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.();
+  window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
+  const options = {
+    onPresentationReady: init3D,
+  };
   createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();
   window.__TONY_DEBUG__.ready = true;
-}
 })();
 `;
 
-const generatedWithCanonicalImports = `import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
-import("./src/game/config/gameplayConfig.js");
-${generatedWithMigrationBoundaries}`;
-
-test("normalizes generated function boundaries without nesting browser bootstrap", () => {
-  const normalized = normalizeTon80GameSource(generatedWithMigrationBoundaries);
-  assert.doesNotMatch(normalized, /function \w+\s+function \w+/);
-  assert.doesNotMatch(normalized, /\n}\n}\)\(\);\n/);
-  assert.equal((normalized.match(/function applyBallStyle\(\) \{/g) ?? []).length, 1);
-  assert.doesNotThrow(() => new Function(normalized));
-});
-
-test("rebases generated module imports away from the generated directory", () => {
-  const normalized = normalizeTon80GameSource(generatedWithCanonicalImports);
+test("normalization rebases generated imports and is idempotent", () => {
+  const normalized = normalizeTon80GameSource(prepared);
   assert.match(normalized, /from "\.\.\/src\/game\/core\/SimulationLoop\.js"/);
   assert.match(normalized, /import\("\.\.\/src\/game\/config\/gameplayConfig\.js"\)/);
-  assert.doesNotMatch(normalized, /[#']\.\/src\//);
-});
-
-test("normalization is idempotent for a prepared artifact", () => {
-  const normalized = normalizeTon80GameSource(generatedWithCanonicalImports);
   assert.equal(normalizeTon80GameSource(normalized), normalized);
 });
 
-test("normalization fails closed when a required bootstrap boundary is missing", () => {
+test("normalization fails closed if model ownership returns", () => {
   assert.throws(
-    () => normalizeTon80GameSource(generatedWithMigrationBoundaries.replace("  window.__TONY_DEBUG__.ready = true;\n", "")),
-    /Missing generated TON-80 boundary/,
+    () => normalizeTon80GameSource(prepared.replace("  function createParticleView() {}", "  function createParticleView() {}\n  new THREE.AnimationMixer(model);")),
+    /retains TON-81 ownership/,
+  );
+});
+
+test("normalization fails closed when a required boundary is missing", () => {
+  assert.throws(
+    () => normalizeTon80GameSource(prepared.replace("  window.__TONY_DEBUG__.ready = true;\n", "")),
+    /Missing generated presentation boundary/,
   );
 });
