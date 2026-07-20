@@ -2,18 +2,34 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DUPLICATE_BOUNDARIES = Object.freeze([
-  ["  function createLabelSprite  function createLabelSprite", "  function createLabelSprite"],
-  ["  function drawFallbackPlayerDetail  function drawFallbackPlayerDetail", "  function drawFallbackPlayerDetail"],
-  ["  function applyBallStyle() {  function applyBallStyle() {", "  function applyBallStyle() {"],
-]);
-
 const REQUIRED_BOUNDARIES = Object.freeze([
-  "  function createLabelSprite(player, accent) {",
+  "  let threeScenePort = null;",
+  "  function applyBallStyle() { return true; }",
+  "  function createParticleView() {",
   "  function drawFallbackPlayerDetail(player,pose,replayFrame,selectedPlayerId) {",
-  "  function applyBallStyle() {",
+  "    onPresentationReady: init3D,",
+  "window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.()",
   "  createTeams(); updateUI(captureCompatibilitySnapshot()); browserBootstrap.start();",
   "  window.__TONY_DEBUG__.ready = true;",
+]);
+
+const FORBIDDEN_MODEL_OWNERSHIP = Object.freeze([
+  "GLTFLoader",
+  "cloneSkeleton",
+  "MeshoptDecoder",
+  "playerViews",
+  "playerAsset",
+  "createPlayerView",
+  "upgradePlayerView",
+  "new THREE.AnimationMixer",
+  "createBall3D",
+  "ballView",
+  "chargeView",
+  "createChargeView",
+  "updatePlayerView",
+  "updateRigPlayer",
+  "applyIntegratedFootballKit",
+  "createBallSurfaceTextures",
 ]);
 
 function rebaseGeneratedModuleImports(source) {
@@ -23,25 +39,19 @@ function rebaseGeneratedModuleImports(source) {
 }
 
 export function normalizeTon80GameSource(source) {
-  let normalized = source;
-  for (const [duplicate, replacement] of DUPLICATE_BOUNDARIES) {
-    const occurrences = normalized.split(duplicate).length - 1;
-    if (occurrences > 1) {
-      throw new Error(`Generated boundary repeated unexpectedly: ${replacement.trim()}`);
-    }
-    if (occurrences === 1) normalized = normalized.replace(duplicate, replacement);
-  }
-
+  let normalized = rebaseGeneratedModuleImports(source);
   if (normalized.includes("\n}\n})();\n")) {
     normalized = normalized.replace("\n}\n})();\n", "\n})();\n");
   }
-  normalized = rebaseGeneratedModuleImports(normalized);
 
   for (const marker of REQUIRED_BOUNDARIES) {
-    if (!normalized.includes(marker)) throw new Error(`Missing generated TON-80 boundary: ${marker.trim()}`);
+    if (!normalized.includes(marker)) throw new Error(`Missing generated presentation boundary: ${marker.trim()}`);
   }
-  if ((normalized.match(/function applyBallStyle\(\) \{/g) ?? []).length !== 1) {
-    throw new Error("Expected exactly one generated applyBallStyle function");
+  for (const marker of FORBIDDEN_MODEL_OWNERSHIP) {
+    if (normalized.includes(marker)) throw new Error(`Generated runtime retains TON-81 ownership: ${marker}`);
+  }
+  if ((normalized.match(/function applyBallStyle\(\) \{ return true; \}/g) ?? []).length !== 1) {
+    throw new Error("Expected exactly one generated applyBallStyle compatibility no-op");
   }
   const closingBoundary = "\n})();\n";
   if (normalized.split(closingBoundary).length - 1 !== 1) {
