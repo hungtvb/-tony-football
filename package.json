@@ -29,7 +29,7 @@
     "test:engine:fast": "node --test tests/simulation/*.test.mjs tests/engine/*.test.mjs tests/gameplay/*.test.mjs tests/input/*.test.mjs tests/application/*.test.mjs tests/scenarios/*.test.mjs",
     "test:presentation:fast": "node --test tests/presentation/*.test.mjs",
     "test:ci:fast": "npm run test:syntax && npm run test:assets && npm run test:engine:fast && npm run test:presentation:fast && npm run test:tooling && npm run build",
-    "test:e2e:smoke": "npm run prepare:ton80-game && playwright test tests/e2e/smoke.spec.mjs tests/e2e/context-restore.spec.mjs",
+    "test:e2e:smoke": "npm run prepare:ton80-game && playwright test tests/e2e/smoke.spec.mjs tests/e2e/context-restore.spec.mjs tests/e2e/model-views.spec.mjs",
     "test:e2e:broad": "npm run prepare:ton80-game && playwright test",
     "test:e2e:desktop:broad": "npm run prepare:ton80-game && playwright test --project=desktop-chromium",
     "test:e2e:narrow:broad": "npm run prepare:ton80-game && playwright test --project=narrow-landscape"
