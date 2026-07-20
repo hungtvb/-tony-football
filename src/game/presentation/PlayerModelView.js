@@ -107,7 +107,8 @@ function commitRig(view, rig) {
   } catch (error) {
     if (view.rig === rig) view.rig = null;
     view.body.visible = proceduralVisible;
-    if (added) {
+    const candidateAttached = added || rig.model?.parent === view.root || view.root.children?.includes?.(rig.model);
+    if (candidateAttached) {
       try { view.root.remove(rig.model); } catch {}
     }
     releaseRigCandidate(rig);

@@ -114,7 +114,8 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     if (disposed) return false; loadGeneration += 1; disposed = true; attached = false; const errors = [];
     for (const view of [...playerViews.values()].reverse()) { try { view.teardown?.(); } catch (error) { errors.push(error); } }
     playerViews.clear(); try { ballView?.teardown?.(); } catch (error) { errors.push(error); }
-    ballView = null; disposePlayerAssetTemplate(characterScene); characterScene = null; animations = Object.freeze([]); scenePort = null;
+    ballView = null; try { disposePlayerAssetTemplate(characterScene); } catch (error) { errors.push(error); }
+    characterScene = null; animations = Object.freeze([]); scenePort = null;
     if (errors.length === 1) throw errors[0]; if (errors.length > 1) throw new AggregateError(errors, "model view teardown reported errors"); return true;
   }
   return Object.freeze({ attach, render, reset, teardown, diagnostics: () => Object.freeze({ owner: "browser-model-views", attached, disposed, sceneBound: Boolean(isSceneBound()), playerCount: playerViews.size, ballAttached: Boolean(ballView?.diagnostics?.().attached), assetState, assetDetail, animationClips: animations.length, loadGeneration }) });

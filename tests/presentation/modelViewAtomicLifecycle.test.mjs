@@ -113,6 +113,29 @@ test("reset retains shared template geometry until dependent rigs are torn down"
   assert.equal(adapter.teardown(), true); assert.equal(geometryDisposals, 1);
 });
 
+test("teardown continues in reverse ownership order and aggregates cleanup failures", async () => {
+  const order = [];
+  const adapter = createAdapter({
+    assetLoader: {
+      loadCharacter: async () => ({ scene: disposableScene(() => { order.push("template"); throw new Error("template cleanup failed"); }) }),
+      loadAnimations: async () => ({ animations: [] }),
+    },
+    createPlayerView: () => ({
+      attach() {}, render() {}, installAsset() {}, installAnimations() {},
+      teardown() { order.push("player"); throw new Error("player cleanup failed"); },
+    }),
+    createBallView: () => ({
+      attach() {}, render() {}, reset() {},
+      teardown() { order.push("ball"); throw new Error("ball cleanup failed"); },
+      diagnostics: () => Object.freeze({ attached: true }),
+    }),
+  });
+  adapter.attach(); const current = snapshot(); adapter.render(frame(current)); await flush(); await flush();
+  assert.throws(() => adapter.teardown(), (error) => error instanceof AggregateError && error.errors.length === 3);
+  assert.deepEqual(order, ["player", "ball", "template"]);
+  assert.equal(adapter.diagnostics().disposed, true); assert.equal(adapter.diagnostics().playerCount, 0);
+});
+
 test("fallback-to-rig preparation failure disposes candidate materials and preserves procedural fallback", () => {
   let materialDisposals = 0; let geometryDisposals = 0;
   const candidate = candidateModel({ onMaterialDispose: () => { materialDisposals += 1; }, onGeometryDispose: () => { geometryDisposals += 1; } });
@@ -125,12 +148,12 @@ test("fallback-to-rig preparation failure disposes candidate materials and prese
   assert.equal(view.teardown(), true);
 });
 
-test("fallback-to-rig root commit failure rolls back the fully prepared candidate", () => {
+test("fallback-to-rig root commit failure removes a partially attached candidate", () => {
   let materialDisposals = 0; let geometryDisposals = 0;
   const candidate = candidateModel({ onMaterialDispose: () => { materialDisposals += 1; }, onGeometryDispose: () => { geometryDisposals += 1; } });
   const view = createPlayerModelView({ player: descriptor, scenePort: scenePort(), document: documentStub(), worldX: (value) => value, worldZ: (value) => value, cloneModel: () => candidate });
   const proceduralBody = view.root.children[0]; const originalAdd = view.root.add.bind(view.root);
-  view.root.add = (object) => { if (object === candidate) throw new Error("root add failed"); return originalAdd(object); };
+  view.root.add = (object) => { originalAdd(object); if (object === candidate) throw new Error("root add failed"); return view.root; };
   assert.equal(view.installAsset({ characterScene: new THREE.Group(), animations: [] }), false);
   assert.equal(view.rigged, false); assert.equal(proceduralBody.visible, true); assert.equal(candidate.parent, null);
   assert.equal(materialDisposals, 1); assert.equal(geometryDisposals, 0); assert.match(view.diagnostics().installError, /root add failed/);
