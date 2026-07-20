@@ -55,10 +55,10 @@ if (!animation.json.extensionsRequired?.includes("EXT_meshopt_compression")) thr
 
 for (const contract of [
   "new THREE.AnimationMixer(model)",
-  "createIntegratedKitMaterial",
-  "applyIntegratedFootballKit",
+  "kitMaterial",
+  "prepareRig",
   "selectPlayerRigAnimation",
-  "createRigSquadNumber",
+  "numberPlanes",
 ]) {
   if (!playerSource.includes(contract)) throw new Error(`PlayerModelView.js: missing contract ${contract}`);
 }
@@ -76,7 +76,7 @@ for (const contract of [
 ]) {
   if (!loaderSource.includes(contract)) throw new Error(`BrowserPlayerAssetLoader.js: missing contract ${contract}`);
 }
-for (const forbidden of [
+for (const marker of [
   "GLTFLoader",
   "cloneSkeleton",
   "MeshoptDecoder",
@@ -85,7 +85,7 @@ for (const forbidden of [
   "createBall3D",
   "chargeView",
 ]) {
-  if (generatedSource.includes(forbidden)) throw new Error(`generated/game.js: retained extracted model ownership ${forbidden}`);
+  if (generatedSource.includes(marker)) throw new Error(`generated/game.js: retained extracted model ownership ${marker}`);
 }
 for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) {
   if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
