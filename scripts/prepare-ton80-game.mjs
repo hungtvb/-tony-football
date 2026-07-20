@@ -44,6 +44,7 @@ export function prepareTon80Game({ cwd = process.cwd(), run = spawnSync } = {}) 
   const workdir = mkdtempSync(join(tmpdir(), "ton80-generate-"));
   try {
     copyFileSync(sourcePath, join(workdir, "game.js"));
+    runStep(run, "python3", [resolve(cwd, "scripts/ton-81-migrate-model-views.py")], workdir);
     runStep(run, "python3", [resolve(cwd, "scripts/ton-80-migrate-game.py")], workdir);
     const generated = normalizeTon80GameSource(readFileSync(join(workdir, "game.js"), "utf8"));
     if (classifyTon80GameSource(generated) !== "prepared") {
