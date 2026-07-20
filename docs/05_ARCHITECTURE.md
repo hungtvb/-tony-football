@@ -4,7 +4,7 @@
 
 Gameplay and AI authority have been extracted from `game.js` into the deterministic `MatchEngine` under `src/game/engine/`. The deployed browser consumes immutable snapshots and ordered events; temporary objects in `game.js` are outward-only presentation mirrors and cannot progress gameplay.
 
-Presentation ownership is now explicit for lifecycle, HUD, radar, event audio, and the Three.js scene/environment. `BrowserPresentationComposition` creates adapters before the simulation loop starts. `ThreeSceneEnvironmentAdapter` transactionally starts `BrowserThreeSceneEnvironmentHost`, which is the production owner of the WebGL renderer/composer, scene, environment map, lights, pitch, stadium, goals, weather, resize and fallback lifecycle. `game.js` retains player/ball/model animation, Canvas fallback, settings, particles, trails, preview tones and camera/replay decisions until their dedicated slices; those Three.js objects connect only through the frozen scene-host port.
+Presentation ownership is now explicit for lifecycle, HUD, radar, event audio, the Three.js scene/environment, and player/ball model views. `BrowserPresentationComposition` creates adapters before the simulation loop starts. `ThreeSceneEnvironmentAdapter` transactionally starts `BrowserThreeSceneEnvironmentHost`, which owns the WebGL renderer/composer, scene, environment map, lights, pitch, stadium, goals, weather, resize and fallback lifecycle. `BrowserModelViewAdapter` owns snapshot-driven player/ball meshes, shared model loading, kit materials, mixers, labels, markers and charge indication through the frozen scene-host port. `game.js` retains Canvas fallback, settings, particles, trails, preview tones and camera/replay decisions until their dedicated slices.
 
 Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
 
@@ -31,18 +31,22 @@ Core and engine modules have no DOM, Three.js, Canvas or Web Audio dependency. B
 
 ## Runtime contracts
 
-- Browser input adapters translate keyboard state into immutable gameplay commands.
+- Browser input adapters translate keyboard state into immutable gameplay commands and expose only frozen presentation facts such as active charge and pressed codes.
 - `MatchEngine` consumes commands only on fixed simulation ticks.
 - Commands with a future `targetTick` remain buffered until that tick is reached.
 - The engine owns players, ball, score, statistics, match lifecycle, and gameplay event ordering.
 - The engine publishes read-only snapshots for rendering and typed events for presentation feedback.
 - `BrowserPresentationComposition` owns presentation adapter creation, best-effort startup rollback, reset and reverse-order teardown. Cleanup attempts every adapter, always clears composition state and reports any collected failures after resources have been released.
 - Browser bootstrap may accept presentation adapter factories, but application modules never import Three.js. Factories receive only frozen `target` and `document` lifecycle context.
-- Browser bootstrap invokes the presentation-ready bridge after adapters attach and before the simulation loop starts. Temporary player/ball views therefore register into an already-created clean scene host without creating a second renderer or scene.
+- Browser bootstrap publishes frozen presentation frames containing current/previous snapshots, interpolation alpha, frame time, control mode, active charge and pressed codes.
+- Browser bootstrap invokes the presentation-ready bridge after adapters attach and before the simulation loop starts. Remaining compatibility trail/particle/camera views therefore connect to an already-created clean scene host without creating a second renderer or scene.
 - `ThreeSceneEnvironmentAdapter` owns WebGL availability, resize, context loss/restoration, explicit Canvas fallback signaling and scene-host lifecycle.
 - `BrowserThreeSceneEnvironmentHost` owns only environment resources. Objects registered through the port are foreign-owned: teardown detaches them without disposing their geometry, materials or textures.
 - `ThreeSceneEnvironmentProfile` is one deeply frozen, validated seam for world/field/goal geometry, renderer background/fog/exposure, camera defaults, lighting and pitch-environment styles. Defaults preserve current visuals; the active profile id is exposed through immutable diagnostics.
 - The scene-host port exposes only object registration, immutable camera-pose operations, quaternion copy, render requests and immutable diagnostics. Raw renderer, scene, camera and composer handles do not cross the boundary.
+- `BrowserModelViewAdapter` consumes immutable snapshot frames through `SnapshotRenderState`, reconciles views by stable ids and never receives mutable compatibility player or ball objects.
+- `PlayerModelView` owns procedural/rigged player projection, kit materials, mixer/actions, markers and labels. `BallModelView` owns ball surface projection and the charge indicator. Both register only through the frozen scene port and dispose only their own resources.
+- Model asset failure is presentation-local: character failure preserves procedural players; animation failure preserves the loaded model with safe basic motion.
 - Presentation factories and reset hooks receive only browser-safe lifecycle context. Runtime and snapshot mutation capabilities are not exposed; gameplay facts arrive only through immutable render frames and ordered events.
 - After-render presentation failures are isolated from the fixed simulation loop. Remaining listeners still run and the next frame is scheduled while the loop remains active.
 - Three.js, Canvas fallback, radar, HUD, audio, and presentation flows may consume snapshots and events but may not mutate engine state.
