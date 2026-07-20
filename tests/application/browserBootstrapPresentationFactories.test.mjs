@@ -4,10 +4,19 @@ import test from "node:test";
 import { BrowserBootstrapComposition } from "../../src/game/application/BrowserBootstrapComposition.js";
 import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
 
-test("browser bootstrap registers injected presentation factories before built-in adapters", () => {
+function keyboardEvent(type, code) {
+  const event = new Event(type, { cancelable: true });
+  Object.defineProperty(event, "code", { value: code });
+  Object.defineProperty(event, "repeat", { value: false });
+  Object.defineProperty(event, "shiftKey", { value: false });
+  return event;
+}
+
+test("browser bootstrap registers injected presentation factories and publishes immutable input presentation facts", () => {
   const target = new EventTarget();
   const calls = [];
   const listeners = [];
+  const renderedFrames = [];
   const snapshot = createMatchSnapshot({
     tick: 1,
     match: { state: "playing", elapsed: 1, matchSeconds: 150, score: [0, 0], selectedPlayerId: null },
@@ -49,7 +58,10 @@ test("browser bootstrap registers injected presentation factories before built-i
         calls.push(["custom:create", Object.keys(context).sort()]);
         return {
           attach: () => calls.push("custom:attach"),
-          render: (frame) => calls.push(["custom:render", frame.snapshot.tick]),
+          render: (frame) => {
+            renderedFrames.push(frame);
+            calls.push(["custom:render", frame.snapshot.tick]);
+          },
           teardown: () => calls.push("custom:teardown"),
         };
       },
@@ -57,7 +69,9 @@ test("browser bootstrap registers injected presentation factories before built-i
   });
 
   composition.start();
+  target.dispatchEvent(keyboardEvent("keydown", "KeyD"));
   listeners[0](Object.freeze({ alpha: 0, nowMilliseconds: 16 }));
+  target.dispatchEvent(keyboardEvent("keyup", "KeyD"));
   composition.teardown();
 
   assert.deepEqual(calls[0], ["custom:create", ["document", "target"]]);
@@ -65,6 +79,12 @@ test("browser bootstrap registers injected presentation factories before built-i
   assert.equal(calls.indexOf("presentation:ready") < calls.indexOf("loop:start"), true);
   assert.equal(calls.some((entry) => Array.isArray(entry) && entry[0] === "custom:render"), true);
   assert.equal(calls.includes("custom:teardown"), true);
+  assert.equal(renderedFrames.length, 1);
+  assert.ok(Object.isFrozen(renderedFrames[0]));
+  assert.ok(Object.isFrozen(renderedFrames[0].activeCharge));
+  assert.ok(Object.isFrozen(renderedFrames[0].pressedCodes));
+  assert.equal(renderedFrames[0].activeCharge.code, "KeyD");
+  assert.deepEqual(renderedFrames[0].pressedCodes, ["KeyD"]);
 });
 
 test("browser bootstrap rejects invalid injected presentation factories", () => {
