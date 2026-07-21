@@ -2,6 +2,7 @@ import { createSnapshotCameraController } from "./SnapshotCameraController.js";
 
 const EMPTY_FRAMES = Object.freeze([]);
 const SAMPLE_EPSILON_SECONDS = 1e-9;
+const DEFAULT_PRE_SHOT_FRAMES = 2;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function assertSnapshot(snapshot, name = "snapshot") {
@@ -56,11 +57,12 @@ function cameraSubjectSnapshot(current, visual, goalScorerId) {
   return Object.freeze({ ...visual, ball: Object.freeze({ ...visual.ball, x: scorer.x, y: scorer.y, vx: 0, vy: 0 }) });
 }
 
-export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, viewportWidth = worldWidth, viewportHeight = worldHeight, cameraConfig, sampleRate = 15, maxFrames = 66 } = {}) {
+export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, viewportWidth = worldWidth, viewportHeight = worldHeight, cameraConfig, sampleRate = 15, maxFrames = 66, preShotFrames = DEFAULT_PRE_SHOT_FRAMES } = {}) {
   if (![worldWidth, worldHeight, viewportWidth, viewportHeight].every((value) => Number.isFinite(value) && value > 0)) throw new TypeError("camera/replay adapter dimensions must be positive finite numbers");
   if (!cameraConfig) throw new TypeError("camera/replay adapter requires cameraConfig");
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new TypeError("sampleRate must be positive");
   if (!Number.isInteger(maxFrames) || maxFrames <= 0) throw new TypeError("maxFrames must be a positive integer");
+  if (!Number.isInteger(preShotFrames) || preShotFrames <= 0 || preShotFrames > maxFrames) throw new TypeError("preShotFrames must be a positive integer no greater than maxFrames");
 
   const cameraController = createSnapshotCameraController({ worldWidth, worldHeight, viewportWidth, viewportHeight, config: cameraConfig });
   const sampleInterval = 1 / sampleRate;
@@ -83,7 +85,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   function recordIncident(snapshot, key) {
     if (incidentKey !== key) {
       incidentKey = key;
-      incidentFrames = [...history];
+      incidentFrames = history.slice(-preShotFrames);
     }
     appendUniqueFrame(incidentFrames, snapshot, maxFrames);
     return true;
@@ -91,6 +93,8 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   function record(snapshot) {
     const facts = replayFacts(snapshot);
     if (facts.active || snapshot.match.state !== "playing") return false;
+    // The first live frame after replay is kickoff/restoration, not current-incident buildup.
+    if (previousReplayActive) { clearPlayback({ clearHistory: true }); return false; }
     const key = goalIncidentKey(snapshot);
     if (key) return recordIncident(snapshot, key);
     if (incidentKey && latestSnapshot?.match?.goalSequence) clearPlayback({ clearHistory: true });
@@ -151,7 +155,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
       camera: Object.freeze({ ...cameraController.state, mode: lastCameraMode }),
       replay: Object.freeze({
         active: Boolean(latestProjection?.replay.active), elapsed: Number(latestProjection?.replay.elapsed ?? 0), duration: Number(latestProjection?.replay.duration ?? 0),
-        historyFrames: history.length, incidentFrames: incidentFrames.length, incidentKey, playbackIncidentKey, playbackFrames: playbackFrames.length,
+        historyFrames: history.length, preShotFrames, incidentFrames: incidentFrames.length, incidentKey, playbackIncidentKey, playbackFrames: playbackFrames.length,
         historyFrameTicks: Object.freeze(history.map((snapshot) => snapshot.tick)), incidentFrameTicks: Object.freeze(incidentFrames.map((snapshot) => snapshot.tick)), playbackFrameTicks: Object.freeze(playbackFrames.map((snapshot) => snapshot.tick)),
         frameIndex: latestProjection?.replay.frameIndex ?? -1, missingFrame: Boolean(latestProjection?.replay.missingFrame),
       }),

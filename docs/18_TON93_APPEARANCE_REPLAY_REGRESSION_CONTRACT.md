@@ -44,7 +44,7 @@ Asset mode is Ready only when every live rig has seven overlay meshes and exactl
 - the active goal incident window;
 - immutable playback frames selected when engine-owned replay becomes active.
 
-The incident key is derived from immutable score, scoring team and scorer facts. A new key starts a new incident from the current rolling pre-shot history. Goal-sequence frames are retained through shot/goal/highlight aftermath until replay activation. Sampling at the configured interval includes a small deterministic floating-point tolerance so exact boundary frames are not lost.
+The incident key is derived from immutable score, scoring team and scorer facts. A new key starts a new incident from an explicitly bounded `preShotFrames` window (default: two sampled frames), never the whole rolling history. The first live frame after replay is treated as kickoff/restoration and is deliberately excluded before current-goal history resumes. Goal-sequence frames are then retained through shot, goal and immediate aftermath until authoritative replay activation. Sampling at the configured interval includes a small deterministic floating-point tolerance so exact boundary frames are not lost.
 
 After replay/kickoff completes, prior incident/history state is cleared before normal recording resumes. A later score therefore cannot select playback frames from a prior goal. The adapter still reads replay active/elapsed/duration from the current engine snapshot and never activates, advances or ends replay locally.
 
@@ -68,7 +68,7 @@ The existing exact-once contract remains unchanged:
 - normal asset-mode live-match evidence for all 12 rigs: seven visible clothing meshes and exactly two boot geometries each;
 - screenshot evidence showing distinct team clothing and visible footwear during animation;
 - synthetic unique-position pre-shot → shot → goal → aftermath replay chronology;
-- second-goal isolation proving no first-goal ticks are reused;
+- second-goal isolation proving prior-goal kickoff/restoration and unrelated buildup are rejected, while only the uniquely marked current-goal pre-shot, shot, goal and aftermath frames are replayed;
 - existing authority, projection parity, lifecycle and ownership guards.
 
 ## Out of scope
