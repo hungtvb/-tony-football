@@ -1,7 +1,9 @@
+import { cameraHudConfig } from "./src/game/config/cameraHudConfig.js";
 import { createCanvasMatchRenderer } from "./src/game/presentation/CanvasMatchRenderer.js";
 import { createBrowserModelViewAdapter } from "./src/game/presentation/BrowserModelViewAdapter.js";
 import { createBrowserThreeSceneEnvironmentAdapter } from "./src/game/presentation/BrowserThreeSceneEnvironmentAdapterFactory.js";
 import { createRebindableThreeSceneHostPort } from "./src/game/presentation/RebindableThreeSceneHostPort.js";
+import { createSnapshotCameraReplayAdapter } from "./src/game/presentation/SnapshotCameraReplayAdapter.js";
 
 const BLOCKED_GAMEPLAY_PARAMS = Object.freeze(["runtime", "debugScenario"]);
 
@@ -37,12 +39,26 @@ export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge) {
 
 if (typeof globalThis.window !== "undefined") {
   const sceneFacade = createRebindableThreeSceneHostPort();
+  const cameraReplayAdapter = createSnapshotCameraReplayAdapter({
+    worldWidth: 1200,
+    worldHeight: 700,
+    viewportWidth: 1200,
+    viewportHeight: 700,
+    cameraConfig: cameraHudConfig.camera,
+  });
   let modelViewAdapter = null;
   let canvasMatchRenderer = null;
   const sceneBridge = Object.freeze({
     getPort: () => sceneFacade.bound ? sceneFacade.port : null,
     getStablePort: () => sceneFacade.port,
     diagnostics: () => sceneFacade.port.diagnostics(),
+  });
+  const cameraReplayBridge = Object.freeze({
+    camera: cameraReplayAdapter.camera,
+    replay: cameraReplayAdapter.replay,
+    project: (frame) => cameraReplayAdapter.project(frame),
+    projection: () => cameraReplayAdapter.projection(),
+    diagnostics: () => cameraReplayAdapter.diagnostics(),
   });
   const modelViewBridge = Object.freeze({
     diagnostics: () => modelViewAdapter?.diagnostics?.() ?? Object.freeze({
@@ -67,6 +83,9 @@ if (typeof globalThis.window !== "undefined") {
   Object.defineProperty(globalThis.window, "__TONY_THREE_SCENE_BRIDGE__", {
     value: sceneBridge, configurable: false, enumerable: false, writable: false,
   });
+  Object.defineProperty(globalThis.window, "__TONY_CAMERA_REPLAY_BRIDGE__", {
+    value: cameraReplayBridge, configurable: false, enumerable: false, writable: false,
+  });
   Object.defineProperty(globalThis.window, "__TONY_MODEL_VIEW_BRIDGE__", {
     value: modelViewBridge, configurable: false, enumerable: false, writable: false,
   });
@@ -75,12 +94,14 @@ if (typeof globalThis.window !== "undefined") {
   });
 
   globalThis.window.__TONY_PRESENTATION_ADAPTER_FACTORIES__ = Object.freeze([
+    () => cameraReplayAdapter,
     ({ target, document }) => {
       modelViewAdapter = createBrowserModelViewAdapter({
         target,
         document,
         getScenePort: () => sceneFacade.port,
         isSceneBound: () => sceneFacade.bound,
+        getCameraReplayProjection: () => cameraReplayAdapter.projection(),
       });
       return modelViewAdapter;
     },
@@ -88,7 +109,11 @@ if (typeof globalThis.window !== "undefined") {
       target, document, onHostChanged: (port) => sceneFacade.bind(port),
     }),
     ({ target, document }) => {
-      canvasMatchRenderer = createCanvasMatchRenderer({ target, document });
+      canvasMatchRenderer = createCanvasMatchRenderer({
+        target,
+        document,
+        getCameraReplayProjection: () => cameraReplayAdapter.projection(),
+      });
       return canvasMatchRenderer;
     },
   ]);
@@ -97,7 +122,7 @@ if (typeof globalThis.window !== "undefined") {
   if (sanitized.changed) {
     globalThis.history.replaceState(globalThis.history.state, "", `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`);
   }
-  await import("./generated/game.js?v=22.0.0");
+  await import("./generated/game.js?v=23.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
   exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge);
 }
