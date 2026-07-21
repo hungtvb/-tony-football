@@ -30,9 +30,24 @@ test("camera replay owner preserves current metadata and exposes no activation o
   const owner = source("src/game/presentation/SnapshotCameraReplayAdapter.js");
   assert.match(owner, /match: current\.match/);
   assert.match(owner, /update\(\) \{ return false; \}/);
+  assert.match(owner, /projectionSequence: latestProjection\?\.projectionSequence \?\? 0/);
   for (const forbidden of ["manualActive", "manualElapsed", "manualFrames", "start(finalSnapshot)", "loadFrames(", "syncElapsed(", "GameCommandType", "MatchEngine", "requestAnimationFrame", "setInterval", "setTimeout"]) {
     assert.equal(owner.includes(forbidden), false, `camera/replay owner must not contain ${forbidden}`);
   }
+});
+
+test("Canvas renderer requires and consumes the shared immutable camera replay contract", () => {
+  const canvas = source("src/game/presentation/CanvasMatchRenderer.js");
+  for (const contract of [
+    "assertCameraReplayProjection(frame)",
+    "frame.cameraReplay",
+    "projection.renderSnapshot !== frame.snapshot",
+    "cameraTransform(canvas, world, cameraReplay.camera)",
+    "cameraReplay.replay.active",
+    "projectionSequence: cameraReplay.projectionSequence",
+  ]) assert.equal(canvas.includes(contract), true, `Canvas renderer must retain ${contract}`);
+  assert.equal(canvas.includes("cameraController"), false);
+  assert.equal(canvas.includes("SnapshotCameraReplayAdapter"), false);
 });
 
 test("bootstrap publishes camera facts once through the immutable presentation frame", () => {

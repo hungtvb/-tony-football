@@ -54,11 +54,12 @@ test("production composition boots and routes input, snapshot and lifecycle pres
   const finalDiagnostics = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(finalDiagnostics.legacyGameplayStepCount).toBe(0);
   expect(finalDiagnostics.cameraReplay.renderCount).toBeGreaterThan(0);
+  expect(finalDiagnostics.cameraReplay.projectionSequence).toBe(finalDiagnostics.cameraReplay.renderCount);
   expect(Number.isFinite(finalDiagnostics.cameraReplay.camera.x)).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
 
-test("Canvas fallback boots the snapshot renderer and engine-backed HUD", async ({ page }, testInfo) => {
+test("Canvas fallback boots the snapshot renderer and consumes the shared camera/replay projection", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one representative Canvas boot is sufficient");
   const runtimeErrors = captureRuntimeErrors(page);
   await page.goto("/?visualTest=1&renderer=canvas&skipIntro=1", { waitUntil: "domcontentloaded" });
@@ -75,7 +76,12 @@ test("Canvas fallback boots the snapshot renderer and engine-backed HUD", async 
   expect(diagnostics.canvasMatch.lastFacts.tick).toBe(diagnostics.engineSnapshot.tick);
   expect(diagnostics.canvasMatch.lastFacts.selectedPlayerId).toBe(diagnostics.renderState.selectedPlayerId);
   expect(diagnostics.cameraReplay.owner).toBe("snapshot-camera-replay");
-  expect(diagnostics.cameraReplay.renderCount).toBeGreaterThan(0);
+  expect(diagnostics.cameraReplay.projectionSequence).toBeGreaterThan(0);
+  expect(diagnostics.canvasMatch.lastFacts.cameraReplay.projectionSequence).toBe(diagnostics.cameraReplay.projectionSequence);
+  expect(diagnostics.canvasMatch.lastFacts.cameraReplay.camera).toEqual(diagnostics.cameraReplay.camera);
+  expect(diagnostics.canvasMatch.lastFacts.cameraReplay.replay.active).toBe(diagnostics.cameraReplay.replay.active);
+  expect(Number.isFinite(diagnostics.canvasMatch.lastFacts.transform.a)).toBe(true);
+  expect(Number.isFinite(diagnostics.canvasMatch.lastFacts.transform.e)).toBe(true);
   await expect(page.locator("#gameCanvas")).toBeVisible();
   await expect(page.locator("#radarCanvas")).toBeVisible();
   await expect(page.locator("#staminaText")).toHaveText(/^\d+%$/);

@@ -41,6 +41,19 @@ The presentation owner may select a retained frame using those facts. It must no
 
 When authoritative replay becomes inactive, the projected replay frame is removed immediately and renderers return to the current live snapshot. When replay is active but no retained frame exists, the adapter reports `missingFrame` and falls back to the live immutable snapshot rather than inventing state.
 
+## Projected renderer contract
+
+The owner publishes one frozen projection for each browser presentation frame. The projection contains:
+
+- `renderSnapshot`: current authoritative match metadata with any historical player/ball visual facts projected into it;
+- `camera`: frozen `x`, `y`, `zoom`, `targetZoom` and mode facts;
+- `replay`: frozen authoritative active/elapsed/duration/progress plus visual frame index/count and missing-frame status;
+- `projectionSequence`: the exact-once monotonically increasing presentation sequence.
+
+A projected renderer frame must use the same `renderSnapshot` object and carry that projection as `frame.cameraReplay`. Consumers may not call the owner or derive a second projection.
+
+`CanvasMatchRenderer` validates this contract, applies the supplied camera x/y/zoom transform to the 2D world, uses the supplied replay facts for replay-only visibility decisions and records the consumed projection sequence/camera/replay facts in its diagnostics. It does not instantiate a camera controller or infer replay state. WebGL/model and Canvas therefore consume the same frozen projection produced once by `SnapshotCameraReplayAdapter`.
+
 ## Camera projection
 
 Camera state is presentation-only. `SnapshotCameraController` may retain interpolated x/y/zoom state between render frames, but that state:
@@ -82,6 +95,9 @@ Required evidence includes:
 - skip and kickoff-restoration tests;
 - missing-frame fallback;
 - reset and terminal teardown;
+- Canvas rejection of missing/mutable/mismatched camera-replay projections;
+- Canvas camera-transform and authoritative replay-fact consumption tests;
+- exact consumed `projectionSequence`, camera and replay parity in forced-Canvas browser smoke;
 - generated ownership guards;
 - browser composition smoke for unchanged WebGL and Canvas startup.
 
