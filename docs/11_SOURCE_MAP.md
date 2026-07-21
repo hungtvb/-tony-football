@@ -24,27 +24,29 @@ Before modifying code:
 | Entry point | Responsibility | Ownership note |
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, canvas, HUD, menus and overlays | Loads guarded `browser-entry.js`; never gameplay authority |
-| `browser-entry.js` | Removes blocked runtime/debug URL seams, exposes frozen scene/model/Canvas diagnostics bridges, registers browser presentation factories, then imports generated runtime | Entry composition only; no mutable gameplay state |
-| `game.js` | Canonical compatibility input used to generate remaining settings/particles/trails/preview-tone/camera/replay presentation bridges | Does not own WebGL environment, player/ball model views or match Canvas drawing; fixed steps capture immutable engine snapshots |
+| `browser-entry.js` | Removes blocked runtime/debug URL seams, exposes frozen scene/model/Canvas/camera-replay bridges, registers browser presentation factories, then imports generated runtime | Entry composition only; no mutable gameplay state |
+| `game.js` | Canonical compatibility input used to generate remaining settings/particles/trails/preview-tone presentation bridges | Does not own WebGL environment, player/ball model views, match Canvas drawing or deployed camera/replay timing; fixed steps capture immutable engine snapshots |
 | `generated/game.js` | Deterministic compatibility artifact created from tracked `game.js` | Never edited directly; contains only still-deferred presentation bridges |
 | `src/game/application/BrowserBootstrapComposition.js` | Browser runtime/input/application/snapshot/presentation composition root | Attaches adapters and publishes immutable presentation frames before starting the loop; never imports Three.js or Canvas APIs |
 | `src/game/presentation/BrowserPresentationComposition.js` | Adapter creation, startup rollback, render/reset fan-out and reverse teardown | Factories receive frozen browser lifecycle context; facts arrive through immutable frames/events |
 | `src/game/application/BrowserRuntimeComposition.js` | Live browser runtime configuration and browser event publication | Deployed browser always uses engine authority |
 | `src/game/application/BrowserMatchRuntime.js` | One `MatchEngine`, deterministic command scheduling, fixed steps, immutable snapshots and ordered events | Browser wrapper only; never infers gameplay facts from presentation |
-| `src/game/engine/` | Match lifecycle, movement, ball, actions, possession, AI, goalkeeper and selected-owner takeover | No DOM, Canvas, Three.js, Web Audio or render-frame dependencies |
+| `src/game/engine/` | Match lifecycle, movement, ball, actions, possession, AI, goalkeeper, replay phase/progress and selected-owner takeover | No DOM, Canvas, Three.js, Web Audio or render-frame dependencies |
 | `src/game/input/BrowserInputAdapter.js` | FO4 keyboard lifecycle, immutable commands, frozen active-charge and pressed-code facts | Dispatches to live engine authority and exposes presentation facts read-only |
 | `src/game/application/ApplicationRuntime.js` | Navigation and match lifecycle requests | Match lifecycle requires live engine dispatch |
 | `src/game/application/BrowserApplicationAdapter.js` | Browser buttons/events and immediate lifecycle UI projection | Listener lifecycle only |
 | `src/game/presentation/CompatibilitySnapshotAdapter.js` | Mirrors immutable live-engine facts into temporary compatibility objects | Outward-only mirror; writes never become engine inputs |
 | `src/game/presentation/SnapshotRenderState.js` | Immutable previous/current player and ball interpolation | Shared projection contract for WebGL and Canvas |
 | `src/game/presentation/CanvasMatchRenderer.js` | Explicit forced-Canvas session lifecycle, viewport observation and snapshot-driven pitch/player/ball/selection/charge/weather projection | Sole owner of the match Canvas 2D context; inactive during WebGL sessions |
-| `src/game/presentation/SnapshotCameraController.js`, `SnapshotReplayController.js` | Snapshot-driven camera/replay projections | Camera/replay extraction remains TON-83 |
+| `src/game/presentation/SnapshotCameraReplayAdapter.js` | Immutable replay history, authoritative replay-frame selection and presentation-only camera interpolation | Replay active/elapsed/duration remain engine-owned; one projected snapshot feeds WebGL/model and Canvas |
+| `src/game/presentation/SnapshotCameraController.js` | Pure camera follow/zoom interpolation helper | Presentation math only; owned by `SnapshotCameraReplayAdapter` |
+| `src/game/presentation/SnapshotReplayController.js` | Legacy compatibility helper retained only in tracked migration input | Not constructed by deployed generated runtime after TON-83 |
 | `src/game/presentation/DomHudAdapter.js`, `HudSnapshotProjection.js` | Browser HUD ownership and snapshot projection | Read-only snapshot consumer |
 | `src/game/presentation/RadarSnapshotAdapter.js`, `RadarSnapshotRenderer.js` | Radar Canvas ownership and drawing | Read-only snapshot consumer with duplicate-owner transition guard |
 | `src/game/presentation/BrowserAudioAdapter.js` | Usable match-event Web Audio ownership | Releases ownership on backend failure so compatibility fallback remains audible |
 | `src/game/presentation/BrowserGameEventBridge.js` | Immutable ordered event transport | Transport only |
 | `src/game/core/SimulationLoop.js` | Fixed simulation/render cadence and isolated after-render listeners | Presentation failures cannot stop later frames |
-| `scripts/prepare-ton80-game.mjs`, `scripts/ton-80-migrate-game.py`, `scripts/ton-82-migrate-canvas.py` | Deterministic compatibility-artifact generation | Tracked source stays byte-identical; generated output fails closed on forbidden ownership |
+| `scripts/prepare-ton80-game.mjs`, `scripts/ton-80-migrate-game.py`, `scripts/ton-82-migrate-canvas.py`, `scripts/ton-83-migrate-camera-replay.py` | Deterministic compatibility-artifact generation | Tracked source stays byte-identical; generated output fails closed on forbidden ownership |
 | `scripts/build-static.mjs`, `vercel.json` | Static build/deployment contract | Preserve Vercel and GitHub Pages compatibility |
 
 ## Three.js scene and environment ownership
@@ -80,7 +82,19 @@ Character loading failure preserves procedural players. Animation loading failur
 | `docs/15_CANVAS_MATCH_RENDERER_CONTRACT.md` | Activation, facts, parity, lifecycle and validation rules | Architecture contract for TON-82 and successor slices |
 | `scripts/ton-82-migrate-canvas.py` | Removes generated match Canvas drawing and adds diagnostics bridge evidence | Generated compatibility runtime retains no match Canvas context |
 
-Camera/replay decisions remain TON-83. Settings, particles, trails and preview tones remain TON-84. TON-85 removes final compatibility bridges.
+Settings, particles, trails and preview tones remain TON-84. TON-85 removes final compatibility bridges.
+
+## Camera and replay ownership
+
+| Source | Responsibility | Boundary |
+| --- | --- | --- |
+| `SnapshotCameraReplayAdapter.js` | Records frozen live history, selects replay frames from engine progress, updates presentation camera interpolation and publishes diagnostics | Cannot advance replay time, finish replay, mutate gameplay or schedule timers |
+| `SnapshotCameraController.js` | Dead-zone, look-ahead, safe-area and zoom interpolation | Presentation-only helper |
+| `browser-entry.js` camera/replay bridge | One stable page owner plus shared replay-projected frame wrappers for model/WebGL and Canvas consumers | Frozen bridge; no raw engine mutation access |
+| `scripts/ton-83-migrate-camera-replay.py` | Removes local controller construction, replay timer advancement/record flags and simulation-side camera updates from generated runtime | Fails closed when forbidden ownership remains |
+| `docs/16_SNAPSHOT_CAMERA_REPLAY_CONTRACT.md` | Authority, immutable history, projection, lifecycle and validation rules | Architecture contract for TON-83 and successor slices |
+
+The engine snapshot owns replay phase, active state, elapsed time, duration, skip/end and kickoff restoration. Presentation may retain immutable historical snapshots and select a visual frame from those engine facts. Missing replay history falls back to the live snapshot and is surfaced in diagnostics.
 
 ## Browser runtime flow
 
@@ -88,24 +102,26 @@ Camera/replay decisions remain TON-83. Settings, particles, trails and preview t
 index.html
   → browser-entry.js engine-only URL guard
   → create page-lifetime stable scene façade
-  → register model, scene and Canvas match adapter factories
+  → create one SnapshotCameraReplayAdapter
+  → register camera/replay, model, scene and Canvas match adapter factories
   → import generated compatibility runtime
   → BrowserBootstrapComposition
       ├→ BrowserInputAdapter → immutable commands + frozen presentation input facts
       ├→ BrowserRuntimeComposition → BrowserMatchRuntime → MatchEngine
       ├→ CompatibilitySnapshotAdapter → immutable previous/current frames
       └→ BrowserPresentationComposition
-          ├→ BrowserModelViewAdapter (lazy attach after scene bind; updates before scene render)
+          ├→ SnapshotCameraReplayAdapter → one replay-projected snapshot + camera facts
+          ├→ BrowserModelViewAdapter (lazy attach after scene bind; replay-projected frame)
           ├→ ThreeSceneEnvironmentAdapter → clean BrowserThreeSceneEnvironmentHost
-          ├→ CanvasMatchRenderer (active only for renderer=canvas page sessions)
+          ├→ CanvasMatchRenderer (active only for renderer=canvas; replay-projected frame)
           ├→ DomHudAdapter
           ├→ RadarSnapshotAdapter
           └→ event-audio/feedback adapters
-      → presentation-ready hook registers remaining trail/particle/camera compatibility views
+      → presentation-ready hook registers remaining trail/particle/settings compatibility views
       → SimulationLoop starts
 ```
 
-Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, CSS classes, animation mixers, audio nodes and replay badges never become gameplay inputs.
+Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, CSS classes, animation mixers, audio nodes, replay history and camera interpolation never become gameplay inputs.
 
 ## Subsystem ownership
 
@@ -124,7 +140,7 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 | Three.js renderer/environment | clean scene adapter/factory/host/profile/port | lifecycle, teardown, profile, source guards and browser smoke | Host owns environment; foreign views retain disposal ownership |
 | Player/ball models and animation | `BrowserModelViewAdapter`, `PlayerModelView`, `BallModelView` | loading success/failure, animation projection, reset/teardown, source guard and browser smoke | Snapshot-only projection through stable scene port |
 | Canvas fallback renderer | `CanvasMatchRenderer`, `SnapshotRenderState` | immutable lifecycle/parity tests, generated ownership guard, forced-Canvas browser smoke | One explicit Canvas page-session owner |
-| Camera/replay | snapshot controllers plus scene-port camera pose | presentation and browser flows | Pending TON-83 extraction |
+| Camera/replay | `SnapshotCameraReplayAdapter`, camera helper and frozen bridge | normal/goal/replay/skip/kickoff/missing-frame lifecycle plus generated ownership guard | Engine timing outward; presentation projection only |
 | Settings/particles/trails | remaining generated runtime implementations | presentation/event/browser tests | Pending TON-84 extraction |
 | Final bridge cleanup | remaining duplicate callbacks and composition helpers | architecture/source-map and parity gates | TON-85 |
 | Static deployment | package/build/Vercel contracts | build and preview smoke | Static hosting preserved |
@@ -135,8 +151,8 @@ Authoritative state flows outward. Scene nodes, Canvas coordinates, DOM values, 
 These are temporary migration points, not patterns to copy:
 
 - `CompatibilitySnapshotAdapter` mirrors immutable engine facts into compatibility objects only where remaining presentation implementations still read them.
-- Generated runtime owns trail, particles, settings/preview tones and camera/replay projection but no longer owns WebGL environment, player/ball models or match Canvas drawing.
-- Camera decisions remain in snapshot camera/replay controllers and are projected through immutable `setCameraPose` calls.
+- Generated runtime owns trail, particles, settings and preview-tone implementations but no longer owns WebGL environment, player/ball models, match Canvas drawing or camera/replay timing authority.
+- The frozen camera/replay bridge preserves compatibility method shapes while authoritative projection reads only immutable engine snapshots.
 - New presentation implementations must register through `BrowserPresentationComposition`; new gameplay logic must never be added to `game.js`.
 
 ## Dependency rules
@@ -150,7 +166,7 @@ Three.js and Canvas context ownership belong under presentation. Application mod
 ## Validation pyramid
 
 - `npm run test:engine:fast`: simulation, engine, gameplay, input/application and deterministic scenarios.
-- `npm run test:presentation:fast`: snapshot/event projections, adapter lifecycle, scene/model/Canvas lifecycle and profile validation without gameplay simulation.
+- `npm run test:presentation:fast`: snapshot/event projections, adapter lifecycle, scene/model/Canvas/camera-replay lifecycle and profile validation without gameplay simulation.
 - `npm run test:tooling`: workflow policy, source/authority/ownership guards and architecture contracts.
 - `npm run test:ci:fast`: syntax, assets, engine, presentation, tooling and static build.
 - `npm run test:e2e:smoke`: clean-host WebGL, forced Canvas, model views, input, pause/resume and context restoration.
@@ -164,7 +180,7 @@ Three.js and Canvas context ownership belong under presentation. Application mod
 | Three scene lifecycle or host | startup/fallback/context-loss/teardown, foreign-resource preservation, profile, WebGL/Canvas smoke |
 | Player/ball model animation | immutable-frame, asset success/failure, animation state, reset/teardown, source guard, WebGL/Canvas smoke |
 | Canvas fallback | immutable lifecycle/parity, missing-context and coordinate tests, generated ownership guard, engine-backed Canvas smoke |
-| Camera/HUD/overlays | pure presentation tests; broad browser evidence for visual changes |
+| Camera/replay | synthetic normal/goal/replay/skip/kickoff/missing-frame tests, generated authority guard and browser smoke |
 | Engine contract | deterministic headless contracts, ordering and immutability |
 | Workflow/CI policy | actual workflow scan, positive/negative fixtures and required CI gate |
 
