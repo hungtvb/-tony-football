@@ -12,6 +12,7 @@ const PREPARED_MARKERS = Object.freeze([
   "window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.()",
   "window.__TONY_CANVAS_MATCH_BRIDGE__?.diagnostics?.()",
   "window.__TONY_CAMERA_REPLAY_BRIDGE__",
+  "window.__TONY_SETTINGS_EFFECTS_BRIDGE__",
 ]);
 
 const LEGACY_MARKERS = Object.freeze([
@@ -46,13 +47,14 @@ export function prepareTon80Game({ cwd = process.cwd(), run = spawnSync } = {}) 
     runStep(run, "python3", [resolve(cwd, "scripts/ton-80-migrate-game.py")], workdir);
     runStep(run, "python3", [resolve(cwd, "scripts/ton-82-migrate-canvas.py")], workdir);
     runStep(run, "python3", [resolve(cwd, "scripts/ton-83-migrate-camera-replay.py")], workdir);
+    runStep(run, "python3", [resolve(cwd, "scripts/ton-84-migrate-settings-effects.py")], workdir);
     const generated = normalizeTon80GameSource(readFileSync(join(workdir, "game.js"), "utf8"));
     if (classifyTon80GameSource(generated) !== "prepared") throw new Error("TON-83 generation ended in an unexpected state");
     mkdirSync(dirname(outputPath), { recursive: true });
     const previous = (() => { try { return readFileSync(outputPath, "utf8"); } catch { return null; } })();
     writeFileSync(outputPath, generated, "utf8");
     if (readFileSync(sourcePath, "utf8") !== source) throw new Error("TON-83 generation mutated tracked game.js");
-    console.log(previous === generated ? "TON-83 generated artifact unchanged" : "TON-83 generated artifact prepared");
+    console.log(previous === generated ? "TON-84 generated artifact unchanged" : "TON-84 generated artifact prepared");
     return Object.freeze({ state: "prepared", changed: previous !== generated, outputPath });
   } finally {
     rmSync(workdir, { recursive: true, force: true });

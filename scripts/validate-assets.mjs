@@ -10,6 +10,8 @@ const loaderSource = await readFile("src/game/presentation/PlayerAssetLoader.js"
 const ballSource = await readFile("src/game/presentation/BallModelView.js", "utf8");
 const canvasSource = await readFile("src/game/presentation/CanvasMatchRenderer.js", "utf8");
 const cameraReplaySource = await readFile("src/game/presentation/SnapshotCameraReplayAdapter.js", "utf8");
+const settingsSource = await readFile("src/game/presentation/BrowserSettingsAdapter.js", "utf8");
+const effectsSource = await readFile("src/game/presentation/BrowserEffectsAdapter.js", "utf8");
 const entrySource = await readFile("browser-entry.js", "utf8"); const indexSource = await readFile("index.html", "utf8");
 if (character.bytes.length > 750_000) throw new Error(`${characterPath}: exceeds 750 KB budget`); if (animation.bytes.length > 750_000) throw new Error(`${animationPath}: exceeds 750 KB budget`);
 const unsupportedCharacterExtensions = (character.json.extensionsRequired || []).filter((extension) => extension !== "KHR_mesh_quantization"); if (unsupportedCharacterExtensions.length) throw new Error(`${characterPath}: unsupported required extensions: ${unsupportedCharacterExtensions.join(", ")}`);
@@ -27,9 +29,11 @@ for (const [sourceName, source, contracts] of [
   ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(0.56, 48, 32)", "createBallSurfaceTextures", "chargeRoot"]],
   ["CanvasMatchRenderer.js", canvasSource, ["createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
   ["SnapshotCameraReplayAdapter.js", cameraReplaySource, ["snapshot-camera-replay", "snapshot.match.replay", "match: current.match", "goalIncidentKey(snapshot)", "recordIncident(snapshot, key)", "playbackIncidentKey", "update() { return false; }"]],
+  ["BrowserSettingsAdapter.js", settingsSource, ["user-preference", "browser settings owner already attached", "controlBindings", "previewCount"]],
+  ["BrowserEffectsAdapter.js", effectsSource, ["browser effects owner already attached", "emitContextParticles", "projectTrail", "projectCharge", "projectionSequence"]],
 ]) for (const contract of contracts) if (!source.includes(contract)) throw new Error(`${sourceName}: missing presentation contract: ${contract}`);
 if (playerSource.includes("material.map = null")) throw new Error("PlayerModelView.js: semantic source texture maps must not be cleared");
 for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
 if (!entrySource.includes('await import("./generated/game.js?v=24.0.0")')) throw new Error("browser-entry.js: missing corrected TON-83 generated game entry import");
-for (const contract of ["createBrowserModelViewAdapter", "createCanvasMatchRenderer", "createSnapshotCameraReplayAdapter", "__TONY_CAMERA_REPLAY_BRIDGE__", "cameraReplay: projection", "cameraReplayConsumer: owner"]) if (!entrySource.includes(contract)) throw new Error(`browser-entry.js: missing presentation contract ${contract}`);
+for (const contract of ["createBrowserModelViewAdapter", "createCanvasMatchRenderer", "createSnapshotCameraReplayAdapter", "__TONY_CAMERA_REPLAY_BRIDGE__", "cameraReplay: projection", "cameraReplayConsumer: owner", "createBrowserSettingsAdapter", "createBrowserEffectsAdapter", "__TONY_SETTINGS_EFFECTS_BRIDGE__"]) if (!entrySource.includes(contract)) throw new Error(`browser-entry.js: missing presentation contract ${contract}`);
 console.log(`Player assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
