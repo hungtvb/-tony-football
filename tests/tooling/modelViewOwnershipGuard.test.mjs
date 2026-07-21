@@ -11,11 +11,13 @@ test("browser entry registers model views before scene rendering", async () => {
   assert.match(bootstrap, /const activeCharge = this\.#inputAdapter\.activeCharge/); assert.match(bootstrap, /const pressedCodes = this\.#inputAdapter\.pressedCodes/); assert.match(bootstrap, /activeCharge, pressedCodes/);
 });
 
-test("player appearance preserves semantic materials and explicit fallback footwear", async () => {
-  const [playerView, adapter] = await Promise.all([read("src/game/presentation/PlayerModelView.js"), read("src/game/presentation/BrowserModelViewAdapter.js")]);
-  for (const contract of ["classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "footwearNodeCount", "appearance: view.appearance"]) assert.equal(playerView.includes(contract), true, `PlayerModelView must retain ${contract}`);
+test("player appearance preserves source maps and requires explicit rig kit and boot meshes", async () => {
+  const [playerView, adapter, overlay] = await Promise.all([read("src/game/presentation/PlayerModelView.js"), read("src/game/presentation/BrowserModelViewAdapter.js"), read("src/game/presentation/RigFootballKitOverlay.js")]);
+  for (const contract of ["classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "appearance: view.appearance"]) assert.equal(playerView.includes(contract), true, `PlayerModelView must retain ${contract}`);
   assert.equal(playerView.includes("material.map = null"), false);
-  assert.match(adapter, /appearanceDiagnostics\(playerViews\)/); assert.match(adapter, /bootlessPlayers/); assert.match(adapter, /preservedMapPlayers/);
+  for (const contract of ["TonyRigJersey", "TonyRigShorts", "TonyRigSockLeft", "TonyRigSockRight", "TonyRigBootLeft", "TonyRigBootRight", "tonyRigBootGeometry", "rigFootballKitEvidence"]) assert.equal(overlay.includes(contract), true, `RigFootballKitOverlay must retain ${contract}`);
+  assert.match(adapter, /ensureRigFootballKitOverlay/); assert.match(adapter, /visibleKitPlayers/); assert.match(adapter, /bootGeometryCount/); assert.match(adapter, /rigKitInstalled/);
+  assert.equal(adapter.includes("footwearNodeCount"), false, "browser acceptance must not treat skeleton foot bones as boot geometry");
 });
 
 test("generated runtime cannot retain TON-81 ownership", async () => {
