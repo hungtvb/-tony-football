@@ -35,6 +35,7 @@ test("normal asset mode preserves kit maps and visible footwear for home, away a
   await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing", null, { timeout: 30_000 });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.kickoffTimer === 0, null, { timeout: 30_000 });
   await expect(page.locator("#gameCanvas")).toBeVisible();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
   const liveEvidence = await page.evaluate(() => ({
     appearance: window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance,
@@ -46,6 +47,9 @@ test("normal asset mode preserves kit maps and visible footwear for home, away a
   expect(liveEvidence.appearance.riggedPlayers).toBe(12);
   expect(liveEvidence.appearance.bootlessPlayers).toBe(0);
 
+  const devtools = await page.context().newCDPSession(page);
+  const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+  await devtools.detach();
   await testInfo.attach("ton-93-asset-appearance.json", { body: Buffer.from(JSON.stringify(liveEvidence, null, 2)), contentType: "application/json" });
-  await testInfo.attach("ton-93-live-asset-pitch.png", { body: await page.locator("#gameCanvas").screenshot({ timeout: 30_000 }), contentType: "image/png" });
+  await testInfo.attach("ton-93-live-asset-pitch.png", { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
 });
