@@ -93,7 +93,7 @@ test("Canvas renderer consumes the immutable camera/replay projection and applie
   assert.ok(Math.abs(diagnostics.lastFacts.transform.d - 1.1) < 1e-9);
   assert.ok(Math.abs(diagnostics.lastFacts.transform.e + 104) < 1e-9);
   assert.ok(Math.abs(diagnostics.lastFacts.transform.f + 46) < 1e-9);
-  assert.equal(document.context.calls.some((call) => call[0] === "setTransform" && Math.abs(call[1] - 1.1) < 1e-9 && Math.abs(call[4] + 104) < 1e-9 && Math.abs(call[5] + 46) < 1e-9), true);
+  assert.equal(document.context.calls.some((call) => call[0] === "setTransform" && Math.abs(call[1] - 1.1) < 1e-9 && Math.abs(call[5] + 104) < 1e-9 && Math.abs(call[6] + 46) < 1e-9), true);
   assert.equal(document.context.calls.some((call) => call[0] === "fillText" && call[1] === "GOAL!"), true);
   assert.equal(renderer.resize(), true); assert.equal(renderer.diagnostics().viewport.cssWidth, 900);
   assert.equal(renderer.reset(), true); assert.equal(renderer.diagnostics().renderCount, 0); assert.equal(renderer.diagnostics().lastFacts, null);
