@@ -21,6 +21,7 @@ const adapterSource = await readFile("src/game/presentation/BrowserModelViewAdap
 const loaderSource = await readFile("src/game/presentation/PlayerAssetLoader.js", "utf8");
 const ballSource = await readFile("src/game/presentation/BallModelView.js", "utf8");
 const canvasSource = await readFile("src/game/presentation/CanvasMatchRenderer.js", "utf8");
+const cameraReplaySource = await readFile("src/game/presentation/SnapshotCameraReplayAdapter.js", "utf8");
 const entrySource = await readFile("browser-entry.js", "utf8");
 const indexSource = await readFile("index.html", "utf8");
 
@@ -55,13 +56,15 @@ for (const [sourceName, source, contracts] of [
   ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "createIntegratedKitMaterial", "applyFootballActionPose", "selectPlayerAnimationState"]],
   ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(0.56, 48, 32)", "createBallSurfaceTextures", "chargeRoot"]],
   ["CanvasMatchRenderer.js", canvasSource, ["createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
+  ["SnapshotCameraReplayAdapter.js", cameraReplaySource, ["snapshot-camera-replay", "snapshot.match.replay", "update() { return false; }"]],
 ]) {
   for (const contract of contracts) if (!source.includes(contract)) throw new Error(`${sourceName}: missing presentation contract: ${contract}`);
 }
 
 for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
-if (!entrySource.includes('await import("./generated/game.js?v=22.0.0")')) throw new Error("browser-entry.js: missing TON-82 versioned generated game entry import");
+if (!entrySource.includes('await import("./generated/game.js?v=23.0.0")')) throw new Error("browser-entry.js: missing TON-83 versioned generated game entry import");
 if (!entrySource.includes("createBrowserModelViewAdapter")) throw new Error("browser-entry.js: missing model-view adapter registration");
 if (!entrySource.includes("createCanvasMatchRenderer")) throw new Error("browser-entry.js: missing Canvas match renderer registration");
+if (!entrySource.includes("createSnapshotCameraReplayAdapter") || !entrySource.includes("__TONY_CAMERA_REPLAY_BRIDGE__")) throw new Error("browser-entry.js: missing camera/replay adapter registration");
 
 console.log(`Player assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
