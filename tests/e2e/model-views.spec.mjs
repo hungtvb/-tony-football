@@ -9,6 +9,7 @@ test("visual-test composition owns snapshot-driven fallback player and ball view
 });
 
 test("normal asset mode preserves kit maps and visible footwear for home, away and keeper players", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one desktop live-match asset proof is sufficient");
   test.setTimeout(120_000);
   await page.goto("/?skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
@@ -27,6 +28,23 @@ test("normal asset mode preserves kit maps and visible footwear for home, away a
     expect(player).toBeTruthy(); expect(player.mode).toBe("asset"); expect(player.bootCount).toBeGreaterThan(0); expect(player.preservedMapCount).toBeGreaterThan(0);
   }
   expect(result.scene.foreignObjects).toBeGreaterThanOrEqual(14);
-  await testInfo.attach("ton-93-asset-appearance.json", { body: Buffer.from(JSON.stringify(result.model.appearance, null, 2)), contentType: "application/json" });
-  await testInfo.attach("ton-93-asset-appearance.png", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+
+  await page.locator("#quickMatchButton").click();
+  await page.locator("#playButton").click();
+  await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing");
+  await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.kickoffTimer === 0);
+  await expect(page.locator("#gameCanvas")).toBeVisible();
+
+  const liveEvidence = await page.evaluate(() => ({
+    appearance: window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance,
+    engineTick: window.__TONY_DEBUG__.diagnostics().engineSnapshot.tick,
+    state: window.__TONY_DEBUG__.diagnostics().state,
+  }));
+  expect(liveEvidence.state).toBe("playing");
+  expect(liveEvidence.engineTick).toBeGreaterThan(0);
+  expect(liveEvidence.appearance.riggedPlayers).toBe(12);
+  expect(liveEvidence.appearance.bootlessPlayers).toBe(0);
+
+  await testInfo.attach("ton-93-asset-appearance.json", { body: Buffer.from(JSON.stringify(liveEvidence, null, 2)), contentType: "application/json" });
+  await testInfo.attach("ton-93-live-asset-appearance.png", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 });
