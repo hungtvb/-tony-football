@@ -48,7 +48,7 @@ replace_once(
 )
 replace_once('    updateInput(); updateParticles(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', '    updateInput(); settingsEffectsBridge.effects.update(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', 'presentation effect update')
 replace_once('    updateInput(); updateParticles(dt); updateLegacyReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', '    updateInput(); settingsEffectsBridge.effects.update(dt); updateLegacyReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', 'legacy effect update')
-replace_once('createBall3D(); ballTrailView=createBallTrail3D(THREE,{maxPoints:gameFeel.config.ball.trailMaxPoints});', 'createBall3D(); ballTrailView=createBallTrail3D(THREE,{maxPoints:settingsEffectsBridge.effects.diagnostics().trailCapacity});', 'trail view capacity')
+replace_once('ballTrailView=createBallTrail3D(THREE,{maxPoints:gameFeel.config.ball.trailMaxPoints})', 'ballTrailView=createBallTrail3D(THREE,{maxPoints:settingsEffectsBridge.effects.diagnostics().trailCapacity})', 'trail view capacity')
 replace_once(
     '''  function updateParticleView() {
     const positions=particleView.geometry.attributes.position.array; const colors=particleView.geometry.attributes.color.array; const count=Math.min(gameFeel.particleBudget(),game.particles.length);
