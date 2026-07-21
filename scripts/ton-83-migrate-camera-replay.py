@@ -80,14 +80,13 @@ replace_once(
     'render frame remains projection-free',
 )
 replace_once(
-    '''    createPresentationFeedback,
-  });''',
+    '    createPresentationFeedback,\n',
     '''    createPresentationFeedback,
     getPresentationFrameFacts: () => Object.freeze({
       cameraMode: game.cameraMode,
       goalScorerId: game.goalScorer ? compatibilityPlayerId(game.goalScorer) : null,
     }),
-  });''',
+''',
     'presentation frame facts',
 )
 replace_once('    game.replay.start(captureCompatibilitySnapshot());\n', '    // Engine snapshots exclusively activate and advance replay.\n', 'manual goal replay activation')
