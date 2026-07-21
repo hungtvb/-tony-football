@@ -35,12 +35,12 @@ function createDocument({ context = createContext(), includeCanvas = true } = {}
   return { canvas, context, getElementById: (id) => id === "gameCanvas" ? canvas : null };
 }
 
-function snapshot({ tick, selectedX, ballX, weather = "clear", goalSequence = null } = {}) {
+function snapshot({ tick, selectedX, ballX, weather = "clear", goalSequence = null, replay = Object.freeze({ active: false }) } = {}) {
   return createMatchSnapshot({
     tick,
     match: {
       state: "playing", time: 120, matchSeconds: 150, elapsed: 30, score: [1, 0], stats: { possession: [55, 45], shots: [2, 1], passes: 5, completed: 4 },
-      selectedPlayerId: "home-0", settings: { pitchStyle: "elite", ballStyle: "volt", weather }, controls: { lastMode: "attack" }, replay: { active: false }, goalSequence,
+      selectedPlayerId: "home-0", settings: { pitchStyle: "elite", ballStyle: "volt", weather }, controls: { lastMode: "attack" }, replay, goalSequence,
     },
     players: [
       { id: "home-0", team: 0, index: 0, role: "FW", name: "TONY", number: 10, x: selectedX, y: 300, vx: 40, vy: 0, dirX: 1, dirY: 0, radius: 17, stepPhase: 1 },
@@ -50,8 +50,12 @@ function snapshot({ tick, selectedX, ballX, weather = "clear", goalSequence = nu
   });
 }
 
-function frame(previous, current) {
-  return Object.freeze({ previousSnapshot: previous, snapshot: current, alpha: .5, nowMilliseconds: 1000, controlMode: "attack", activeCharge: Object.freeze({ code: "KeyD", power: .75 }), pressedCodes: Object.freeze(["KeyD"]) });
+function projection(current, { projectionSequence = 7, camera = Object.freeze({ x: 640, y: 360, zoom: 1.1, targetZoom: 1.1, mode: "broadcast" }), replay = Object.freeze({ active: false, elapsed: 0, duration: 1, progress: 0, frameIndex: -1, frameCount: 0, missingFrame: false }) } = {}) {
+  return Object.freeze({ snapshot: current, renderSnapshot: current, replaySnapshot: null, camera, replay, projectionSequence });
+}
+
+function frame(previous, current, cameraReplay = projection(current)) {
+  return Object.freeze({ previousSnapshot: previous, snapshot: current, alpha: .5, nowMilliseconds: 1000, controlMode: "attack", activeCharge: Object.freeze({ code: "KeyD", power: .75 }), pressedCodes: Object.freeze(["KeyD"]), cameraReplay });
 }
 
 test("Canvas renderer stays inactive outside an explicit Canvas session", () => {
@@ -70,27 +74,50 @@ test("Canvas renderer reports missing canvas and missing 2D context without thro
   assert.equal(missingContext.attach(), false); assert.equal(missingContext.status, "context-missing"); assert.equal(missingContext.teardown(), true);
 });
 
-test("Canvas renderer projects interpolated immutable match facts and explicit lifecycle", () => {
+test("Canvas renderer consumes the immutable camera/replay projection and applies its camera transform", () => {
   const target = createTarget(); const document = createDocument();
   const renderer = createCanvasMatchRenderer({ target, document });
   assert.equal(renderer.attach(), true); assert.equal(renderer.active, true); assert.equal(target.listeners.has("resize"), true);
   const previous = snapshot({ tick: 1, selectedX: 100, ballX: 120 });
   const current = snapshot({ tick: 2, selectedX: 140, ballX: 160, weather: "rain", goalSequence: { team: 0, timer: 1, duration: 2 } });
-  assert.equal(renderer.render(frame(previous, current)), true);
+  const cameraReplay = projection(current, { projectionSequence: 23 });
+  assert.equal(renderer.render(frame(previous, current, cameraReplay)), true);
   const diagnostics = renderer.diagnostics();
   assert.equal(diagnostics.owner, "canvas-match-renderer"); assert.equal(diagnostics.renderCount, 1); assert.equal(diagnostics.status, "ready");
   assert.deepEqual(diagnostics.lastFacts.score, [1, 0]); assert.equal(diagnostics.lastFacts.time, 120); assert.equal(diagnostics.lastFacts.selectedPlayerId, "home-0"); assert.equal(diagnostics.lastFacts.ballOwnerId, "home-0");
   assert.equal(diagnostics.lastFacts.selectedX, 120); assert.equal(diagnostics.lastFacts.ballX, 140);
-  assert.equal(document.context.calls.some((call) => call[0] === "setTransform" && call[1] === 1), true);
+  assert.equal(diagnostics.lastFacts.cameraReplay.projectionSequence, 23);
+  assert.equal(diagnostics.lastFacts.cameraReplay.camera, cameraReplay.camera);
+  assert.equal(diagnostics.lastFacts.cameraReplay.replay, cameraReplay.replay);
+  assert.ok(Math.abs(diagnostics.lastFacts.transform.a - 1.1) < 1e-9);
+  assert.ok(Math.abs(diagnostics.lastFacts.transform.d - 1.1) < 1e-9);
+  assert.ok(Math.abs(diagnostics.lastFacts.transform.e + 104) < 1e-9);
+  assert.ok(Math.abs(diagnostics.lastFacts.transform.f + 46) < 1e-9);
+  assert.equal(document.context.calls.some((call) => call[0] === "setTransform" && Math.abs(call[1] - 1.1) < 1e-9 && Math.abs(call[5] + 104) < 1e-9 && Math.abs(call[6] + 46) < 1e-9), true);
   assert.equal(document.context.calls.some((call) => call[0] === "fillText" && call[1] === "GOAL!"), true);
   assert.equal(renderer.resize(), true); assert.equal(renderer.diagnostics().viewport.cssWidth, 900);
   assert.equal(renderer.reset(), true); assert.equal(renderer.diagnostics().renderCount, 0); assert.equal(renderer.diagnostics().lastFacts, null);
   assert.equal(renderer.teardown(), true); assert.equal(renderer.status, "disposed"); assert.equal(target.listeners.has("resize"), false); assert.equal(renderer.teardown(), false);
 });
 
-test("Canvas renderer rejects mutable presentation frames", () => {
+test("Canvas renderer consumes authoritative replay facts instead of inferring replay from local state", () => {
+  const renderer = createCanvasMatchRenderer({ target: createTarget(), document: createDocument() }); renderer.attach();
+  const replayFacts = Object.freeze({ active: true, elapsed: .4, duration: 2, progress: .2, frameIndex: -1, frameCount: 0, missingFrame: true });
+  const current = snapshot({ tick: 3, selectedX: 200, ballX: 220, replay: Object.freeze({ active: true, elapsed: .4, duration: 2 }) });
+  const cameraReplay = projection(current, { projectionSequence: 31, replay: replayFacts });
+  assert.equal(renderer.render(frame(current, current, cameraReplay)), true);
+  assert.equal(renderer.diagnostics().lastFacts.cameraReplay.replay, replayFacts);
+  assert.equal(renderer.diagnostics().lastFacts.cameraReplay.replay.missingFrame, true);
+  renderer.teardown();
+});
+
+test("Canvas renderer rejects mutable or missing camera/replay presentation contracts", () => {
   const renderer = createCanvasMatchRenderer({ target: createTarget(), document: createDocument() }); renderer.attach();
   const current = snapshot({ tick: 1, selectedX: 100, ballX: 120 });
   assert.throws(() => renderer.render({ previousSnapshot: current, snapshot: current, alpha: 0, nowMilliseconds: 0 }), /immutable frame/);
+  const missingProjection = Object.freeze({ previousSnapshot: current, snapshot: current, alpha: 0, nowMilliseconds: 0 });
+  assert.throws(() => renderer.render(missingProjection), /immutable camera\/replay projection/);
+  const wrongSnapshot = snapshot({ tick: 2, selectedX: 120, ballX: 140 });
+  assert.throws(() => renderer.render(frame(current, current, projection(wrongSnapshot))), /projection render snapshot/);
   renderer.teardown();
 });

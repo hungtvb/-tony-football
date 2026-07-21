@@ -32,6 +32,19 @@ function assertImmutableFrame(frame) {
   if (!Object.isFrozen(frame.snapshot) || !Object.isFrozen(frame.previousSnapshot)) throw new TypeError("CanvasMatchRenderer requires immutable snapshots");
 }
 
+function assertCameraReplayProjection(frame) {
+  const projection = frame.cameraReplay;
+  if (!projection || !Object.isFrozen(projection)) throw new TypeError("CanvasMatchRenderer requires an immutable camera/replay projection");
+  if (!Object.isFrozen(projection.camera) || !Object.isFrozen(projection.replay)) throw new TypeError("CanvasMatchRenderer requires immutable camera and replay facts");
+  if (projection.renderSnapshot !== frame.snapshot) throw new TypeError("CanvasMatchRenderer frame must use the projection render snapshot");
+  if (!Number.isInteger(projection.projectionSequence) || projection.projectionSequence <= 0) throw new TypeError("CanvasMatchRenderer requires a positive camera/replay projection sequence");
+  const { x, y, zoom } = projection.camera;
+  if (![x, y, zoom].every(Number.isFinite) || zoom <= 0) throw new TypeError("CanvasMatchRenderer requires finite camera x/y and positive zoom");
+  if (typeof projection.replay.active !== "boolean") throw new TypeError("CanvasMatchRenderer requires replay active facts");
+  if (Boolean(frame.snapshot.match.replay?.active) !== projection.replay.active) throw new TypeError("CanvasMatchRenderer replay facts must match the authoritative snapshot");
+  return projection;
+}
+
 function canvasViewport(canvas, target) {
   return Object.freeze({
     cssWidth: Math.max(1, Number(canvas?.clientWidth || canvas?.width || DEFAULT_WORLD.width)),
@@ -39,6 +52,18 @@ function canvasViewport(canvas, target) {
     pixelRatio: Math.max(1, Number(target?.devicePixelRatio || 1)),
     backingWidth: Math.max(1, Number(canvas?.width || DEFAULT_WORLD.width)),
     backingHeight: Math.max(1, Number(canvas?.height || DEFAULT_WORLD.height)),
+  });
+}
+
+function cameraTransform(canvas, world, camera) {
+  const scaleX = Math.max(.0001, Number(canvas.width || world.width) / world.width);
+  const scaleY = Math.max(.0001, Number(canvas.height || world.height) / world.height);
+  const zoom = Math.max(.0001, Number(camera.zoom));
+  return Object.freeze({
+    a: scaleX * zoom,
+    d: scaleY * zoom,
+    e: scaleX * (world.width / 2 - Number(camera.x) * zoom),
+    f: scaleY * (world.height / 2 - Number(camera.y) * zoom),
   });
 }
 
@@ -164,23 +189,36 @@ export function createCanvasMatchRenderer({ target, document, canvasId = "gameCa
     render(frame) {
       if (!attached || !active || disposed || !context || !canvas) return false;
       assertImmutableFrame(frame);
+      const cameraReplay = assertCameraReplayProjection(frame);
       const snapshot = frame.snapshot;
       const renderState = createSnapshotRenderState({ previous: frame.previousSnapshot, current: snapshot, alpha: frame.alpha });
       const settings = snapshot.match.settings ?? Object.freeze({});
       const selectedPlayer = renderState.players.find((player) => player.id === snapshot.match.selectedPlayerId) ?? null;
       const defenseSelection = frame.controlMode === "defense" && (frame.pressedCodes?.length ?? 0) > 0;
-      const scaleX = Math.max(.0001, Number(canvas.width || world.width) / world.width);
-      const scaleY = Math.max(.0001, Number(canvas.height || world.height) / world.height);
-      context.save(); context.setTransform?.(scaleX, 0, 0, scaleY, 0, 0);
+      const transform = cameraTransform(canvas, world, cameraReplay.camera);
+      context.save(); context.setTransform?.(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, canvas.width || world.width, canvas.height || world.height); context.restore();
+      context.save(); context.setTransform?.(transform.a, 0, 0, transform.d, transform.e, transform.f);
       drawPitch(context, world, field, settings.pitchStyle);
-      for (const player of [...renderState.players].sort((left, right) => left.y - right.y)) drawPlayer(context, player, { selected: !snapshot.match.replay?.active && player.id === snapshot.match.selectedPlayerId, defenseSelection, nowMilliseconds: frame.nowMilliseconds });
+      for (const player of [...renderState.players].sort((left, right) => left.y - right.y)) drawPlayer(context, player, { selected: !cameraReplay.replay.active && player.id === snapshot.match.selectedPlayerId, defenseSelection, nowMilliseconds: frame.nowMilliseconds });
       drawBall(context, renderState.ball, settings.ballStyle);
       if (settings.weather === "rain") drawRain(context, world, frame.nowMilliseconds, lowPowerDevice);
-      if (snapshot.ball.ownerId === snapshot.match.selectedPlayerId) drawCharge(context, selectedPlayer, frame.activeCharge);
+      if (!cameraReplay.replay.active && snapshot.ball.ownerId === snapshot.match.selectedPlayerId) drawCharge(context, selectedPlayer, frame.activeCharge);
       drawGoalFlash(context, world, snapshot.match.goalSequence);
       context.restore();
       renderCount += 1;
-      lastFacts = Object.freeze({ tick: snapshot.tick, score: snapshot.match.score, time: snapshot.match.time, selectedPlayerId: snapshot.match.selectedPlayerId, ballOwnerId: snapshot.ball.ownerId, selectedX: selectedPlayer?.x ?? null, selectedY: selectedPlayer?.y ?? null, ballX: renderState.ball.x, ballY: renderState.ball.y });
+      lastFacts = Object.freeze({
+        tick: snapshot.tick,
+        score: snapshot.match.score,
+        time: snapshot.match.time,
+        selectedPlayerId: snapshot.match.selectedPlayerId,
+        ballOwnerId: snapshot.ball.ownerId,
+        selectedX: selectedPlayer?.x ?? null,
+        selectedY: selectedPlayer?.y ?? null,
+        ballX: renderState.ball.x,
+        ballY: renderState.ball.y,
+        cameraReplay: Object.freeze({ projectionSequence: cameraReplay.projectionSequence, camera: cameraReplay.camera, replay: cameraReplay.replay }),
+        transform,
+      });
       return true;
     },
     reset() { if (!attached || disposed) return false; lastFacts = null; renderCount = 0; clear(); return active; },
