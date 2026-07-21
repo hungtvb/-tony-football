@@ -1,6 +1,7 @@
 import { createSnapshotCameraController } from "./SnapshotCameraController.js";
 
 const EMPTY_FRAMES = Object.freeze([]);
+const SAMPLE_EPSILON_SECONDS = 1e-9;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function assertSnapshot(snapshot, name = "snapshot") {
@@ -76,7 +77,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   function recordNormal(snapshot) {
     const elapsed = Math.max(0, Number(snapshot.match.elapsed ?? 0));
     if (lastRecordedElapsed !== null && elapsed < lastRecordedElapsed) clearPlayback({ clearHistory: true });
-    if (lastRecordedElapsed !== null && elapsed - lastRecordedElapsed < sampleInterval) return false;
+    if (lastRecordedElapsed !== null && elapsed - lastRecordedElapsed + SAMPLE_EPSILON_SECONDS < sampleInterval) return false;
     appendUniqueFrame(history, snapshot, maxFrames); lastRecordedElapsed = elapsed; return true;
   }
   function recordIncident(snapshot, key) {
