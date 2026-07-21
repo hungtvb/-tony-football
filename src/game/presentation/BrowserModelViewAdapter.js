@@ -15,6 +15,21 @@ function defaultLowPowerDevice(target) {
 function createWorldProjection({ width = 1200, height = 700, scale = 0.1 } = {}) {
   return Object.freeze({ worldX: (value) => (value - width / 2) * scale, worldZ: (value) => (value - height / 2) * scale });
 }
+function appearanceDiagnostics(playerViews) {
+  const players = Object.freeze([...playerViews.values()].map((view) => {
+    const diagnostics = view.diagnostics?.() ?? Object.freeze({});
+    const appearance = diagnostics.appearance ?? Object.freeze({ mode: diagnostics.rigged ? "asset" : "fallback", bootCount: 0, preservedMapCount: 0, tintedKitMaterialCount: 0, materialCount: 0, semanticCounts: Object.freeze({}) });
+    return Object.freeze({ id: diagnostics.id ?? view.id ?? null, team: diagnostics.team ?? null, role: diagnostics.role ?? null, rigged: Boolean(diagnostics.rigged), ...appearance });
+  }));
+  return Object.freeze({
+    players,
+    riggedPlayers: players.filter((player) => player.rigged).length,
+    fallbackPlayers: players.filter((player) => !player.rigged).length,
+    bootlessPlayers: players.filter((player) => Number(player.bootCount || 0) < 1).length,
+    preservedMapPlayers: players.filter((player) => Number(player.preservedMapCount || 0) > 0).length,
+    tintedKitPlayers: players.filter((player) => Number(player.tintedKitMaterialCount || 0) > 0).length,
+  });
+}
 
 export function createBrowserModelViewAdapter({ target, document, getScenePort, isSceneBound = () => Boolean(getScenePort?.()), createPlayerView = createPlayerModelView, createBallView = createBallModelView, assetLoader = createDefaultPlayerAssetLoader(), visualTestMode = defaultVisualTestMode(target), lowPowerDevice = defaultLowPowerDevice(target), world = createWorldProjection() } = {}) {
   if (!target || typeof target !== "object") throw new TypeError("BrowserModelViewAdapter requires a target");
@@ -80,8 +95,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     }
   }
   function startAssetLoad({ reuseCharacterScene = false } = {}) {
-    loadGeneration += 1;
-    const generation = loadGeneration;
+    loadGeneration += 1; const generation = loadGeneration;
     if (visualTestMode) setAssetStatus("ready", "VISUAL TEST · MODEL VIEWS", "Snapshot-driven procedural model validation");
     else void loadAssets(generation, { reuseCharacterScene });
   }
@@ -90,8 +104,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     scenePort = getScenePort(); if (!scenePort || typeof scenePort.addObject !== "function") return false;
     ballView = createBallView({ scenePort, document, worldX: world.worldX, worldZ: world.worldZ });
     if (ballView.attach?.() === false) { ballView.teardown?.(); ballView = null; return false; }
-    attached = true; startAssetLoad();
-    return true;
+    attached = true; startAssetLoad(); return true;
   }
   function render(frame) {
     if (!attached && !unavailable() && isSceneBound()) attach();
@@ -107,48 +120,21 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
   function reset() {
     if (!attached || unavailable()) return false;
     for (const view of playerViews.values()) view.reset?.();
-    ballView?.reset?.();
-    startAssetLoad({ reuseCharacterScene: Boolean(characterScene) });
-    return true;
+    ballView?.reset?.(); startAssetLoad({ reuseCharacterScene: Boolean(characterScene) }); return true;
   }
   function teardown() {
-    if (disposed) return false;
-    const errors = [];
-    if (!terminating) {
-      loadGeneration += 1;
-      terminating = true;
-      attached = false;
-    }
+    if (disposed) return false; const errors = [];
+    if (!terminating) { loadGeneration += 1; terminating = true; attached = false; }
     for (const [id, view] of [...playerViews.entries()].reverse()) {
-      try {
-        view.teardown?.();
-        playerViews.delete(id);
-      } catch (error) {
-        errors.push(error);
-      }
+      try { view.teardown?.(); playerViews.delete(id); } catch (error) { errors.push(error); }
     }
     if (playerViews.size === 0 && ballView) {
-      try {
-        ballView.teardown?.();
-        ballView = null;
-      } catch (error) {
-        errors.push(error);
-      }
+      try { ballView.teardown?.(); ballView = null; } catch (error) { errors.push(error); }
     }
     if (playerViews.size === 0 && !ballView && characterScene) {
-      try {
-        disposePlayerAssetTemplate(characterScene);
-        characterScene = null;
-      } catch (error) {
-        errors.push(error);
-      }
+      try { disposePlayerAssetTemplate(characterScene); characterScene = null; } catch (error) { errors.push(error); }
     }
-    if (playerViews.size === 0 && !ballView && !characterScene) {
-      animations = Object.freeze([]);
-      scenePort = null;
-      disposed = true;
-      terminating = false;
-    }
+    if (playerViews.size === 0 && !ballView && !characterScene) { animations = Object.freeze([]); scenePort = null; disposed = true; terminating = false; }
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1) throw new AggregateError(errors, "model view teardown reported errors");
     return disposed;
@@ -158,7 +144,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     diagnostics: () => Object.freeze({
       owner: "browser-model-views", attached, disposed, terminating, sceneBound: Boolean(isSceneBound()),
       playerCount: playerViews.size, ballAttached: Boolean(ballView?.diagnostics?.().attached),
-      assetState, assetDetail, animationClips: animations.length, loadGeneration,
+      assetState, assetDetail, animationClips: animations.length, loadGeneration, appearance: appearanceDiagnostics(playerViews),
     }),
   });
 }
