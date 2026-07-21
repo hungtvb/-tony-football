@@ -91,11 +91,11 @@ test("a later goal replays only its bounded pre-shot, shot, goal and aftermath f
   owner.project(frame(firstLive)); owner.project(frame(firstGoal, firstLive)); owner.project(frame(firstAftermath, firstGoal)); owner.project(frame(firstReplay, firstAftermath));
   const priorGoalKickoff = snapshot(5, { elapsed: .1, score: [1, 0], ballX: 600 }); owner.project(frame(priorGoalKickoff, firstReplay));
   const unrelatedBuildup = snapshot(9, { elapsed: .15, score: [1, 0], ballX: 80 });
-  const secondPreShot = snapshot(10, { elapsed: .2, score: [1, 0], ballX: 220 });
-  const secondShot = snapshot(11, { elapsed: .3, score: [1, 0], ballX: 420 });
-  const secondGoal = snapshot(12, { elapsed: .3, score: [2, 0], ballX: 1135, goalSequence: goalSequence({ phase: "flash" }) });
-  const secondAftermath = snapshot(13, { elapsed: .3, score: [2, 0], ballX: 1145, goalSequence: goalSequence({ phase: "highlight" }) });
-  const secondReplay = snapshot(14, { elapsed: .3, score: [2, 0], replayActive: true, goalSequence: goalSequence({ phase: "replay" }) });
+  const secondPreShot = snapshot(10, { elapsed: .3, score: [1, 0], ballX: 220 });
+  const secondShot = snapshot(11, { elapsed: .4, score: [1, 0], ballX: 420 });
+  const secondGoal = snapshot(12, { elapsed: .4, score: [2, 0], ballX: 1135, goalSequence: goalSequence({ phase: "flash" }) });
+  const secondAftermath = snapshot(13, { elapsed: .4, score: [2, 0], ballX: 1145, goalSequence: goalSequence({ phase: "highlight" }) });
+  const secondReplay = snapshot(14, { elapsed: .4, score: [2, 0], replayActive: true, goalSequence: goalSequence({ phase: "replay" }) });
   owner.project(frame(unrelatedBuildup, priorGoalKickoff)); owner.project(frame(secondPreShot, unrelatedBuildup)); owner.project(frame(secondShot, secondPreShot));
   owner.project(frame(secondGoal, secondShot)); owner.project(frame(secondAftermath, secondGoal));
   const projection = owner.project(frame(secondReplay, secondAftermath)); const evidence = owner.diagnostics().replay;
@@ -106,9 +106,9 @@ test("a later goal replays only its bounded pre-shot, shot, goal and aftermath f
   assert.equal(evidence.playbackFrameTicks.includes(unrelatedBuildup.tick), false);
   assert.equal(projection.replaySnapshot.tick, secondPreShot.tick);
   assert.equal(projection.replaySnapshot.ball.x, 220);
-  const replayShot = snapshot(15, { elapsed: .3, score: [2, 0], replayActive: true, replayElapsed: .6, replayDuration: 2, goalSequence: goalSequence({ phase: "replay" }) });
-  const replayGoal = snapshot(16, { elapsed: .3, score: [2, 0], replayActive: true, replayElapsed: 1.1, replayDuration: 2, goalSequence: goalSequence({ phase: "replay" }) });
-  const replayAftermath = snapshot(17, { elapsed: .3, score: [2, 0], replayActive: true, replayElapsed: 1.99, replayDuration: 2, goalSequence: goalSequence({ phase: "replay" }) });
+  const replayShot = snapshot(15, { elapsed: .4, score: [2, 0], replayActive: true, replayElapsed: .6, replayDuration: 2, goalSequence: goalSequence({ phase: "replay" }) });
+  const replayGoal = snapshot(16, { elapsed: .4, score: [2, 0], replayActive: true, replayElapsed: 1.1, replayDuration: 2, goalSequence: goalSequence({ phase: "replay" }) });
+  const replayAftermath = snapshot(17, { elapsed: .4, score: [2, 0], replayActive: true, replayElapsed: 1.99, replayDuration: 2, goalSequence: goalSequence({ phase: "replay" }) });
   assert.deepEqual([
     owner.project(frame(replayShot, secondReplay)).replaySnapshot.ball.x,
     owner.project(frame(replayGoal, replayShot)).replaySnapshot.ball.x,
