@@ -48,7 +48,7 @@ replace_once(
 )
 replace_once('    updateInput(); updateParticles(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', '    updateInput(); settingsEffectsBridge.effects.update(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', 'presentation effect update')
 replace_once('    updateInput(); updateParticles(dt); updateLegacyReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', '    updateInput(); settingsEffectsBridge.effects.update(dt); updateLegacyReplay(dt); gameFeel.update(dt); game.flash = gameFeel.decayFlash(game.flash,dt); game.shake *= Math.pow(.04, dt);', 'legacy effect update')
-replace_once('ballTrailView=createBallTrail3D(THREE,{maxPoints:gameFeel.config.ball.trailMaxPoints})', 'ballTrailView=createBallTrail3D(THREE,{maxPoints:settingsEffectsBridge.effects.diagnostics().trailCapacity})', 'trail view capacity')
+replace_once('ballTrailView = createBallTrail3D(THREE, { maxPoints: gameFeel.config.ball.trailMaxPoints })', 'ballTrailView = createBallTrail3D(THREE, { maxPoints: settingsEffectsBridge.effects.diagnostics().trailCapacity })', 'trail view capacity')
 replace_once(
     '''  function updateParticleView() {
     const positions=particleView.geometry.attributes.position.array; const colors=particleView.geometry.attributes.color.array; const count=Math.min(gameFeel.particleBudget(),game.particles.length);
@@ -63,26 +63,22 @@ replace_once(
     'particle view consumer',
 )
 replace_once(
-    'ballTrailView?.update(renderTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index,count,speed)=>gameFeel.trailOpacity(index,count,speed)}); updateParticleView(); updateAtmosphere3D(now);',
-    'const projectedTrail=settingsEffectsBridge.effects.projectTrail(renderTrail,{speed:visualSpeed});ballTrailView?.update(projectedTrail,{worldX,worldZ,speed:visualSpeed,opacityForIndex:(index)=>projectedTrail[index]?.opacity??0}); updateParticleView(settingsEffectsBridge.effects.snapshot()); updateAtmosphere3D(now);',
+    '''    ballTrailView?.update(renderTrail, {
+      worldX,
+      worldZ,
+      speed: visualSpeed,
+      opacityForIndex: (index, count, speed) => gameFeel.trailOpacity(index, count, speed),
+    });
+    updateParticleView();''',
+    '''    const projectedTrail = settingsEffectsBridge.effects.projectTrail(renderTrail, { speed: visualSpeed });
+    ballTrailView?.update(projectedTrail, {
+      worldX,
+      worldZ,
+      speed: visualSpeed,
+      opacityForIndex: (index) => projectedTrail[index]?.opacity ?? 0,
+    });
+    updateParticleView(settingsEffectsBridge.effects.snapshot());''',
     'webgl effects projection',
-)
-replace_once(
-    'const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){chargeView.visible=true;chargeView.position.set(worldX(selectedPose.x),7.5,worldZ(selectedPose.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,input.actionCharge);fill.position.x=-2.4+2.4*input.actionCharge;fill.material.color.set(input.actionCharge>.82?0xff5b45:0xffcf58);}else chargeView.visible=false;',
-    'const selectedPose=renderState.players.find((player)=>player.id===snapshot.match.selectedPlayerId);const charge=settingsEffectsBridge.effects.projectCharge({active:Boolean(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId),power:input.actionCharge,player:selectedPose});if(charge.active){chargeView.visible=true;chargeView.position.set(worldX(charge.player.x),7.5,worldZ(charge.player.y));chargeView.quaternion.copy(camera3D.quaternion);const fill=chargeView.userData.fill;fill.scale.x=Math.max(.02,charge.power);fill.position.x=-2.4+2.4*charge.power;fill.material.color.set(charge.color);}else chargeView.visible=false;',
-    'webgl charge projection',
-)
-for label in ['canvas3d particle consumer', 'canvas2d particle consumer']:
-    replace_once('for(const particle of game.particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}', 'for(const particle of settingsEffectsBridge.effects.snapshot().particles){ctx.globalAlpha=clamp(particle.life/particle.max,0,1);ctx.fillStyle=particle.color;ctx.fillRect(particle.x,particle.y,particle.size,particle.size);}', label)
-replace_once(
-    'const visualSpeed=Math.hypot(ball.vx,ball.vy);for(let i=ball.trail.length-1;i>=0;i-=1){const point=ball.trail[i];ctx.globalAlpha=gameFeel.trailOpacity(i,ball.trail.length,visualSpeed);ctx.fillStyle="white";ctx.beginPath();ctx.arc(point.x,point.y,Math.max(1.5,ball.radius*(1-i/(ball.trail.length+4))),0,Math.PI*2);ctx.fill();}',
-    'const visualSpeed=Math.hypot(ball.vx,ball.vy);const projectedTrail=settingsEffectsBridge.effects.projectTrail(ball.trail,{speed:visualSpeed});for(let i=projectedTrail.length-1;i>=0;i-=1){const point=projectedTrail[i];ctx.globalAlpha=point.opacity;ctx.fillStyle="white";ctx.beginPath();ctx.arc(point.x,point.y,Math.max(1.5,ball.radius*(1-i/(projectedTrail.length+4))),0,Math.PI*2);ctx.fill();}',
-    'canvas trail projection',
-)
-replace_once(
-    'if(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(selectedPose.x-31,selectedPose.y-50,62,8);ctx.fillStyle=input.actionCharge>.82?"#ff5b45":"#ffcf58";ctx.fillRect(selectedPose.x-30,selectedPose.y-49,60*input.actionCharge,6);}',
-    'const charge=settingsEffectsBridge.effects.projectCharge({active:Boolean(input.actionStart&&selectedPose&&snapshot.ball.ownerId===snapshot.match.selectedPlayerId),power:input.actionCharge,player:selectedPose});if(charge.active){ctx.fillStyle="rgba(0,0,0,.7)";ctx.fillRect(charge.player.x-31,charge.player.y-50,62,8);ctx.fillStyle=charge.color;ctx.fillRect(charge.player.x-30,charge.player.y-49,60*charge.power,6);}',
-    'canvas charge projection',
 )
 replace_once('game.weather=game.weather==="rain"?"clear":"rain";', 'settingsEffectsBridge.settings.set("weather",game.weather==="rain"?"clear":"rain");', 'weather command')
 replace_once(';tone(game.weather==="rain"?330:560,.06,"sine",.02);', ';', 'weather preview tone removal')
