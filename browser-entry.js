@@ -37,6 +37,22 @@ export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge) {
   return true;
 }
 
+function projectedPresentationFrame(frame, projection) {
+  const replaySnapshot = projection?.replaySnapshot ?? null;
+  if (!replaySnapshot) return frame;
+  return Object.freeze({ ...frame, snapshot: replaySnapshot, previousSnapshot: replaySnapshot, alpha: 1 });
+}
+
+function wrapProjectedAdapter(adapter, getProjection) {
+  return Object.freeze({
+    attach: (...args) => adapter.attach?.(...args),
+    render: (frame) => adapter.render?.(projectedPresentationFrame(frame, getProjection())),
+    reset: (...args) => adapter.reset?.(...args),
+    teardown: (...args) => adapter.teardown?.(...args),
+    diagnostics: () => adapter.diagnostics?.(),
+  });
+}
+
 if (typeof globalThis.window !== "undefined") {
   const sceneFacade = createRebindableThreeSceneHostPort();
   const cameraReplayAdapter = createSnapshotCameraReplayAdapter({
@@ -101,20 +117,15 @@ if (typeof globalThis.window !== "undefined") {
         document,
         getScenePort: () => sceneFacade.port,
         isSceneBound: () => sceneFacade.bound,
-        getCameraReplayProjection: () => cameraReplayAdapter.projection(),
       });
-      return modelViewAdapter;
+      return wrapProjectedAdapter(modelViewAdapter, () => cameraReplayAdapter.projection());
     },
     ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({
       target, document, onHostChanged: (port) => sceneFacade.bind(port),
     }),
     ({ target, document }) => {
-      canvasMatchRenderer = createCanvasMatchRenderer({
-        target,
-        document,
-        getCameraReplayProjection: () => cameraReplayAdapter.projection(),
-      });
-      return canvasMatchRenderer;
+      canvasMatchRenderer = createCanvasMatchRenderer({ target, document });
+      return wrapProjectedAdapter(canvasMatchRenderer, () => cameraReplayAdapter.projection());
     },
   ]);
 
