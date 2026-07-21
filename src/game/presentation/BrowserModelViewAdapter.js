@@ -2,6 +2,7 @@ import { createSnapshotRenderState } from "./SnapshotRenderState.js";
 import { createPlayerModelView } from "./PlayerModelView.js";
 import { createBallModelView } from "./BallModelView.js";
 import { createDefaultPlayerAssetLoader, disposePlayerAssetTemplate } from "./PlayerAssetLoader.js";
+import { ensureRigFootballKitOverlay, rigFootballKitEvidence } from "./RigFootballKitOverlay.js";
 
 function assertFunction(value, name) {
   if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
@@ -19,15 +20,28 @@ function appearanceDiagnostics(playerViews) {
   const players = Object.freeze([...playerViews.values()].map((view) => {
     const diagnostics = view.diagnostics?.() ?? Object.freeze({});
     const appearance = diagnostics.appearance ?? Object.freeze({ mode: diagnostics.rigged ? "asset" : "fallback", bootCount: 0, preservedMapCount: 0, tintedKitMaterialCount: 0, materialCount: 0, semanticCounts: Object.freeze({}) });
-    return Object.freeze({ id: diagnostics.id ?? view.id ?? null, team: diagnostics.team ?? null, role: diagnostics.role ?? null, rigged: Boolean(diagnostics.rigged), ...appearance });
+    const overlay = diagnostics.rigged ? rigFootballKitEvidence(view.root) : Object.freeze({ installed: false, visibleKitNodeCount: 0, bootGeometryCount: Number(appearance.bootCount || 0), nodes: Object.freeze([]) });
+    return Object.freeze({
+      id: diagnostics.id ?? view.id ?? null,
+      team: diagnostics.team ?? null,
+      role: diagnostics.role ?? null,
+      rigged: Boolean(diagnostics.rigged),
+      ...appearance,
+      rigKitInstalled: overlay.installed,
+      visibleKitNodeCount: overlay.visibleKitNodeCount,
+      bootGeometryCount: overlay.bootGeometryCount,
+      bootCount: diagnostics.rigged ? overlay.bootGeometryCount : Number(appearance.bootCount || 0),
+      rigKitNodes: overlay.nodes,
+    });
   }));
   return Object.freeze({
     players,
     riggedPlayers: players.filter((player) => player.rigged).length,
     fallbackPlayers: players.filter((player) => !player.rigged).length,
-    bootlessPlayers: players.filter((player) => Number(player.bootCount || 0) < 1).length,
+    bootlessPlayers: players.filter((player) => Number(player.bootGeometryCount || player.bootCount || 0) < 1).length,
     preservedMapPlayers: players.filter((player) => Number(player.preservedMapCount || 0) > 0).length,
     tintedKitPlayers: players.filter((player) => Number(player.tintedKitMaterialCount || 0) > 0).length,
+    visibleKitPlayers: players.filter((player) => !player.rigged || (player.rigKitInstalled && Number(player.visibleKitNodeCount || 0) >= 7 && Number(player.bootGeometryCount || 0) === 2)).length,
   });
 }
 
@@ -49,10 +63,17 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     if (badge) { badge.className = `asset-status ${state}`; badge.textContent = label; badge.title = detail; }
     return status;
   }
+  function installRigAsset(view, playerFacts) {
+    const installed = view.installAsset?.({ characterScene, animations });
+    if (!view.rigged) return Boolean(installed);
+    const evidence = ensureRigFootballKitOverlay({ root: view.root, player: playerFacts, lowPowerDevice });
+    if (evidence.visibleKitNodeCount < 7 || evidence.bootGeometryCount !== 2) throw new Error(`player model view ${playerFacts?.id ?? view.id} rejected incomplete rig kit geometry`);
+    return true;
+  }
   function createView(player) {
     const view = createPlayerView({ player, scenePort, document, worldX: world.worldX, worldZ: world.worldZ, lowPowerDevice });
     if (view.attach?.() === false) { view.teardown?.(); throw new Error(`player model view ${player.id} rejected scene attachment`); }
-    if (characterScene) view.installAsset?.({ characterScene, animations });
+    if (characterScene) installRigAsset(view, player);
     playerViews.set(player.id, view); return view;
   }
   function reconcilePlayers(players) {
@@ -75,8 +96,8 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
           throw new Error("character template replacement is blocked while live rigs may share its geometry");
         }
         characterScene = nextCharacterScene;
-        for (const view of playerViews.values()) view.installAsset?.({ characterScene, animations });
-        setAssetStatus("ready", "MODEL · READY", "Character loaded; animation loading in background");
+        for (const view of playerViews.values()) installRigAsset(view, view.diagnostics?.() ?? Object.freeze({ id: view.id, team: 0, role: "FW" }));
+        setAssetStatus("ready", "FOOTBALL KIT · READY", "Character, explicit jersey/shorts/socks and boot geometry loaded");
       } catch (error) {
         if (unavailable() || generation !== loadGeneration) return false;
         setAssetStatus("error", "MODEL · FALLBACK", error?.message ?? String(error)); return false;
@@ -88,10 +109,10 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       animations = Object.freeze([...(motion?.animations ?? [])]);
       for (const view of playerViews.values()) view.installAnimations?.(animations);
       disposePlayerAssetTemplate(motion?.scene);
-      setAssetStatus("ready", "PLAYER RIG · READY", `${animations.length} animation clips`); return true;
+      setAssetStatus("ready", "PLAYER RIG + KIT · READY", `${animations.length} animation clips; explicit football clothing and boots attached`); return true;
     } catch (error) {
       if (unavailable() || generation !== loadGeneration) return false;
-      setAssetStatus("warning", "MODEL READY · BASIC MOTION", error?.message ?? String(error)); return false;
+      setAssetStatus("warning", "KIT READY · BASIC MOTION", error?.message ?? String(error)); return false;
     }
   }
   function startAssetLoad({ reuseCharacterScene = false } = {}) {
