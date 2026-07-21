@@ -46,7 +46,7 @@ test("model adapter lazily attaches after the scene binds and renders immutable 
   const previous = snapshot({ tick: 1, x: 100, ballX: 140 }); const current = snapshot({ tick: 2, x: 120, ballX: 160 });
   assert.equal(adapter.render(frame(previous, current)), true); await flush(); await flush();
   assert.deepEqual(calls.slice(0, 4), ["ball:attach", "player:attach", ["player:render", 110], ["ball:render", 150]]);
-  assert.equal(calls.includes("player:asset"), true); assert.equal(calls.includes("player:animations"), true); assert.equal(adapter.diagnostics().playerCount, 1); assert.equal(adapter.diagnostics().assetState, "ready"); assert.equal(document.status.textContent, "PLAYER RIG · READY");
+  assert.equal(calls.includes("player:asset"), true); assert.equal(calls.includes("player:animations"), true); assert.equal(adapter.diagnostics().playerCount, 1); assert.equal(adapter.diagnostics().assetState, "ready"); assert.equal(document.status.textContent, "PLAYER RIG + KIT · READY");
   assert.equal(adapter.reset(), true); await flush(); await flush(); assert.equal(adapter.teardown(), true); assert.equal(calls.includes("player:reset"), true); assert.equal(calls.includes("ball:reset"), true); assert.equal(calls.includes("player:teardown"), true); assert.equal(calls.includes("ball:teardown"), true);
 });
 
