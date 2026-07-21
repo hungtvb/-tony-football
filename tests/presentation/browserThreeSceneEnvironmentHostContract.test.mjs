@@ -26,7 +26,7 @@ test("browser entry keeps the clean host narrow and registers Canvas plus camera
   assert.equal(entry.includes("__TONY_CAMERA_REPLAY_BRIDGE__"), true);
   assert.equal(entry.includes("createCanvasMatchRenderer"), true);
   assert.equal(entry.includes("createSnapshotCameraReplayAdapter"), true);
-  assert.equal(entry.includes('./generated/game.js?v=23.0.0'), true);
+  assert.equal(entry.includes('./generated/game.js?v=24.0.0'), true);
   assert.equal(entry.includes("installLegacyThreeSceneTracking"), false);
   assert.equal(entry.includes("EffectComposer"), false);
   assert.equal(entry.includes('from "three"'), false);
@@ -36,12 +36,13 @@ test("generated game no longer constructs the Three environment, match Canvas or
   const canonicalSource = await readFile(canonicalGameSourceUrl, "utf8");
   const generatedSource = await readFile(generatedGameSourceUrl, "utf8");
   assert.equal(canonicalSource.includes("new THREE.WebGLRenderer"), true);
-  const forbidden = ["new THREE.WebGLRenderer", "new EffectComposer", "new RoomEnvironment", "createPitch3D", "createGrass3D", "createStadium3D", "createAtmosphere3D", "createGoals3D", "renderFallback2D", "drawFallbackPlayerDetail", 'canvas.getContext("2d")', "createSnapshotCameraController", "createSnapshotReplayController", "game.replay.update(", "game.replay.record(", "recordReplaySnapshot"];
+  const forbidden = ["new THREE.WebGLRenderer", "new EffectComposer", "new RoomEnvironment", "createPitch3D", "createGrass3D", "createStadium3D", "createAtmosphere3D", "createGoals3D", "renderFallback2D", "drawFallbackPlayerDetail", 'canvas.getContext("2d")', "createSnapshotCameraController", "createSnapshotReplayController", "game.replay.update(", "game.replay.record(", "game.replay.start(", "game.replay.loadFrames(", "game.replay.syncElapsed(", "cameraReplayBridge.project(", "recordReplaySnapshot"];
   for (const token of forbidden) assert.equal(generatedSource.includes(token), false, `generated/game.js must not own ${token}`);
   assert.equal(generatedSource.includes('from "../src/'), true);
   assert.equal(generatedSource.includes('from "./src/'), false);
   assert.equal(generatedSource.includes("__TONY_THREE_SCENE_BRIDGE__"), true);
   assert.equal(generatedSource.includes("__TONY_CANVAS_MATCH_BRIDGE__"), true);
   assert.equal(generatedSource.includes("__TONY_CAMERA_REPLAY_BRIDGE__"), true);
+  assert.equal(generatedSource.includes("getPresentationFrameFacts"), true);
   assert.equal(generatedSource.includes("onPresentationReady: init3D"), true);
 });
