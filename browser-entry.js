@@ -1,3 +1,4 @@
+import { createCanvasMatchRenderer } from "./src/game/presentation/CanvasMatchRenderer.js";
 import { createBrowserModelViewAdapter } from "./src/game/presentation/BrowserModelViewAdapter.js";
 import { createBrowserThreeSceneEnvironmentAdapter } from "./src/game/presentation/BrowserThreeSceneEnvironmentAdapterFactory.js";
 import { createRebindableThreeSceneHostPort } from "./src/game/presentation/RebindableThreeSceneHostPort.js";
@@ -37,6 +38,7 @@ export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge) {
 if (typeof globalThis.window !== "undefined") {
   const sceneFacade = createRebindableThreeSceneHostPort();
   let modelViewAdapter = null;
+  let canvasMatchRenderer = null;
   const sceneBridge = Object.freeze({
     getPort: () => sceneFacade.bound ? sceneFacade.port : null,
     getStablePort: () => sceneFacade.port,
@@ -51,12 +53,25 @@ if (typeof globalThis.window !== "undefined") {
       assetState: "idle",
     }),
   });
+  const canvasMatchBridge = Object.freeze({
+    diagnostics: () => canvasMatchRenderer?.diagnostics?.() ?? Object.freeze({
+      owner: "canvas-match-renderer",
+      attached: false,
+      active: false,
+      status: "idle",
+      renderCount: 0,
+      lastFacts: null,
+    }),
+  });
 
   Object.defineProperty(globalThis.window, "__TONY_THREE_SCENE_BRIDGE__", {
     value: sceneBridge, configurable: false, enumerable: false, writable: false,
   });
   Object.defineProperty(globalThis.window, "__TONY_MODEL_VIEW_BRIDGE__", {
     value: modelViewBridge, configurable: false, enumerable: false, writable: false,
+  });
+  Object.defineProperty(globalThis.window, "__TONY_CANVAS_MATCH_BRIDGE__", {
+    value: canvasMatchBridge, configurable: false, enumerable: false, writable: false,
   });
 
   globalThis.window.__TONY_PRESENTATION_ADAPTER_FACTORIES__ = Object.freeze([
@@ -72,13 +87,17 @@ if (typeof globalThis.window !== "undefined") {
     ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({
       target, document, onHostChanged: (port) => sceneFacade.bind(port),
     }),
+    ({ target, document }) => {
+      canvasMatchRenderer = createCanvasMatchRenderer({ target, document });
+      return canvasMatchRenderer;
+    },
   ]);
 
   const sanitized = sanitizeBrowserRuntimeSearch(globalThis.location.search);
   if (sanitized.changed) {
     globalThis.history.replaceState(globalThis.history.state, "", `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`);
   }
-  await import("./generated/game.js?v=21.0.0");
+  await import("./generated/game.js?v=22.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
   exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge);
 }

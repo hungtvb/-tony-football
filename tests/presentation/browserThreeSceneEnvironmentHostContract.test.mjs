@@ -10,55 +10,35 @@ const generatedGameSourceUrl = new URL("../../generated/game.js", import.meta.ur
 
 test("browser Three scene host owns renderer, environment and validated profile inside presentation", async () => {
   const source = await readFile(hostSourceUrl, "utf8");
-  for (const dependency of [
-    'from "three"',
-    "EffectComposer.js",
-    "RoomEnvironment.js",
-    "ThreeSceneEnvironmentProfile.js",
-    "environmentRoot",
-    'owner: "clean-host"',
-  ]) assert.equal(source.includes(dependency), true, `missing ${dependency}`);
+  for (const dependency of ['from "three"', "EffectComposer.js", "RoomEnvironment.js", "ThreeSceneEnvironmentProfile.js", "environmentRoot", 'owner: "clean-host"']) assert.equal(source.includes(dependency), true, `missing ${dependency}`);
   assert.equal(source.includes("disposeObject(scene)"), false);
   assert.equal(source.includes("disposeObject(environmentRoot)"), true);
-  for (const forbidden of [
-    "MatchEngine",
-    "BrowserRuntimeComposition",
-    "GameCommandType",
-    "playerViews",
-    "ballView",
-    "cameraController",
-    "replayController",
-  ]) assert.equal(source.includes(forbidden), false, `scene host must not absorb ${forbidden}`);
+  for (const forbidden of ["MatchEngine", "BrowserRuntimeComposition", "GameCommandType", "playerViews", "ballView", "cameraController", "replayController"]) assert.equal(source.includes(forbidden), false, `scene host must not absorb ${forbidden}`);
 });
 
-test("browser factory always selects the clean host and entry exposes only a narrow port bridge", async () => {
+test("browser entry keeps the clean host narrow and registers the Canvas owner", async () => {
   const factory = await readFile(factorySourceUrl, "utf8");
   const entry = await readFile(entrySourceUrl, "utf8");
-  assert.match(factory, /createBrowserThreeSceneEnvironmentHost/);
-  assert.doesNotMatch(factory, /LegacyAdoptedThreeSceneHost|legacyThreeSceneSnapshot/);
-  assert.match(entry, /__TONY_THREE_SCENE_BRIDGE__/);
-  assert.match(entry, /\.\/generated\/game\.js\?v=21\.0\.0/);
-  assert.doesNotMatch(entry, /installLegacyThreeSceneTracking|EffectComposer|from "three"/);
+  assert.equal(factory.includes("createBrowserThreeSceneEnvironmentHost"), true);
+  assert.equal(factory.includes("LegacyAdoptedThreeSceneHost"), false);
+  assert.equal(entry.includes("__TONY_THREE_SCENE_BRIDGE__"), true);
+  assert.equal(entry.includes("__TONY_CANVAS_MATCH_BRIDGE__"), true);
+  assert.equal(entry.includes("createCanvasMatchRenderer"), true);
+  assert.equal(entry.includes('./generated/game.js?v=22.0.0'), true);
+  assert.equal(entry.includes("installLegacyThreeSceneTracking"), false);
+  assert.equal(entry.includes("EffectComposer"), false);
+  assert.equal(entry.includes('from "three"'), false);
 });
 
-test("generated game composition no longer constructs the Three environment while canonical source remains reviewable", async () => {
-  const [canonicalSource, generatedSource] = await Promise.all([
-    readFile(canonicalGameSourceUrl, "utf8"),
-    readFile(generatedGameSourceUrl, "utf8"),
-  ]);
-  assert.match(canonicalSource, /new THREE\.WebGLRenderer/);
-  for (const forbidden of [
-    "new THREE.WebGLRenderer",
-    "new EffectComposer",
-    "new RoomEnvironment",
-    "createPitch3D",
-    "createGrass3D",
-    "createStadium3D",
-    "createAtmosphere3D",
-    "createGoals3D",
-  ]) assert.equal(generatedSource.includes(forbidden), false, `generated/game.js must not own ${forbidden}`);
-  assert.match(generatedSource, /from "\.\.\/src\//);
-  assert.doesNotMatch(generatedSource, /from "\.\/src\//);
-  assert.match(generatedSource, /__TONY_THREE_SCENE_BRIDGE__/);
-  assert.match(generatedSource, /onPresentationReady:\s*init3D/);
+test("generated game no longer constructs the Three environment or match Canvas while canonical source remains reviewable", async () => {
+  const canonicalSource = await readFile(canonicalGameSourceUrl, "utf8");
+  const generatedSource = await readFile(generatedGameSourceUrl, "utf8");
+  assert.equal(canonicalSource.includes("new THREE.WebGLRenderer"), true);
+  const forbidden = ["new THREE.WebGLRenderer", "new EffectComposer", "new RoomEnvironment", "createPitch3D", "createGrass3D", "createStadium3D", "createAtmosphere3D", "createGoals3D", "renderFallback2D", "drawFallbackPlayerDetail", 'canvas.getContext("2d")'];
+  for (const token of forbidden) assert.equal(generatedSource.includes(token), false, `generated/game.js must not own ${token}`);
+  assert.equal(generatedSource.includes('from "../src/'), true);
+  assert.equal(generatedSource.includes('from "./src/'), false);
+  assert.equal(generatedSource.includes("__TONY_THREE_SCENE_BRIDGE__"), true);
+  assert.equal(generatedSource.includes("__TONY_CANVAS_MATCH_BRIDGE__"), true);
+  assert.equal(generatedSource.includes("onPresentationReady: init3D"), true);
 });
