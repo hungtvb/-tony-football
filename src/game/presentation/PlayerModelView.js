@@ -3,6 +3,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 const SKIN = Object.freeze([0xd89d78, 0xb97958, 0x8f5a3d, 0xe5b08b]);
 const HAIR = Object.freeze([0x231914, 0x38241b, 0x111413, 0x5a351f]);
+const SURFACES = Object.freeze(["kit", "shorts", "socks", "boots", "skin", "hair", "unknown"]);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (from, to, alpha) => from + (to - from) * alpha;
 
@@ -13,11 +14,89 @@ function smoothAngle(current, target, ease) { return current + Math.atan2(Math.s
 function motionPulse(progress, start = 0, end = 1) { if (progress <= start || progress >= end) return 0; return Math.sin(((progress - start) / (end - start)) * Math.PI); }
 function disposeMaterial(material) {
   if (!material) return;
-  for (const key of ["map", "bumpMap", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "alphaMap"]) material[key]?.dispose?.();
+  if (!material.userData?.tonySharedTextures) {
+    for (const key of ["map", "bumpMap", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "alphaMap"]) material[key]?.dispose?.();
+  }
   material.dispose?.();
 }
 function disposeOwned(root) {
   root?.traverse?.((node) => { if (!node.userData?.tonySharedGeometry) node.geometry?.dispose?.(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(disposeMaterial); });
+}
+
+function normalizedSurfaceLabel(nodeName = "", materialName = "") {
+  return `${nodeName} ${materialName}`.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export function classifyPlayerSurface(nodeName = "", materialName = "") {
+  const label = normalizedSurfaceLabel(nodeName, materialName);
+  if (/(^| )(boot|boots|shoe|shoes|cleat|cleats|sneaker|sneakers|footwear|foot l|foot r)( |$)/.test(label)) return "boots";
+  if (/(^| )(sock|socks|stocking|stockings)( |$)/.test(label)) return "socks";
+  if (/(^| )(short|shorts|trouser|trousers|pant|pants)( |$)/.test(label)) return "shorts";
+  if (/(^| )(jersey|shirt|kit|uniform|top|torso|chest)( |$)/.test(label)) return "kit";
+  if (/(^| )(hair|beard|brow|eyebrow|mustache|moustache)( |$)/.test(label)) return "hair";
+  if (/(^| )(skin|face|head|hand|hands|arm|arms|leg|legs|neck|ear|ears)( |$)/.test(label)) return "skin";
+  return "unknown";
+}
+
+function createAppearance(mode) {
+  return {
+    mode,
+    materialCount: 0,
+    preservedMapCount: 0,
+    tintedKitMaterialCount: 0,
+    sharedTextureMaterialCount: 0,
+    footwearNodeCount: 0,
+    semanticCounts: Object.fromEntries(SURFACES.map((surface) => [surface, 0])),
+  };
+}
+function freezeAppearance(source) {
+  const semanticCounts = Object.freeze({ ...source.semanticCounts });
+  const bootCount = Math.max(Number(source.footwearNodeCount || 0), Number(semanticCounts.boots || 0));
+  return Object.freeze({
+    mode: source.mode,
+    materialCount: source.materialCount,
+    preservedMapCount: source.preservedMapCount,
+    tintedKitMaterialCount: source.tintedKitMaterialCount,
+    sharedTextureMaterialCount: source.sharedTextureMaterialCount,
+    footwearNodeCount: source.footwearNodeCount,
+    bootCount,
+    semanticCounts,
+  });
+}
+function kitColor(player, semantic) {
+  const home = player.team === 0; const keeper = player.role === "GK";
+  if (semantic === "kit") return keeper ? (home ? 0x7650d6 : 0xe65348) : (home ? 0xe1bb58 : 0x32b8c8);
+  if (semantic === "shorts") return keeper ? 0x20212c : (home ? 0x171b1a : 0x092e35);
+  if (semantic === "socks") return home ? 0xe9d58f : 0xb8eff3;
+  return null;
+}
+
+export function createSemanticPlayerMaterial({ source, nodeName = "", player, ownedMaterials, appearance } = {}) {
+  if (!source || typeof source.clone !== "function") return source;
+  const semantic = classifyPlayerSurface(nodeName, source.name ?? "");
+  const material = source.clone(); ownedMaterials?.push?.(material);
+  material.userData = {
+    ...(material.userData ?? {}),
+    tonyAppearanceSemantic: semantic,
+    tonySourceMaterialName: source.name ?? "",
+    tonySourceMapPreserved: Boolean(source.map && material.map === source.map),
+    tonySharedTextures: true,
+  };
+  if (appearance) {
+    appearance.materialCount += 1;
+    appearance.semanticCounts[semantic] += 1;
+    appearance.sharedTextureMaterialCount += 1;
+    if (source.map && material.map === source.map) appearance.preservedMapCount += 1;
+  }
+  const color = kitColor(player, semantic);
+  if (color !== null && material.color?.set) {
+    material.color.set(color);
+    const sourceCacheKey = typeof source.customProgramCacheKey === "function" ? source.customProgramCacheKey.bind(source) : () => "";
+    material.customProgramCacheKey = () => `${sourceCacheKey()}|football-kit-ton93-${semantic}-${player.team}-${player.role}-${player.index % 4}`;
+    material.needsUpdate = true;
+    if (appearance) appearance.tintedKitMaterialCount += 1;
+  }
+  return material;
 }
 
 export function selectPlayerAnimationState(player, speed, currentState = "") {
@@ -44,26 +123,30 @@ function limb(THREE, material, endMaterial, length, radius, lowPowerDevice) {
   const upper = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * .9, length * .52, segments), material); upper.position.y = -length * .26; upper.castShadow = true; root.add(upper);
   const lower = new THREE.Mesh(new THREE.CylinderGeometry(radius * .86, radius * .7, length * .48, segments), endMaterial ?? material); lower.position.y = -length * .76; lower.castShadow = true; root.add(lower); return root;
 }
+function boot(THREE, material, side, lowPowerDevice) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(.48, .3, .82, lowPowerDevice ? 1 : 2, 1, lowPowerDevice ? 1 : 2), material);
+  mesh.name = side === "left" ? "TonyBootLeft" : "TonyBootRight";
+  mesh.userData.tonyAppearanceSemantic = "boots";
+  mesh.position.set(0, -1.92, .22); mesh.rotation.x = -.08; mesh.castShadow = true; return mesh;
+}
 function createProceduralPlayer({ THREE, document, player, lowPowerDevice }) {
   const home = player.team === 0; const keeper = player.role === "GK"; const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
   const jersey = new THREE.MeshStandardMaterial({ color: keeper ? (home ? 0x8a62dd : 0xed6757) : (home ? 0xe1bb58 : 0x34b8c7), roughness: .58 });
   const skin = new THREE.MeshStandardMaterial({ color: SKIN[(player.index + player.team) % SKIN.length], roughness: .72 });
   const shorts = new THREE.MeshStandardMaterial({ color: keeper ? 0x20212c : (home ? 0x171b1a : 0x092e35), roughness: .72 });
   const socks = new THREE.MeshStandardMaterial({ color: home ? 0xe9d58f : 0xb8eff3, roughness: .82 });
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(.82, 1.08, 2.45, lowPowerDevice ? 8 : 12), jersey); torso.position.y = 3.48; torso.scale.z = .88; torso.castShadow = true; body.add(torso);
-  const hips = new THREE.Mesh(new THREE.BoxGeometry(1.78, .78, 1.2), shorts); hips.position.y = 2.02; hips.castShadow = true; body.add(hips);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(.72, lowPowerDevice ? 10 : 18, lowPowerDevice ? 8 : 14), skin); head.position.y = 5.35; head.scale.set(.93, 1.08, .96); head.castShadow = true; body.add(head);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(.74, lowPowerDevice ? 8 : 14, 7, 0, Math.PI * 2, 0, Math.PI * .46), new THREE.MeshStandardMaterial({ color: HAIR[(player.index + player.team) % HAIR.length], roughness: .92 })); hair.position.y = 5.55; body.add(hair);
-  const leftLeg = limb(THREE, skin, socks, 1.9, .27, lowPowerDevice); const rightLeg = limb(THREE, skin, socks, 1.9, .27, lowPowerDevice); leftLeg.position.set(-.48, 1.75, 0); rightLeg.position.set(.48, 1.75, 0); body.add(leftLeg, rightLeg);
+  const boots = new THREE.MeshStandardMaterial({ color: keeper ? 0x18191f : 0x111413, roughness: .6, metalness: .04 });
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(.82, 1.08, 2.45, lowPowerDevice ? 8 : 12), jersey); torso.name = "TonyJersey"; torso.position.y = 3.48; torso.scale.z = .88; torso.castShadow = true; body.add(torso);
+  const hips = new THREE.Mesh(new THREE.BoxGeometry(1.78, .78, 1.2), shorts); hips.name = "TonyShorts"; hips.position.y = 2.02; hips.castShadow = true; body.add(hips);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(.72, lowPowerDevice ? 10 : 18, lowPowerDevice ? 8 : 14), skin); head.name = "TonySkinHead"; head.position.y = 5.35; head.scale.set(.93, 1.08, .96); head.castShadow = true; body.add(head);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(.74, lowPowerDevice ? 8 : 14, 7, 0, Math.PI * 2, 0, Math.PI * .46), new THREE.MeshStandardMaterial({ color: HAIR[(player.index + player.team) % HAIR.length], roughness: .92 })); hair.name = "TonyHair"; hair.position.y = 5.55; body.add(hair);
+  const leftLeg = limb(THREE, skin, socks, 1.9, .27, lowPowerDevice); const rightLeg = limb(THREE, skin, socks, 1.9, .27, lowPowerDevice); leftLeg.name = "TonySockLegLeft"; rightLeg.name = "TonySockLegRight"; leftLeg.position.set(-.48, 1.75, 0); rightLeg.position.set(.48, 1.75, 0);
+  const leftBoot = boot(THREE, boots, "left", lowPowerDevice); const rightBoot = boot(THREE, boots, "right", lowPowerDevice); leftLeg.add(leftBoot); rightLeg.add(rightBoot); body.add(leftLeg, rightLeg);
   const leftArm = limb(THREE, jersey, skin, 1.58, .22, lowPowerDevice); const rightArm = limb(THREE, jersey, skin, 1.58, .22, lowPowerDevice); leftArm.position.set(-1, 4.42, 0); rightArm.position.set(1, 4.42, 0); leftArm.rotation.z = -.24; rightArm.rotation.z = .24; body.add(leftArm, rightArm);
   const marker = new THREE.Mesh(new THREE.TorusGeometry(1.7, .09, 8, 36), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: .92, toneMapped: false })); marker.rotation.x = Math.PI / 2; marker.position.y = .08; root.add(marker);
   const label = canvasLabel({ THREE, document, text: `${player.number} · ${player.name}`, accent: home ? "#e1bb58" : "#47c9d4" }); root.add(label);
-  return { root, body, torso, head, leftLeg, rightLeg, leftArm, rightArm, marker, label, rig: null };
-}
-function createIntegratedKitMaterial(THREE, source, player, ownedMaterials) {
-  const home = player.team === 0; const keeper = player.role === "GK"; const material = source.clone(); ownedMaterials.push(material);
-  material.map = null; material.color.set(keeper ? (home ? 0x7650d6 : 0xe65348) : (home ? 0xe1bb58 : 0x32b8c8)); material.roughness = .68; material.metalness = 0;
-  material.customProgramCacheKey = () => `football-kit-ton81-${player.team}-${player.role}-${player.index % 4}`; material.needsUpdate = true; return material;
+  const appearance = freezeAppearance({ mode: "fallback", materialCount: 6, preservedMapCount: 0, tintedKitMaterialCount: 3, sharedTextureMaterialCount: 0, footwearNodeCount: 2, semanticCounts: { kit: 1, shorts: 1, socks: 2, boots: 2, skin: 3, hair: 1, unknown: 0 } });
+  return { root, body, torso, head, leftLeg, rightLeg, leftArm, rightArm, leftBoot, rightBoot, marker, label, rig: null, appearance };
 }
 function switchRigAnimation(THREE, rig, state, immediate = false) {
   if (!rig || rig.state === state) return false; const next = rig.actions[state] || rig.actions.Idle_Loop; if (!next) return false;
@@ -72,16 +155,12 @@ function switchRigAnimation(THREE, rig, state, immediate = false) {
   if (rig.active && rig.active !== next) rig.active.fadeOut(fade); rig.active = next; rig.state = state; return true;
 }
 function disposeCandidateMaterials(materials) {
-  for (const material of new Set(materials ?? [])) {
-    try { disposeMaterial(material); } catch {}
-  }
+  for (const material of new Set(materials ?? [])) { try { disposeMaterial(material); } catch {} }
 }
 function releaseAnimationSet(animationSet, errors = null) {
   if (!animationSet?.mixer) return;
   const collected = errors ?? [];
-  for (const action of new Set(Object.values(animationSet.actions ?? {}).filter(Boolean))) {
-    try { action.stop?.(); } catch (error) { collected.push(error); }
-  }
+  for (const action of new Set(Object.values(animationSet.actions ?? {}).filter(Boolean))) { try { action.stop?.(); } catch (error) { collected.push(error); } }
   try { animationSet.mixer.stopAllAction?.(); } catch (error) { collected.push(error); }
   try { animationSet.mixer.uncacheRoot?.(animationSet.model); } catch (error) { collected.push(error); }
   if (!errors && collected.length === 1) throw collected[0];
@@ -92,52 +171,46 @@ function prepareAnimationSet({ THREE, model, animations = [] }) {
   try {
     for (const clip of animations) actions[clip.name] = mixer.clipAction(clip, model);
     const candidate = { model, mixer, actions, clips: Object.freeze([...animations]), state: "", active: null };
-    switchRigAnimation(THREE, candidate, "Idle_Loop", true);
-    return candidate;
+    switchRigAnimation(THREE, candidate, "Idle_Loop", true); return candidate;
   } catch (error) {
-    try { releaseAnimationSet({ model, mixer, actions }); } catch {}
-    throw error;
+    try { releaseAnimationSet({ model, mixer, actions }); } catch {} throw error;
   }
 }
 function releaseRigCandidate(rig, errors = null) {
-  try { releaseAnimationSet(rig, errors); } catch (error) {
-    if (errors) errors.push(error);
-  }
+  try { releaseAnimationSet(rig, errors); } catch (error) { if (errors) errors.push(error); }
   disposeCandidateMaterials(rig?.ownedMaterials);
 }
+function countFootwearNodes(model) {
+  let count = 0;
+  model?.traverse?.((node) => { if (/(^|[^a-z])(boot|shoe|cleat|foot)([^a-z]|$)/i.test(node.name ?? "")) count += 1; });
+  return count;
+}
 function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }) {
-  let model = null; let animationSet = null; const ownedMaterials = [];
+  let model = null; let animationSet = null; const ownedMaterials = []; const appearance = createAppearance("asset");
   try {
     model = cloneModel(characterScene); model.scale.set(2.96, 3.28, 2.96); model.rotation.y = 0;
     model.traverse((node) => {
       if (!node.isMesh) return; node.castShadow = true; node.receiveShadow = true; node.frustumCulled = false; node.userData.tonySharedGeometry = true;
-      const source = Array.isArray(node.material) ? node.material : [node.material]; const mapped = source.map((material) => createIntegratedKitMaterial(THREE, material, player, ownedMaterials)); node.material = Array.isArray(node.material) ? mapped : mapped[0];
+      const source = Array.isArray(node.material) ? node.material : [node.material];
+      const mapped = source.map((material) => createSemanticPlayerMaterial({ source: material, nodeName: node.name ?? "", player, ownedMaterials, appearance }));
+      node.material = Array.isArray(node.material) ? mapped : mapped[0];
     });
+    appearance.footwearNodeCount = countFootwearNodes(model);
     animationSet = prepareAnimationSet({ THREE, model, animations: animations ?? [] });
-    return { model, ...animationSet, ownedMaterials, lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
+    return { model, ...animationSet, ownedMaterials, appearance: freezeAppearance(appearance), lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
   } catch (error) {
-    if (animationSet) {
-      try { releaseAnimationSet(animationSet); } catch {}
-    }
-    disposeCandidateMaterials(ownedMaterials);
-    throw error;
+    if (animationSet) { try { releaseAnimationSet(animationSet); } catch {} }
+    disposeCandidateMaterials(ownedMaterials); throw error;
   }
 }
 function commitRig(view, rig) {
-  const proceduralVisible = view.body.visible; let added = false;
-  try {
-    view.root.add(rig.model); added = true;
-    view.body.visible = false; view.rig = rig;
-    return true;
-  } catch (error) {
-    if (view.rig === rig) view.rig = null;
-    view.body.visible = proceduralVisible;
+  const proceduralVisible = view.body.visible; const previousAppearance = view.appearance; let added = false;
+  try { view.root.add(rig.model); added = true; view.body.visible = false; view.rig = rig; view.appearance = rig.appearance; return true; }
+  catch (error) {
+    if (view.rig === rig) view.rig = null; view.appearance = previousAppearance; view.body.visible = proceduralVisible;
     const candidateAttached = added || rig.model?.parent === view.root || view.root.children?.includes?.(rig.model);
-    if (candidateAttached) {
-      try { view.root.remove(rig.model); } catch {}
-    }
-    releaseRigCandidate(rig);
-    throw error;
+    if (candidateAttached) { try { view.root.remove(rig.model); } catch {} }
+    releaseRigCandidate(rig); throw error;
   }
 }
 function applyFootballActionPose(rig, player, progress, dt) {
@@ -158,42 +231,24 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   function attach() { if (attached || unavailable()) return false; if (scenePort.addObject(view.root) === false) return false; attached = true; return true; }
   function retryRetiredAnimationSets(errors = null) {
     for (let index = retiredAnimationSets.length - 1; index >= 0; index -= 1) {
-      try {
-        releaseAnimationSet(retiredAnimationSets[index]);
-        retiredAnimationSets.splice(index, 1);
-      } catch (error) {
-        errors?.push(error);
-      }
+      try { releaseAnimationSet(retiredAnimationSets[index]); retiredAnimationSets.splice(index, 1); }
+      catch (error) { errors?.push(error); }
     }
   }
   function installAsset({ characterScene, animations = [] } = {}) {
     if (unavailable() || !characterScene || view.rig) return false;
-    try {
-      const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations });
-      commitRig(view, candidate); currentAnimationReleased = false; installError = ""; return true;
-    } catch (error) {
-      installError = error?.message ?? String(error); return false;
-    }
+    try { const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }); commitRig(view, candidate); currentAnimationReleased = false; installError = ""; return true; }
+    catch (error) { installError = error?.message ?? String(error); return false; }
   }
   function installAnimations(nextAnimations = []) {
     if (unavailable() || !view.rig || !Array.isArray(nextAnimations)) return false;
     const rig = view.rig; let candidate = null;
-    try {
-      candidate = prepareAnimationSet({ THREE, model: rig.model, animations: nextAnimations });
-    } catch (error) {
-      installError = error?.message ?? String(error); return false;
-    }
+    try { candidate = prepareAnimationSet({ THREE, model: rig.model, animations: nextAnimations }); }
+    catch (error) { installError = error?.message ?? String(error); return false; }
     const previous = { model: rig.model, mixer: rig.mixer, actions: rig.actions, clips: rig.clips, state: rig.state, active: rig.active };
-    rig.mixer = candidate.mixer; rig.actions = candidate.actions; rig.clips = candidate.clips; rig.state = candidate.state; rig.active = candidate.active; rig.lastTime = null;
-    currentAnimationReleased = false;
-    retiredAnimationSets.push(previous);
-    try {
-      releaseAnimationSet(previous);
-      retiredAnimationSets.pop();
-      installError = "";
-    } catch (error) {
-      installError = `animation refresh committed; previous cleanup deferred: ${error?.message ?? String(error)}`;
-    }
+    rig.mixer = candidate.mixer; rig.actions = candidate.actions; rig.clips = candidate.clips; rig.state = candidate.state; rig.active = candidate.active; rig.lastTime = null; currentAnimationReleased = false; retiredAnimationSets.push(previous);
+    try { releaseAnimationSet(previous); retiredAnimationSets.pop(); installError = ""; }
+    catch (error) { installError = `animation refresh committed; previous cleanup deferred: ${error?.message ?? String(error)}`; }
     return true;
   }
   function render({ player: pose, ball, selectedPlayerId, replayActive = false, controlMode = "attack", pressedCodes = Object.freeze([]), nowMilliseconds = 0 } = {}) {
@@ -215,58 +270,30 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     view.label.visible = !replayActive && (selected || speed < 10); return true;
   }
   function reset() {
-    if (unavailable()) return false;
-    view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0);
-    retryRetiredAnimationSets();
+    if (unavailable()) return false; view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0); retryRetiredAnimationSets();
     if (view.rig) {
       view.rig.lastTime = null;
-      try {
-        view.rig.mixer.stopAllAction?.(); view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true);
-      } catch (error) {
-        installError = error?.message ?? String(error); return false;
-      }
+      try { view.rig.mixer.stopAllAction?.(); view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true); }
+      catch (error) { installError = error?.message ?? String(error); return false; }
     }
     return true;
   }
   function teardown() {
-    if (disposed) return false;
-    const errors = [];
-    terminating = true;
-    if (attached) {
-      try { scenePort.removeObject(view.root); attached = false; } catch (error) { errors.push(error); }
-    }
-    if (view.rig && !currentAnimationReleased) {
-      try {
-        releaseAnimationSet(view.rig);
-        currentAnimationReleased = true;
-      } catch (error) {
-        errors.push(error);
-      }
-    }
+    if (disposed) return false; const errors = []; terminating = true;
+    if (attached) { try { scenePort.removeObject(view.root); attached = false; } catch (error) { errors.push(error); } }
+    if (view.rig && !currentAnimationReleased) { try { releaseAnimationSet(view.rig); currentAnimationReleased = true; } catch (error) { errors.push(error); } }
     retryRetiredAnimationSets(errors);
     const animationOwnershipReleased = (!view.rig || currentAnimationReleased) && retiredAnimationSets.length === 0;
-    if (!attached && animationOwnershipReleased && !rootDisposed) {
-      try { disposeOwned(view.root); rootDisposed = true; } catch (error) { errors.push(error); }
-    }
-    if (!attached && animationOwnershipReleased && rootDisposed) {
-      view.rig = null;
-      disposed = true;
-      terminating = false;
-      installError = "";
-    }
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) throw new AggregateError(errors, `player model view ${player.id} teardown reported errors`);
-    return disposed;
+    if (!attached && animationOwnershipReleased && !rootDisposed) { try { disposeOwned(view.root); rootDisposed = true; } catch (error) { errors.push(error); } }
+    if (!attached && animationOwnershipReleased && rootDisposed) { view.rig = null; disposed = true; terminating = false; installError = ""; }
+    if (errors.length === 1) throw errors[0]; if (errors.length > 1) throw new AggregateError(errors, `player model view ${player.id} teardown reported errors`); return disposed;
   }
   return Object.freeze({
-    get id() { return player.id; },
-    get root() { return view.root; },
-    get attached() { return attached; },
-    get rigged() { return Boolean(view.rig); },
+    get id() { return player.id; }, get root() { return view.root; }, get attached() { return attached; }, get rigged() { return Boolean(view.rig); },
     attach, installAsset, installAnimations, render, reset, teardown,
     diagnostics: () => Object.freeze({
-      id: player.id, attached, rigged: Boolean(view.rig), disposed, terminating, installError,
-      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed,
+      id: player.id, team: player.team, role: player.role, attached, rigged: Boolean(view.rig), disposed, terminating, installError,
+      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance,
     }),
   });
 }

@@ -2,6 +2,7 @@ import { createSnapshotRenderState } from "./SnapshotRenderState.js";
 import { createPlayerModelView } from "./PlayerModelView.js";
 import { createBallModelView } from "./BallModelView.js";
 import { createDefaultPlayerAssetLoader, disposePlayerAssetTemplate } from "./PlayerAssetLoader.js";
+import { ensureRigFootballKitOverlay, rigFootballKitEvidence } from "./RigFootballKitOverlay.js";
 
 function assertFunction(value, name) {
   if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
@@ -14,6 +15,34 @@ function defaultLowPowerDevice(target) {
 }
 function createWorldProjection({ width = 1200, height = 700, scale = 0.1 } = {}) {
   return Object.freeze({ worldX: (value) => (value - width / 2) * scale, worldZ: (value) => (value - height / 2) * scale });
+}
+function appearanceDiagnostics(playerViews) {
+  const players = Object.freeze([...playerViews.values()].map((view) => {
+    const diagnostics = view.diagnostics?.() ?? Object.freeze({});
+    const appearance = diagnostics.appearance ?? Object.freeze({ mode: diagnostics.rigged ? "asset" : "fallback", bootCount: 0, preservedMapCount: 0, tintedKitMaterialCount: 0, materialCount: 0, semanticCounts: Object.freeze({}) });
+    const overlay = diagnostics.rigged ? rigFootballKitEvidence(view.root) : Object.freeze({ installed: false, visibleKitNodeCount: 0, bootGeometryCount: Number(appearance.bootCount || 0), nodes: Object.freeze([]) });
+    return Object.freeze({
+      id: diagnostics.id ?? view.id ?? null,
+      team: diagnostics.team ?? null,
+      role: diagnostics.role ?? null,
+      rigged: Boolean(diagnostics.rigged),
+      ...appearance,
+      rigKitInstalled: overlay.installed,
+      visibleKitNodeCount: overlay.visibleKitNodeCount,
+      bootGeometryCount: overlay.bootGeometryCount,
+      bootCount: diagnostics.rigged ? overlay.bootGeometryCount : Number(appearance.bootCount || 0),
+      rigKitNodes: overlay.nodes,
+    });
+  }));
+  return Object.freeze({
+    players,
+    riggedPlayers: players.filter((player) => player.rigged).length,
+    fallbackPlayers: players.filter((player) => !player.rigged).length,
+    bootlessPlayers: players.filter((player) => Number(player.bootGeometryCount || player.bootCount || 0) < 1).length,
+    preservedMapPlayers: players.filter((player) => Number(player.preservedMapCount || 0) > 0).length,
+    tintedKitPlayers: players.filter((player) => Number(player.tintedKitMaterialCount || 0) > 0).length,
+    visibleKitPlayers: players.filter((player) => !player.rigged || (player.rigKitInstalled && Number(player.visibleKitNodeCount || 0) >= 7 && Number(player.bootGeometryCount || 0) === 2)).length,
+  });
 }
 
 export function createBrowserModelViewAdapter({ target, document, getScenePort, isSceneBound = () => Boolean(getScenePort?.()), createPlayerView = createPlayerModelView, createBallView = createBallModelView, assetLoader = createDefaultPlayerAssetLoader(), visualTestMode = defaultVisualTestMode(target), lowPowerDevice = defaultLowPowerDevice(target), world = createWorldProjection() } = {}) {
@@ -34,10 +63,17 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     if (badge) { badge.className = `asset-status ${state}`; badge.textContent = label; badge.title = detail; }
     return status;
   }
+  function installRigAsset(view, playerFacts) {
+    const installed = view.installAsset?.({ characterScene, animations });
+    if (!view.rigged) return Boolean(installed);
+    const evidence = ensureRigFootballKitOverlay({ root: view.root, player: playerFacts, lowPowerDevice });
+    if (evidence.visibleKitNodeCount < 7 || evidence.bootGeometryCount !== 2) throw new Error(`player model view ${playerFacts?.id ?? view.id} rejected incomplete rig kit geometry`);
+    return true;
+  }
   function createView(player) {
     const view = createPlayerView({ player, scenePort, document, worldX: world.worldX, worldZ: world.worldZ, lowPowerDevice });
     if (view.attach?.() === false) { view.teardown?.(); throw new Error(`player model view ${player.id} rejected scene attachment`); }
-    if (characterScene) view.installAsset?.({ characterScene, animations });
+    if (characterScene) installRigAsset(view, player);
     playerViews.set(player.id, view); return view;
   }
   function reconcilePlayers(players) {
@@ -60,8 +96,8 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
           throw new Error("character template replacement is blocked while live rigs may share its geometry");
         }
         characterScene = nextCharacterScene;
-        for (const view of playerViews.values()) view.installAsset?.({ characterScene, animations });
-        setAssetStatus("ready", "MODEL · READY", "Character loaded; animation loading in background");
+        for (const view of playerViews.values()) installRigAsset(view, view.diagnostics?.() ?? Object.freeze({ id: view.id, team: 0, role: "FW" }));
+        setAssetStatus("ready", "FOOTBALL KIT · READY", "Character, explicit jersey/shorts/socks and boot geometry loaded");
       } catch (error) {
         if (unavailable() || generation !== loadGeneration) return false;
         setAssetStatus("error", "MODEL · FALLBACK", error?.message ?? String(error)); return false;
@@ -73,15 +109,14 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       animations = Object.freeze([...(motion?.animations ?? [])]);
       for (const view of playerViews.values()) view.installAnimations?.(animations);
       disposePlayerAssetTemplate(motion?.scene);
-      setAssetStatus("ready", "PLAYER RIG · READY", `${animations.length} animation clips`); return true;
+      setAssetStatus("ready", "PLAYER RIG + KIT · READY", `${animations.length} animation clips; explicit football clothing and boots attached`); return true;
     } catch (error) {
       if (unavailable() || generation !== loadGeneration) return false;
-      setAssetStatus("warning", "MODEL READY · BASIC MOTION", error?.message ?? String(error)); return false;
+      setAssetStatus("warning", "KIT READY · BASIC MOTION", error?.message ?? String(error)); return false;
     }
   }
   function startAssetLoad({ reuseCharacterScene = false } = {}) {
-    loadGeneration += 1;
-    const generation = loadGeneration;
+    loadGeneration += 1; const generation = loadGeneration;
     if (visualTestMode) setAssetStatus("ready", "VISUAL TEST · MODEL VIEWS", "Snapshot-driven procedural model validation");
     else void loadAssets(generation, { reuseCharacterScene });
   }
@@ -90,8 +125,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     scenePort = getScenePort(); if (!scenePort || typeof scenePort.addObject !== "function") return false;
     ballView = createBallView({ scenePort, document, worldX: world.worldX, worldZ: world.worldZ });
     if (ballView.attach?.() === false) { ballView.teardown?.(); ballView = null; return false; }
-    attached = true; startAssetLoad();
-    return true;
+    attached = true; startAssetLoad(); return true;
   }
   function render(frame) {
     if (!attached && !unavailable() && isSceneBound()) attach();
@@ -107,48 +141,21 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
   function reset() {
     if (!attached || unavailable()) return false;
     for (const view of playerViews.values()) view.reset?.();
-    ballView?.reset?.();
-    startAssetLoad({ reuseCharacterScene: Boolean(characterScene) });
-    return true;
+    ballView?.reset?.(); startAssetLoad({ reuseCharacterScene: Boolean(characterScene) }); return true;
   }
   function teardown() {
-    if (disposed) return false;
-    const errors = [];
-    if (!terminating) {
-      loadGeneration += 1;
-      terminating = true;
-      attached = false;
-    }
+    if (disposed) return false; const errors = [];
+    if (!terminating) { loadGeneration += 1; terminating = true; attached = false; }
     for (const [id, view] of [...playerViews.entries()].reverse()) {
-      try {
-        view.teardown?.();
-        playerViews.delete(id);
-      } catch (error) {
-        errors.push(error);
-      }
+      try { view.teardown?.(); playerViews.delete(id); } catch (error) { errors.push(error); }
     }
     if (playerViews.size === 0 && ballView) {
-      try {
-        ballView.teardown?.();
-        ballView = null;
-      } catch (error) {
-        errors.push(error);
-      }
+      try { ballView.teardown?.(); ballView = null; } catch (error) { errors.push(error); }
     }
     if (playerViews.size === 0 && !ballView && characterScene) {
-      try {
-        disposePlayerAssetTemplate(characterScene);
-        characterScene = null;
-      } catch (error) {
-        errors.push(error);
-      }
+      try { disposePlayerAssetTemplate(characterScene); characterScene = null; } catch (error) { errors.push(error); }
     }
-    if (playerViews.size === 0 && !ballView && !characterScene) {
-      animations = Object.freeze([]);
-      scenePort = null;
-      disposed = true;
-      terminating = false;
-    }
+    if (playerViews.size === 0 && !ballView && !characterScene) { animations = Object.freeze([]); scenePort = null; disposed = true; terminating = false; }
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1) throw new AggregateError(errors, "model view teardown reported errors");
     return disposed;
@@ -158,7 +165,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     diagnostics: () => Object.freeze({
       owner: "browser-model-views", attached, disposed, terminating, sceneBound: Boolean(isSceneBound()),
       playerCount: playerViews.size, ballAttached: Boolean(ballView?.diagnostics?.().attached),
-      assetState, assetDetail, animationClips: animations.length, loadGeneration,
+      assetState, assetDetail, animationClips: animations.length, loadGeneration, appearance: appearanceDiagnostics(playerViews),
     }),
   });
 }
