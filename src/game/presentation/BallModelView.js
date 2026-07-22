@@ -56,7 +56,7 @@ export function createBallModelView({ scenePort, document, worldX, worldZ, three
     applyStyle(ballStyle); root.position.set(worldX(ball.x), .58 + (ball.height || 0), worldZ(ball.y)); root.rotation.set((ball.angle || 0) * .7, ball.angle || 0, (ball.angle || 0) * .35);
     if (activeCharge && selectedPlayer && selectedPlayerOwnsBall) {
       chargeRoot.visible = true; chargeRoot.position.set(worldX(selectedPlayer.x), 7.5, worldZ(selectedPlayer.y)); scenePort.copyCameraQuaternion?.(chargeRoot.quaternion);
-      const power = Math.max(0, Math.min(1, Number(activeCharge.power ?? 0))); fill.scale.x = Math.max(.02, power); fill.position.x = -2.4 + 2.4 * power; fill.material.color.set(power > .82 ? 0xff5b45 : 0xffcf58);
+      const power = Math.max(0, Math.min(1, Number(activeCharge.power ?? 0))); fill.scale.x = Math.max(.02, power); fill.position.x = -2.4 + 2.4 * power; fill.material.color.set(activeCharge.color ?? (power > .82 ? 0xff5b45 : 0xffcf58));
     } else chargeRoot.visible = false;
     return true;
   }
