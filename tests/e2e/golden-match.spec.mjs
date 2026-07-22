@@ -105,6 +105,7 @@ test.describe("TON-94 current-main golden match", () => {
     // phases cannot be missed by a slow software renderer.
     await advanceAuthoritativeRuntime(page, 90);
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.replayActive === true, null, { timeout: 10_000 });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
 
     const replayEvidence = await page.evaluate(() => ({
@@ -118,6 +119,10 @@ test.describe("TON-94 current-main golden match", () => {
     expect(replayEvidence.engine.replayActive).toBe(true);
     expect(replayEvidence.cameraReplay.replay.active).toBe(true);
     expect(replayEvidence.cameraReplay.replay.missingFrame).toBe(false);
+    expect(replayEvidence.scene.cameraPosition).toBeTruthy();
+    expect(Math.abs(replayEvidence.scene.cameraPosition.x)).toBeLessThanOrEqual(58);
+    expect(replayEvidence.scene.cameraPosition.y).toBeGreaterThanOrEqual(12);
+    expect(Math.abs(replayEvidence.scene.cameraPosition.z)).toBeLessThanOrEqual(32);
 
     await advanceAuthoritativeRuntime(page, 600);
     await page.waitForFunction(() => {
