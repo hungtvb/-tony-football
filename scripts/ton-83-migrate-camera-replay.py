@@ -80,13 +80,38 @@ replace_once(
     'render frame remains projection-free',
 )
 replace_once(
+    '''    const cameraDt = Math.min(0.05, Math.max(0, (render3D.lastNow ? now - render3D.lastNow : 16.667) / 1000));
+    render3D.lastNow = now;
+    cameraPosition.lerp(cameraTarget, gameFeel.cameraEase(cameraDt, Boolean(replayFrame)));
+    const feelOffset = gameFeel.sampleCameraOffset(now);
+    cameraPosition.x += feelOffset.x * 0.42 + feelOffset.z * 0.12;
+    cameraPosition.y += feelOffset.y * 0.28;
+    cameraPosition.z += feelOffset.z * 0.28;''',
+    '''    const cameraDt = Math.min(0.05, Math.max(0, (render3D.lastNow ? now - render3D.lastNow : 16.667) / 1000));
+    render3D.lastNow = now;
+    const enteringReplayCamera = Boolean(replayFrame) && !render3D.replayCameraActive;
+    render3D.replayCameraActive = Boolean(replayFrame);
+    if (enteringReplayCamera) cameraPosition.copy(cameraTarget);
+    else cameraPosition.lerp(cameraTarget, gameFeel.cameraEase(cameraDt, Boolean(replayFrame)));
+    const feelOffset = gameFeel.sampleCameraOffset(now);
+    cameraPosition.x += feelOffset.x * 0.42 + feelOffset.z * 0.12;
+    cameraPosition.y += feelOffset.y * 0.28;
+    cameraPosition.z += feelOffset.z * 0.28;
+    if (replayFrame) {
+      cameraPosition.x = clamp(cameraPosition.x, -58, 58);
+      cameraPosition.y = Math.max(12, cameraPosition.y);
+      cameraPosition.z = clamp(cameraPosition.z, -32, 32);
+    }''',
+    'replay camera stadium clearance',
+)
+replace_once(
     '    createPresentationFeedback,\n',
     '''    createPresentationFeedback,
     getPresentationFrameFacts: () => Object.freeze({
       cameraMode: game.cameraMode,
       goalScorerId: game.goalScorer ? compatibilityPlayerId(game.goalScorer) : null,
     }),
-''',
+ ''',
     'presentation frame facts',
 )
 replace_once('    game.replay.start(captureCompatibilitySnapshot());\n', '    // Engine snapshots exclusively activate and advance replay.\n', 'manual goal replay activation')
@@ -116,5 +141,7 @@ if remaining:
     raise RuntimeError("forbidden camera/replay ownership remains:\n" + "\n".join(remaining))
 if 'window.__TONY_CAMERA_REPLAY_BRIDGE__' not in text or 'getPresentationFrameFacts' not in text:
     raise RuntimeError("camera/replay bridge or immutable frame facts are missing")
+if 'enteringReplayCamera' not in text or 'cameraPosition.z = clamp(cameraPosition.z, -32, 32)' not in text:
+    raise RuntimeError("replay camera stadium clearance is missing")
 
 path.write_text(text, encoding="utf-8")
