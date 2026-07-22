@@ -21,6 +21,7 @@ export function createBrowserSettingsAdapter({
   document = target?.document,
   storage = target?.localStorage,
   keys = DEFAULT_KEYS,
+  toneProfiles = DEFAULT_TONES,
   controlBindings = {},
   createAudioContext = () => {
     const AudioContext = target?.AudioContext ?? target?.webkitAudioContext;
@@ -28,7 +29,7 @@ export function createBrowserSettingsAdapter({
   },
 } = {}) {
   if (!target || typeof target !== "object") throw new TypeError("BrowserSettingsAdapter requires a target");
-  let attached = false; let disposed = false; let audioContext = null; let previewCount = 0;
+  let attached = false; let disposed = false; let audioContext = null; let previewCount = 0; let audioFailureCount = 0; let audioHealth = "idle";
   let config = Object.freeze({ values: Object.freeze({}), allowed: Object.freeze({}), apply: Object.freeze({}) });
   const listeners = [];
 
@@ -37,19 +38,59 @@ export function createBrowserSettingsAdapter({
     try { storage?.setItem?.(key, value); return true; } catch { return false; }
   }
 
-  function preview(name, value) {
+  function releaseAudioContext(context, { close = false } = {}) {
+    if (audioContext === context) audioContext = null;
+    if (close && context?.state !== "closed") {
+      try { Promise.resolve(context?.close?.()).catch(() => {}); } catch { /* unavailable audio is a non-fatal fallback */ }
+    }
+  }
+
+  async function readyAudioContext() {
+    if (disposed) return null;
+    let context = audioContext;
+    if (context?.state === "closed") { releaseAudioContext(context); context = null; }
+    if (!context) {
+      try { context = createAudioContext?.() ?? null; } catch { context = null; }
+      audioContext = context;
+    }
+    if (!context?.createOscillator || !context?.createGain) {
+      releaseAudioContext(context); audioHealth = "unavailable"; audioFailureCount += 1; return null;
+    }
+    if (context.state === "suspended" || context.state === "interrupted") {
+      audioHealth = "recovering";
+      try { await context.resume?.(); } catch {
+        releaseAudioContext(context, { close: true }); audioHealth = "unavailable"; audioFailureCount += 1; return null;
+      }
+      if (context.state !== "running") {
+        releaseAudioContext(context, { close: true }); audioHealth = "unavailable"; audioFailureCount += 1; return null;
+      }
+    }
+    if (context.state && context.state !== "running") {
+      releaseAudioContext(context, { close: true }); audioHealth = "unavailable"; audioFailureCount += 1; return null;
+    }
+    audioHealth = "ready"; return context;
+  }
+
+  async function preview(name, value) {
     if (name !== "sound" && config.values.sound === false) return false;
-    const profile = name === "weather" ? { ...DEFAULT_TONES.weather, frequency: DEFAULT_TONES.weather[value] ?? DEFAULT_TONES.weather.clear } : DEFAULT_TONES[name];
+    const profile = name === "weather" ? { ...toneProfiles.weather, frequency: toneProfiles.weather?.[value] ?? toneProfiles.weather?.clear } : toneProfiles[name];
     if (!profile) return false;
+    const context = await readyAudioContext(); if (!context) return false;
+    const frequencies = profile.frequencies ?? [profile.frequency]; const scheduled = [];
     try {
-      audioContext ??= createAudioContext?.() ?? null;
-      if (!audioContext?.createOscillator || !audioContext?.createGain) return false;
-      const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain(); const now = audioContext.currentTime;
-      oscillator.type = "sine"; oscillator.frequency.value = profile.frequency;
-      gain.gain.setValueAtTime(profile.volume, now); gain.gain.exponentialRampToValueAtTime(0.001, now + profile.duration);
-      oscillator.connect(gain).connect(audioContext.destination); oscillator.start(now); oscillator.stop(now + profile.duration);
+      const now = context.currentTime;
+      for (const frequency of frequencies) {
+        const oscillator = context.createOscillator(); const gain = context.createGain();
+        oscillator.type = "sine"; oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(profile.volume, now); gain.gain.exponentialRampToValueAtTime(0.001, now + profile.duration);
+        oscillator.connect(gain).connect(context.destination); scheduled.push(oscillator);
+      }
+      for (const oscillator of scheduled) { oscillator.start(now); oscillator.stop(now + profile.duration); }
       previewCount += 1; return true;
-    } catch { return false; }
+    } catch {
+      for (const oscillator of scheduled) { try { oscillator.stop?.(); oscillator.disconnect?.(); } catch { /* best-effort partial-cue cleanup */ } }
+      releaseAudioContext(context, { close: true }); audioHealth = "unavailable"; audioFailureCount += 1; return false;
+    }
   }
 
   function updateButtons(name, value) {
@@ -67,7 +108,7 @@ export function createBrowserSettingsAdapter({
     config.apply[name]?.(frozenCopy({ name, value, source: "user-preference" }));
     config = Object.freeze({ ...config, values: Object.freeze({ ...config.values, [name]: value }) });
     if (persist && name !== "sound") save(name, value);
-    updateButtons(name, value); if (playPreview && (name !== "sound" || value)) preview(name, value);
+    updateButtons(name, value); if (playPreview && (name !== "sound" || value)) void preview(name, value);
     return true;
   }
 
@@ -94,11 +135,10 @@ export function createBrowserSettingsAdapter({
     if (disposed) return false;
     for (const [node, type, listener] of listeners.splice(0).reverse()) node.removeEventListener?.(type, listener);
     if (OWNERS.get(target) === api) OWNERS.delete(target);
-    try { audioContext?.close?.(); } catch { /* unavailable audio is a non-fatal fallback */ }
-    audioContext = null; attached = false; disposed = true; return true;
+    releaseAudioContext(audioContext, { close: true }); audioHealth = "disposed"; attached = false; disposed = true; return true;
   }
-  function diagnostics() { return Object.freeze({ owner: "browser-settings", attached, disposed, previewCount, values: frozenCopy(config.values), controlBindings: frozenCopy(controlBindings), audioAvailable: Boolean(target?.AudioContext ?? target?.webkitAudioContext) }); }
+  function diagnostics() { return Object.freeze({ owner: "browser-settings", attached, disposed, previewCount, audioFailureCount, audioHealth, audioState: audioContext?.state ?? null, values: frozenCopy(config.values), controlBindings: frozenCopy(controlBindings), audioAvailable: Boolean(target?.AudioContext ?? target?.webkitAudioContext) }); }
 
-  const api = Object.freeze({ attach, configure, set, reset, teardown, diagnostics });
+  const api = Object.freeze({ attach, configure, set, preview, reset, teardown, diagnostics });
   return api;
 }
