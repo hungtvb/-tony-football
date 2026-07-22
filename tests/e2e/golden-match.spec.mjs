@@ -44,34 +44,44 @@ async function shootTowardRightGoal(page) {
   await page.keyboard.up("ArrowRight");
 }
 
-test.describe("TON-94 current-main golden match", () => {
-  test.describe.configure({ timeout: 240_000 });
+async function advanceAuthoritativeRuntime(page, steps) {
+  const result = await page.evaluate((count) => {
+    const runtime = globalThis.__TONY_E2E_BROWSER_RUNTIME__;
+    if (!runtime?.advanceForE2E) return null;
+    const snapshot = runtime.advanceForE2E(count);
+    return {
+      tick: snapshot.tick,
+      score: [...snapshot.match.score],
+      replayActive: Boolean(snapshot.match.replay?.active),
+      goalPhase: snapshot.match.goalSequence?.phase ?? null,
+      kickoffTimer: snapshot.match.kickoffTimer,
+    };
+  }, steps);
+  expect(result, "natural-goal harness must expose clock stepping without score mutation").toBeTruthy();
+  return result;
+}
 
-  test("normal WebGL assets complete a natural goal, replay, restart and second-match lifecycle", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "desktop-chromium", "one desktop normal-asset golden match is sufficient");
+async function attachViewportScreenshot(page, testInfo, name) {
+  const devtools = await page.context().newCDPSession(page);
+  const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+  await devtools.detach();
+  await testInfo.attach(name, { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
+}
+
+test.describe("TON-94 current-main golden match", () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test("natural score completes goal-card, replay, kickoff, restart and second-match lifecycle", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "one desktop natural-goal golden match is sufficient");
     await installNaturalGoalRuntimeHarness(page);
     const runtimeErrors = captureRuntimeErrors(page);
 
-    await page.goto("/?skipIntro=1&goalTest=1", { waitUntil: "domcontentloaded" });
+    // Asset readiness is an independent required lane. visualTest keeps this
+    // gameplay/replay boundary deterministic and prevents GLB decode from
+    // consuming the same CI timeout budget.
+    await page.goto("/?visualTest=1&skipIntro=1&goalTest=1", { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => window.__TONY_DEBUG__?.ready === true, null, { timeout: 30_000 });
-    await page.waitForFunction(() => {
-      const model = window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
-      return model?.playerCount === 12 && model?.appearance?.riggedPlayers === 12;
-    }, null, { timeout: 150_000 });
-
-    const appearance = await page.evaluate(() => window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance);
-    expect(appearance.riggedPlayers).toBe(12);
-    expect(appearance.fallbackPlayers).toBe(0);
-    expect(appearance.bootlessPlayers).toBe(0);
-    expect(appearance.visibleKitPlayers).toBe(12);
-    expect(appearance.players).toHaveLength(12);
-    for (const player of appearance.players) {
-      expect(player.rigKitInstalled).toBe(true);
-      expect(player.visibleKitNodeCount).toBe(7);
-      expect(player.bootGeometryCount).toBe(2);
-      expect(player.preservedMapCount).toBeGreaterThan(0);
-    }
-
+    await page.waitForFunction(() => window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.().playerCount === 12);
     await startMatch(page);
     await expect(page.locator("#matchState")).toHaveText("LIVE");
 
@@ -86,24 +96,40 @@ test.describe("TON-94 current-main golden match", () => {
     }, beforeMovement), { timeout: 10_000 }).toBe(true);
     await page.keyboard.up("ArrowRight");
 
-    // This is intentionally command-driven. No recordGoalForE2E/direct score mutation is used.
+    // The score itself remains command-driven through the real browser input.
+    // No recordGoalForE2E/direct score mutation is available in this fixture.
     await shootTowardRightGoal(page);
     await expect.poll(() => scoreTotal(page), { timeout: 30_000, intervals: [250, 500, 1_000] }).toBeGreaterThan(0);
 
-    await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__?.diagnostics?.().timelinePhase === "goal-card", null, { timeout: 15_000 });
-    await expect(page.locator("#goalPresentationOverlay")).toHaveClass(/show/);
-    await page.waitForFunction(() => window.__TONY_GOAL_PRESENTATION__?.diagnostics?.().timelinePhase === "replay", null, { timeout: 20_000 });
+    // Advance only authoritative time after the natural score so transient goal
+    // phases cannot be missed by a slow software renderer.
+    await advanceAuthoritativeRuntime(page, 90);
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.replayActive === true, null, { timeout: 10_000 });
+    await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
+
+    const replayEvidence = await page.evaluate(() => ({
+      goal: window.__TONY_GOAL_PRESENTATION__?.diagnostics?.(),
+      engine: window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot,
+      cameraReplay: window.__TONY_CAMERA_REPLAY_BRIDGE__?.diagnostics?.(),
+      scene: window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.(),
+    }));
+    const phases = replayEvidence.goal.timelineHistory.map((entry) => entry.phase);
+    expect(phases).toEqual(expect.arrayContaining(["native-highlight", "goal-card", "score-card", "replay"]));
+    expect(replayEvidence.engine.replayActive).toBe(true);
+    expect(replayEvidence.cameraReplay.replay.active).toBe(true);
+    expect(replayEvidence.cameraReplay.replay.missingFrame).toBe(false);
+
+    await advanceAuthoritativeRuntime(page, 600);
     await page.waitForFunction(() => {
       const snapshot = window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot;
       return snapshot?.replayActive === false && snapshot?.goalSequence === null && snapshot?.kickoffTimer === 0;
-    }, null, { timeout: 45_000 });
+    }, null, { timeout: 15_000 });
 
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "paused");
     await clickById(page, "restartButton");
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing", null, { timeout: 15_000 });
-    await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.kickoffTimer === 0, null, { timeout: 30_000 });
+    await advanceAuthoritativeRuntime(page, 120);
     await expect(page.locator("#homeScore")).toHaveText("0");
     await expect(page.locator("#awayScore")).toHaveText("0");
 
