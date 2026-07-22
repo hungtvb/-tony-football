@@ -154,7 +154,7 @@ function drawCharge(context, selectedPlayer, activeCharge) {
   if (!selectedPlayer || !activeCharge) return;
   const power = clamp(Number(activeCharge.power || 0), 0, 1);
   context.fillStyle = "rgba(0,0,0,.7)"; context.fillRect(selectedPlayer.x - 31, selectedPlayer.y - 50, 62, 8);
-  context.fillStyle = power > .82 ? "#ff5b45" : "#ffcf58"; context.fillRect(selectedPlayer.x - 30, selectedPlayer.y - 49, 60 * power, 6);
+  context.fillStyle = activeCharge.color ?? (power > .82 ? "#ff5b45" : "#ffcf58"); context.fillRect(selectedPlayer.x - 30, selectedPlayer.y - 49, 60 * power, 6);
 }
 
 function drawGoalFlash(context, world, goalSequence) {

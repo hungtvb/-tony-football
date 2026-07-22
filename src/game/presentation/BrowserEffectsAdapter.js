@@ -9,7 +9,7 @@ export function createBrowserEffectsAdapter({ target, lowPowerDevice = false, re
   if (!target || typeof target !== "object") throw new TypeError("BrowserEffectsAdapter requires a target");
   const feel = createGameFeelController({ lowPowerDevice, reducedMotion });
   const contextual = createContextualParticlePolicy({ lowPowerDevice, reducedMotion });
-  let particles = []; let trail = []; let enabled = true; let attached = false; let disposed = false; let projectionSequence = 0; let cachedSnapshot = null;
+  let particles = []; let trail = []; let enabled = true; let attached = false; let disposed = false; let projectionSequence = 0; let cachedSnapshot = null; let projectedFrames = new WeakMap();
 
   function attach() {
     if (disposed || attached) return false;
@@ -48,13 +48,23 @@ export function createBrowserEffectsAdapter({ target, lowPowerDevice = false, re
   }
   function projectCharge({ active = false, power = 0, player = null } = {}) {
     if (!enabled || disposed || !active || !player) return Object.freeze({ active: false, power: 0, player: null, color: "#ffcf58" });
-    return Object.freeze({ active: true, power: clamp(Number(power) || 0, 0, 1), player: copyPoint(player), color: power > 0.82 ? "#ff5b45" : "#ffcf58" });
+    const normalizedPower = clamp(Number(power) || 0, 0, 1);
+    return Object.freeze({ active: true, power: normalizedPower, player: copyPoint(player), color: normalizedPower > 0.82 ? "#ff5b45" : "#ffcf58" });
+  }
+  function projectFrame(frame) {
+    if (!frame || typeof frame !== "object") return frame;
+    const cached = projectedFrames.get(frame); if (cached) return cached;
+    const selectedPlayerId = frame.snapshot?.match?.selectedPlayerId;
+    const selectedPlayer = frame.renderState?.players?.find?.((player) => player.id === selectedPlayerId) ?? null;
+    const projectedCharge = frame.activeCharge ? projectCharge({ active: true, power: frame.activeCharge.power, player: selectedPlayer }) : null;
+    const projected = Object.freeze({ ...frame, activeCharge: projectedCharge?.active ? projectedCharge : null });
+    projectedFrames.set(frame, projected); return projected;
   }
   function snapshot() { cachedSnapshot ??= Object.freeze({ projectionSequence, particles: Object.freeze(particles.map((particle) => Object.freeze({ ...particle }))), enabled }); return cachedSnapshot; }
   function setEnabled(value) { if (disposed) return false; enabled = Boolean(value); if (!enabled) particles = []; projectionSequence += 1; cachedSnapshot = null; return true; }
-  function reset() { if (disposed) return false; particles = []; trail = []; feel.clear(); projectionSequence = 0; cachedSnapshot = null; return true; }
+  function reset() { if (disposed) return false; particles = []; trail = []; feel.clear(); projectionSequence = 0; cachedSnapshot = null; projectedFrames = new WeakMap(); return true; }
   function teardown() { if (disposed) return false; reset(); if (OWNERS.get(target) === api) OWNERS.delete(target); attached = false; disposed = true; return true; }
   function diagnostics() { return Object.freeze({ owner: "browser-effects", attached, disposed, enabled, particleCount: particles.length, trailPointCount: trail.length, trailCapacity: feel.trailPointCount(Number.POSITIVE_INFINITY), projectionSequence, budget: feel.particleBudget() }); }
-  const api = Object.freeze({ attach, emitParticles, emitContextParticles, update, recordTrail, projectTrail, projectCharge, snapshot, setEnabled, reset, teardown, diagnostics });
+  const api = Object.freeze({ attach, emitParticles, emitContextParticles, update, recordTrail, projectTrail, projectCharge, projectFrame, snapshot, setEnabled, reset, teardown, diagnostics });
   return api;
 }

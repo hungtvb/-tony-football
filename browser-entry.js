@@ -42,14 +42,14 @@ function projectedPresentationFrame(frame, projection) {
   });
 }
 
-function wrapProjectedAdapter(adapter, getProjection, owner) {
+function wrapProjectedAdapter(adapter, getProjection, owner, projectEffects = (frame) => frame) {
   let consumedProjectionSequence = 0;
   return Object.freeze({
     attach: (...args) => adapter.attach?.(...args),
     render(frame) {
       const projection = getProjection();
       if (projection?.projectionSequence) consumedProjectionSequence = projection.projectionSequence;
-      return adapter.render?.(projectedPresentationFrame(frame, projection));
+      return adapter.render?.(projectedPresentationFrame(projectEffects(frame), projection));
     },
     reset: (...args) => { consumedProjectionSequence = 0; return adapter.reset?.(...args); },
     teardown: (...args) => adapter.teardown?.(...args),
@@ -81,12 +81,12 @@ if (typeof globalThis.window !== "undefined") {
     () => effectsAdapter,
     ({ target, document }) => {
       modelViewAdapter = createBrowserModelViewAdapter({ target, document, getScenePort: () => sceneFacade.port, isSceneBound: () => sceneFacade.bound });
-      return wrapProjectedAdapter(modelViewAdapter, () => cameraReplayAdapter.projection(), "webgl-model");
+      return wrapProjectedAdapter(modelViewAdapter, () => cameraReplayAdapter.projection(), "webgl-model", (frame) => effectsAdapter.projectFrame(frame));
     },
     ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({ target, document, onHostChanged: (port) => sceneFacade.bind(port) }),
     ({ target, document }) => {
       const renderer = createCanvasMatchRenderer({ target, document });
-      canvasMatchRenderer = wrapProjectedAdapter(renderer, () => cameraReplayAdapter.projection(), "canvas-match");
+      canvasMatchRenderer = wrapProjectedAdapter(renderer, () => cameraReplayAdapter.projection(), "canvas-match", (frame) => effectsAdapter.projectFrame(frame));
       return canvasMatchRenderer;
     },
   ]);

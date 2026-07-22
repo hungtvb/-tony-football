@@ -10,6 +10,8 @@ test("effects adapter owns immutable particle, trail and charge projections", ()
   const points = [{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 6 }, { x: 7, y: 8 }]; const trail = adapter.projectTrail(points, { speed: 500 });
   assert.ok(Object.isFrozen(trail)); assert.notEqual(trail[0], points[0]); assert.ok(trail[0].opacity > 0);
   const charge = adapter.projectCharge({ active: true, power: 0.9, player: { x: 4, y: 5 } }); assert.deepEqual(charge, { active: true, power: 0.9, player: { x: 4, y: 5, height: 0 }, color: "#ff5b45" });
+  const frame = Object.freeze({ snapshot: Object.freeze({ match: Object.freeze({ selectedPlayerId: "p1" }) }), renderState: Object.freeze({ players: Object.freeze([Object.freeze({ id: "p1", x: 4, y: 5 })]) }), activeCharge: Object.freeze({ power: 0.9 }) });
+  const projectedFrame = adapter.projectFrame(frame); assert.equal(adapter.projectFrame(frame), projectedFrame); assert.ok(Object.isFrozen(projectedFrame.activeCharge)); assert.equal(projectedFrame.activeCharge.color, "#ff5b45");
   adapter.update(0.1); assert.equal(adapter.reset(), true); assert.equal(adapter.snapshot().particles.length, 0); assert.equal(adapter.teardown(), true);
 });
 
