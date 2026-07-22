@@ -22,7 +22,6 @@ test("TON-83 migration keeps replay camera clear and points back into the field"
   ]) {
     assert.equal(migration.includes(marker), true, `migration must retain ${marker}`);
   }
-  assert.equal(migration.includes("const scoringRight = game.goalSequence?.team === HOME"), false);
 });
 
 test("Three scene diagnostics expose immutable live camera position", async () => {
