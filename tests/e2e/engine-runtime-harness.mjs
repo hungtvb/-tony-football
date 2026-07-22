@@ -17,6 +17,14 @@ async function exposeBrowserRuntime(page, methods) {
   });
 }
 
+const ADVANCE_ONLY_METHOD = `  advanceForE2E(steps, deltaSeconds = 1 / 60) {
+    if (!Number.isInteger(steps) || steps < 0) {
+      throw new RangeError("E2E runtime steps must be a non-negative integer");
+    }
+    for (let index = 0; index < steps; index += 1) this.step(deltaSeconds);
+    return this.snapshot;
+  }`;
+
 // Presentation-only fixture retained for existing projection tests. It is not
 // valid evidence for headless gameplay, natural scoring, or replay acceptance.
 export async function installEngineRuntimeHarness(page) {
@@ -24,16 +32,13 @@ export async function installEngineRuntimeHarness(page) {
     return this.#engine.recordGoal(team, options);
   }
 
-  advanceForE2E(steps, deltaSeconds = 1 / 60) {
-    if (!Number.isInteger(steps) || steps < 0) {
-      throw new RangeError("E2E runtime steps must be a non-negative integer");
-    }
-    for (let index = 0; index < steps; index += 1) this.step(deltaSeconds);
-    return this.snapshot;
-  }`);
+${ADVANCE_ONLY_METHOD}`);
 }
 
 export async function installNaturalGoalRuntimeHarness(page) {
+  // Clock stepping is exposed only to finish an already naturally-scored
+  // incident deterministically on software-rendered CI. It cannot mutate score.
+  await exposeBrowserRuntime(page, ADVANCE_ONLY_METHOD);
   await page.route("**/game.js*", async (route) => {
     const response = await route.fetch();
     const source = await response.text();
