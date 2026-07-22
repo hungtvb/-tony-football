@@ -63,10 +63,12 @@ test.describe("TON-94 current-main golden match", () => {
     expect(appearance.riggedPlayers).toBe(12);
     expect(appearance.fallbackPlayers).toBe(0);
     expect(appearance.bootlessPlayers).toBe(0);
+    expect(appearance.visibleKitPlayers).toBe(12);
     expect(appearance.players).toHaveLength(12);
     for (const player of appearance.players) {
-      expect(player.kitNodeCount).toBe(7);
-      expect(player.bootCount).toBe(2);
+      expect(player.rigKitInstalled).toBe(true);
+      expect(player.visibleKitNodeCount).toBe(7);
+      expect(player.bootGeometryCount).toBe(2);
       expect(player.preservedMapCount).toBeGreaterThan(0);
     }
 
