@@ -1,10 +1,16 @@
 # Architecture
 
+## TON-85 final presentation boundary
+
+The deployed runtime now has one browser composition root in `browser-entry.js`. HUD, radar, event audio, Three.js environment, model views, Canvas fallback, camera/replay, settings and effects are adapter-owned. Tracked `game.js` no longer creates or renders those presentation owners; it publishes immutable compatibility facts through `__TONY_COMPATIBILITY_PRESENTATION_PORT__` only.
+
+That port is frozen and outward-only. It can configure user preferences and publish presentation feedback facts, but it cannot read or mutate `MatchEngine`. Its removal owner is TON-65 after final parity evidence retires `CompatibilitySnapshotAdapter`. WebGL/model, WebGL effects and Canvas consume the same frozen camera/replay and effects projections. Engine/application modules remain browser-free and authoritative.
+
 ## Current constraint
 
 Gameplay and AI authority have been extracted from `game.js` into the deterministic `MatchEngine` under `src/game/engine/`. The deployed browser consumes immutable snapshots and ordered events; temporary objects in `game.js` are outward-only presentation mirrors and cannot progress gameplay.
 
-Presentation ownership is now explicit for lifecycle, HUD, radar, event audio, the Three.js scene/environment, and player/ball model views. `BrowserPresentationComposition` creates adapters before the simulation loop starts. `ThreeSceneEnvironmentAdapter` transactionally starts `BrowserThreeSceneEnvironmentHost`, which owns the WebGL renderer/composer, scene, environment map, lights, pitch, stadium, goals, weather, resize and fallback lifecycle. `BrowserModelViewAdapter` owns snapshot-driven player/ball meshes, shared model loading, kit materials, mixers, labels, markers and charge indication through the frozen scene-host port. `game.js` retains Canvas fallback, settings, particles, trails, preview tones and camera/replay decisions until their dedicated slices.
+Presentation ownership is explicit across every browser surface. `BrowserPresentationComposition` creates lifecycle, HUD, radar, audio, environment, model, Canvas, camera/replay, settings, effect-state and WebGL-effect-view adapters before the simulation loop starts. `game.js` contains only compatibility composition/mirrors and the named frozen outward presentation port; no migrated presentation owner or direct render call remains there.
 
 Use `docs/11_SOURCE_MAP.md` as the operational index from subsystem ownership to current code and tests. This document remains the source of architectural rules and target dependency direction.
 
