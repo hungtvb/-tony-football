@@ -80,6 +80,19 @@ replace_once(
     'render frame remains projection-free',
 )
 replace_once(
+    '''    if (replayFrame) {
+      const scoringRight = game.goalSequence?.team === HOME;
+      cameraTarget.set(targetX + (scoringRight ? -16 : 16), 13, clamp(targetZ + 22, -19, 19));
+      cameraLook.set(targetX, 1.2, targetZ);
+    }''',
+    '''    if (replayFrame) {
+      const scoringRight = game.goalSequence?.team === HOME;
+      cameraTarget.set(targetX + (scoringRight ? -30 : 30), 22, clamp(targetZ + 12, -14, 14));
+      cameraLook.set(targetX + (scoringRight ? -7 : 7), 1.5, targetZ);
+    }''',
+    'replay incident framing',
+)
+replace_once(
     '''    const cameraDt = Math.min(0.05, Math.max(0, (render3D.lastNow ? now - render3D.lastNow : 16.667) / 1000));
     render3D.lastNow = now;
     cameraPosition.lerp(cameraTarget, gameFeel.cameraEase(cameraDt, Boolean(replayFrame)));
@@ -143,5 +156,7 @@ if 'window.__TONY_CAMERA_REPLAY_BRIDGE__' not in text or 'getPresentationFrameFa
     raise RuntimeError("camera/replay bridge or immutable frame facts are missing")
 if 'enteringReplayCamera' not in text or 'cameraPosition.z = clamp(cameraPosition.z, -32, 32)' not in text:
     raise RuntimeError("replay camera stadium clearance is missing")
+if 'scoringRight ? -30 : 30' not in text or 'scoringRight ? -7 : 7' not in text:
+    raise RuntimeError("replay incident framing is missing")
 
 path.write_text(text, encoding="utf-8")
