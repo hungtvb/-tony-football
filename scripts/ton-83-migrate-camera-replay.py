@@ -87,8 +87,8 @@ replace_once(
     }''',
     '''    if (replayFrame) {
       const scoringRight = game.goalSequence?.team === HOME;
-      cameraTarget.set(targetX + (scoringRight ? -30 : 30), 22, clamp(targetZ + 12, -14, 14));
-      cameraLook.set(targetX + (scoringRight ? -7 : 7), 1.5, targetZ);
+      cameraTarget.set(targetX + (scoringRight ? 18 : -18), 24, clamp(targetZ + 24, -26, 26));
+      cameraLook.set(targetX + (scoringRight ? -24 : 24), 1.5, targetZ);
     }''',
     'replay incident framing',
 )
@@ -156,7 +156,7 @@ if 'window.__TONY_CAMERA_REPLAY_BRIDGE__' not in text or 'getPresentationFrameFa
     raise RuntimeError("camera/replay bridge or immutable frame facts are missing")
 if 'enteringReplayCamera' not in text or 'cameraPosition.z = clamp(cameraPosition.z, -32, 32)' not in text:
     raise RuntimeError("replay camera stadium clearance is missing")
-if 'scoringRight ? -30 : 30' not in text or 'scoringRight ? -7 : 7' not in text:
-    raise RuntimeError("replay incident framing is missing")
+if 'scoringRight ? 18 : -18' not in text or 'scoringRight ? -24 : 24' not in text:
+    raise RuntimeError("replay incident inward framing is missing")
 
 path.write_text(text, encoding="utf-8")
