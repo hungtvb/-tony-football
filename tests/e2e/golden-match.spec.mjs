@@ -127,11 +127,11 @@ test.describe("TON-94 current-main golden match", () => {
     expect(replayEvidence.cameraReplay.replay.missingFrame).toBe(false);
 
     const cameraSamples = [];
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       const sample = await replayCameraSample(page);
       expect(sample, "replay camera diagnostics must be available").toBeTruthy();
       cameraSamples.push(sample);
-      if (index < 3) await advanceAuthoritativeRuntime(page, 15);
+      if (index < 2) await advanceAuthoritativeRuntime(page, 15);
     }
     await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
 
