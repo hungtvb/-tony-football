@@ -134,8 +134,6 @@ test.describe("TON-94 current-main golden match", () => {
       cameraSamples.push(sample);
       if (index < 1) await advanceAuthoritativeRuntime(page, 15);
     }
-    await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
-
     expect(new Set(cameraSamples.map((sample) => sample.frameIndex)).size).toBeGreaterThan(1);
     expect(cameraSamples.every((sample) => sample.active === true)).toBe(true);
     expect(cameraSamples.every((sample) => sample.cinematicActive === true)).toBe(true);
@@ -146,6 +144,12 @@ test.describe("TON-94 current-main golden match", () => {
     expect(cameraSamples.every((sample) => sample.position.y >= 12)).toBe(true);
     expect(cameraSamples.every((sample) => Math.abs(sample.position.z) <= 32)).toBe(true);
     expect(new Set(cameraSamples.map((sample) => Math.sign(sample.target.x - sample.look.x))).size).toBe(1);
+
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => {
+      const diagnostics = window.__TONY_DEBUG__?.diagnostics?.();
+      return diagnostics?.state === "paused" && diagnostics?.engineSnapshot?.replayActive === true;
+    }, null, { timeout: 10_000 });
 
     const resetAccepted = await page.evaluate(() => window.__TONY_CAMERA_REPLAY_BRIDGE__?.resetForE2E?.() ?? null);
     expect(resetAccepted, "golden harness must expose the presentation-only restore seam").toBe(true);
@@ -166,7 +170,7 @@ test.describe("TON-94 current-main golden match", () => {
       };
     });
     expect(missingHistoryFallback.engineReplayActive).toBe(true);
-    expect(missingHistoryFallback.runtimeState).toBe("playing");
+    expect(missingHistoryFallback.runtimeState).toBe("paused");
     expect(missingHistoryFallback.replay.active).toBe(true);
     expect(missingHistoryFallback.replay.missingFrame).toBe(true);
     expect(missingHistoryFallback.replay.cinematicAvailable).toBe(false);
@@ -181,7 +185,10 @@ test.describe("TON-94 current-main golden match", () => {
     expect(missingHistoryFallback.currentSnapshotReplayActive).toBe(true);
     expect(Math.abs(missingHistoryFallback.currentSnapshotTick - missingHistoryFallback.engineTick)).toBeLessThanOrEqual(1);
     expect(runtimeErrors).toEqual([]);
+    await attachViewportScreenshot(page, testInfo, "ton-94-missing-history-fallback.png");
 
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing");
     await advanceAuthoritativeRuntime(page, 600);
     await page.waitForFunction(() => {
       const snapshot = window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot;
