@@ -46,6 +46,11 @@ function selectReplayFrame(frames, elapsed, duration) {
   const index = Math.min(frames.length - 1, Math.floor(progress * frames.length));
   return Object.freeze({ snapshot: frames[index], index });
 }
+function replayIncidentScoringRight(frames, worldWidth) {
+  const terminal = frames.at(-1) ?? null;
+  const ballX = Number(terminal?.ball?.x);
+  return Number.isFinite(ballX) ? ballX >= worldWidth / 2 : null;
+}
 function projectVisualSnapshot(current, historical) {
   if (!historical) return current;
   return Object.freeze({ ...current, match: current.match, players: historical.players, ball: Object.freeze({ ...historical.ball, ownerId: current.ball.ownerId, lastTouchId: current.ball.lastTouchId }) });
@@ -68,11 +73,11 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   const sampleInterval = 1 / sampleRate;
   let attached = false; let disposed = false; let status = "idle";
   let history = []; let incidentFrames = []; let playbackFrames = EMPTY_FRAMES; let lastRecordedElapsed = null;
-  let incidentKey = null; let playbackIncidentKey = null; let previousReplayActive = false;
+  let incidentKey = null; let playbackIncidentKey = null; let playbackScoringRight = null; let previousReplayActive = false;
   let lastNowMilliseconds = null; let lastCameraMode = "broadcast"; let latestSnapshot = null; let latestProjection = null; let renderCount = 0;
 
   function clearPlayback({ clearHistory = false, clearIncident = clearHistory } = {}) {
-    playbackFrames = EMPTY_FRAMES; playbackIncidentKey = null; previousReplayActive = false;
+    playbackFrames = EMPTY_FRAMES; playbackIncidentKey = null; playbackScoringRight = null; previousReplayActive = false;
     if (clearHistory) { history = []; lastRecordedElapsed = null; }
     if (clearIncident) { incidentFrames = []; incidentKey = null; }
   }
@@ -93,7 +98,6 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   function record(snapshot) {
     const facts = replayFacts(snapshot);
     if (facts.active || snapshot.match.state !== "playing") return false;
-    // The first live frame after replay is kickoff/restoration, not current-incident buildup.
     if (previousReplayActive) { clearPlayback({ clearHistory: true }); return false; }
     const key = goalIncidentKey(snapshot);
     if (key) return recordIncident(snapshot, key);
@@ -118,8 +122,13 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
       const key = goalIncidentKey(snapshot);
       playbackFrames = playbackSource(frame, key);
       playbackIncidentKey = key && key === incidentKey ? key : null;
+      playbackScoringRight = replayIncidentScoringRight(playbackFrames, worldWidth);
     }
-    if (!authoritative.active && previousReplayActive) { playbackFrames = EMPTY_FRAMES; playbackIncidentKey = null; }
+    if (!authoritative.active && previousReplayActive) {
+      playbackFrames = EMPTY_FRAMES;
+      playbackIncidentKey = null;
+      playbackScoringRight = null;
+    }
     previousReplayActive = authoritative.active;
     const selection = authoritative.active ? selectReplayFrame(playbackFrames, authoritative.elapsed, authoritative.duration) : Object.freeze({ snapshot: null, index: -1 });
     const renderSnapshot = projectVisualSnapshot(snapshot, selection.snapshot);
@@ -130,7 +139,14 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
     latestProjection = Object.freeze({
       snapshot, renderSnapshot, replaySnapshot: selection.snapshot,
       camera: Object.freeze({ ...cameraController.state, mode: lastCameraMode }),
-      replay: Object.freeze({ ...authoritative, incidentKey: playbackIncidentKey, frameIndex: selection.index, frameCount: playbackFrames.length, missingFrame: authoritative.active && !selection.snapshot }),
+      replay: Object.freeze({
+        ...authoritative,
+        incidentKey: playbackIncidentKey,
+        scoringRight: playbackScoringRight,
+        frameIndex: selection.index,
+        frameCount: playbackFrames.length,
+        missingFrame: authoritative.active && !selection.snapshot,
+      }),
       projectionSequence: renderCount,
     });
     return latestProjection;
@@ -139,6 +155,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   const cameraFacade = Object.freeze({ get state() { return cameraController.state; }, reset(options = {}) { return cameraController.reset(options); } });
   const replayFacade = Object.freeze({
     get active() { return Boolean(latestProjection?.replay.active); }, get elapsed() { return Number(latestProjection?.replay.elapsed ?? 0); }, get duration() { return Number(latestProjection?.replay.duration ?? 0); },
+    get scoringRight() { return latestProjection?.replay.scoringRight ?? null; },
     get bufferedFrames() { return history.length; }, get playbackFrames() { return playbackFrames.length; },
     reset() { clearPlayback({ clearHistory: true }); return true; }, stop() { clearPlayback({ clearHistory: false, clearIncident: false }); return true; }, update() { return false; },
     currentSnapshot() { return latestProjection?.replay.active ? latestProjection.renderSnapshot : null; },
@@ -155,7 +172,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
       camera: Object.freeze({ ...cameraController.state, mode: lastCameraMode }),
       replay: Object.freeze({
         active: Boolean(latestProjection?.replay.active), elapsed: Number(latestProjection?.replay.elapsed ?? 0), duration: Number(latestProjection?.replay.duration ?? 0),
-        historyFrames: history.length, preShotFrames, incidentFrames: incidentFrames.length, incidentKey, playbackIncidentKey, playbackFrames: playbackFrames.length,
+        historyFrames: history.length, preShotFrames, incidentFrames: incidentFrames.length, incidentKey, playbackIncidentKey, playbackScoringRight, playbackFrames: playbackFrames.length,
         historyFrameTicks: Object.freeze(history.map((snapshot) => snapshot.tick)), incidentFrameTicks: Object.freeze(incidentFrames.map((snapshot) => snapshot.tick)), playbackFrameTicks: Object.freeze(playbackFrames.map((snapshot) => snapshot.tick)),
         frameIndex: latestProjection?.replay.frameIndex ?? -1, missingFrame: Boolean(latestProjection?.replay.missingFrame),
       }),

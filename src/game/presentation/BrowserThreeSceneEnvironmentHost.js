@@ -198,7 +198,7 @@ function createAtmosphere({ scene, lowPowerDevice }) {
   const speeds = new Float32Array(drops);
   for (let index = 0; index < drops; index += 1) {
     const x = -67 + seededNoise(index * 3.17) * 134;
-    const y = 2 + seededNoise(index * 7.43 + 9) * 47;
+    const y = 2 + seededNoise(index * 7.43) * 47;
     const z = -39 + seededNoise(index * 11.2) * 78;
     const offset = index * 6;
     positions[offset] = x;
@@ -710,7 +710,6 @@ export function createBrowserThreeSceneEnvironmentHost({
       environmentObjects: environmentRoot?.children?.length ?? 0,
       foreignObjects: foreignObjects.size,
       maxAnisotropy: renderer?.capabilities?.getMaxAnisotropy?.() ?? 1,
-      cameraPosition: camera ? Object.freeze({ x: camera.position.x, y: camera.position.y, z: camera.position.z }) : null,
     }),
   });
 

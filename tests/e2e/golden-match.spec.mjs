@@ -61,6 +61,15 @@ async function advanceAuthoritativeRuntime(page, steps) {
   return result;
 }
 
+async function renderTwoFrames(page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function replayCameraSample(page) {
+  await renderTwoFrames(page);
+  return page.evaluate(() => window.__TONY_DEBUG__?.diagnostics?.().replayCameraFraming ?? null);
+}
+
 async function attachViewportScreenshot(page, testInfo, name) {
   const devtools = await page.context().newCDPSession(page);
   const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
@@ -105,24 +114,36 @@ test.describe("TON-94 current-main golden match", () => {
     // phases cannot be missed by a slow software renderer.
     await advanceAuthoritativeRuntime(page, 90);
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.replayActive === true, null, { timeout: 10_000 });
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    const cameraSamples = [];
+    for (let index = 0; index < 4; index += 1) {
+      const sample = await replayCameraSample(page);
+      expect(sample, "replay camera diagnostics must be available").toBeTruthy();
+      cameraSamples.push(sample);
+      if (index < 3) await advanceAuthoritativeRuntime(page, 15);
+    }
     await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
 
     const replayEvidence = await page.evaluate(() => ({
       goal: window.__TONY_GOAL_PRESENTATION__?.diagnostics?.(),
       engine: window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot,
       cameraReplay: window.__TONY_CAMERA_REPLAY_BRIDGE__?.diagnostics?.(),
-      scene: window.__TONY_THREE_SCENE_BRIDGE__?.diagnostics?.(),
     }));
     const phases = replayEvidence.goal.timelineHistory.map((entry) => entry.phase);
     expect(phases).toEqual(expect.arrayContaining(["native-highlight", "goal-card", "score-card", "replay"]));
     expect(replayEvidence.engine.replayActive).toBe(true);
     expect(replayEvidence.cameraReplay.replay.active).toBe(true);
     expect(replayEvidence.cameraReplay.replay.missingFrame).toBe(false);
-    expect(replayEvidence.scene.cameraPosition).toBeTruthy();
-    expect(Math.abs(replayEvidence.scene.cameraPosition.x)).toBeLessThanOrEqual(58);
-    expect(replayEvidence.scene.cameraPosition.y).toBeGreaterThanOrEqual(12);
-    expect(Math.abs(replayEvidence.scene.cameraPosition.z)).toBeLessThanOrEqual(32);
+
+    expect(new Set(cameraSamples.map((sample) => sample.frameIndex)).size).toBeGreaterThan(1);
+    expect(cameraSamples.every((sample) => sample.active === true)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.scoringRight === true)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.position.x > 0)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.look.x < sample.position.x)).toBe(true);
+    expect(cameraSamples.every((sample) => Math.abs(sample.position.x) <= 58)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.position.y >= 12)).toBe(true);
+    expect(cameraSamples.every((sample) => Math.abs(sample.position.z) <= 32)).toBe(true);
+    expect(new Set(cameraSamples.map((sample) => Math.sign(sample.target.x - sample.look.x))).size).toBe(1);
 
     await advanceAuthoritativeRuntime(page, 600);
     await page.waitForFunction(() => {
