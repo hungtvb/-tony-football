@@ -24,7 +24,8 @@ test("TON-83 migration keeps one incident side and exposes multi-frame camera ev
   ]) {
     assert.equal(migration.includes(marker), true, `migration must retain ${marker}`);
   }
-  assert.equal(migration.includes("const scoringRight = framedX >= W / 2"), false);
+  assert.equal((migration.match(/const scoringRight = framedX >= W \/ 2/g) ?? []).length, 1, "legacy per-frame side marker may remain only as a generated-output forbidden token");
+  assert.match(migration, /forbidden_tokens = \[[\s\S]*'const scoringRight = framedX >= W \/ 2'/);
 });
 
 test("TON-94 does not change the deterministic rain layout", async () => {
