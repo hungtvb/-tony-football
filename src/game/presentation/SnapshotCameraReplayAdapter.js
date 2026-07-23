@@ -131,6 +131,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
     }
     previousReplayActive = authoritative.active;
     const selection = authoritative.active ? selectReplayFrame(playbackFrames, authoritative.elapsed, authoritative.duration) : Object.freeze({ snapshot: null, index: -1 });
+    const cinematicAvailable = authoritative.active && Boolean(selection.snapshot) && typeof playbackScoringRight === "boolean";
     const renderSnapshot = projectVisualSnapshot(snapshot, selection.snapshot);
     const deltaSeconds = lastNowMilliseconds === null ? 1 / 60 : clamp((frame.nowMilliseconds - lastNowMilliseconds) / 1000, 0, .05);
     lastNowMilliseconds = frame.nowMilliseconds; lastCameraMode = frame.cameraMode ?? lastCameraMode;
@@ -143,6 +144,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
         ...authoritative,
         incidentKey: playbackIncidentKey,
         scoringRight: playbackScoringRight,
+        cinematicAvailable,
         frameIndex: selection.index,
         frameCount: playbackFrames.length,
         missingFrame: authoritative.active && !selection.snapshot,
@@ -155,7 +157,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
   const cameraFacade = Object.freeze({ get state() { return cameraController.state; }, reset(options = {}) { return cameraController.reset(options); } });
   const replayFacade = Object.freeze({
     get active() { return Boolean(latestProjection?.replay.active); }, get elapsed() { return Number(latestProjection?.replay.elapsed ?? 0); }, get duration() { return Number(latestProjection?.replay.duration ?? 0); },
-    get scoringRight() { return latestProjection?.replay.scoringRight ?? null; },
+    get scoringRight() { return latestProjection?.replay.scoringRight ?? null; }, get cinematicAvailable() { return Boolean(latestProjection?.replay.cinematicAvailable); },
     get bufferedFrames() { return history.length; }, get playbackFrames() { return playbackFrames.length; },
     reset() { clearPlayback({ clearHistory: true }); return true; }, stop() { clearPlayback({ clearHistory: false, clearIncident: false }); return true; }, update() { return false; },
     currentSnapshot() { return latestProjection?.replay.active ? latestProjection.renderSnapshot : null; },
@@ -174,7 +176,7 @@ export function createSnapshotCameraReplayAdapter({ worldWidth, worldHeight, vie
         active: Boolean(latestProjection?.replay.active), elapsed: Number(latestProjection?.replay.elapsed ?? 0), duration: Number(latestProjection?.replay.duration ?? 0),
         historyFrames: history.length, preShotFrames, incidentFrames: incidentFrames.length, incidentKey, playbackIncidentKey, playbackScoringRight, playbackFrames: playbackFrames.length,
         historyFrameTicks: Object.freeze(history.map((snapshot) => snapshot.tick)), incidentFrameTicks: Object.freeze(incidentFrames.map((snapshot) => snapshot.tick)), playbackFrameTicks: Object.freeze(playbackFrames.map((snapshot) => snapshot.tick)),
-        frameIndex: latestProjection?.replay.frameIndex ?? -1, missingFrame: Boolean(latestProjection?.replay.missingFrame),
+        cinematicAvailable: Boolean(latestProjection?.replay.cinematicAvailable), frameIndex: latestProjection?.replay.frameIndex ?? -1, missingFrame: Boolean(latestProjection?.replay.missingFrame),
       }),
     }),
   });

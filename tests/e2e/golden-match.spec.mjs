@@ -125,6 +125,7 @@ test.describe("TON-94 current-main golden match", () => {
     expect(replayEvidence.engine.replayActive).toBe(true);
     expect(replayEvidence.cameraReplay.replay.active).toBe(true);
     expect(replayEvidence.cameraReplay.replay.missingFrame).toBe(false);
+    expect(replayEvidence.cameraReplay.replay.cinematicAvailable).toBe(true);
 
     const cameraSamples = [];
     for (let index = 0; index < 2; index += 1) {
@@ -137,6 +138,8 @@ test.describe("TON-94 current-main golden match", () => {
 
     expect(new Set(cameraSamples.map((sample) => sample.frameIndex)).size).toBeGreaterThan(1);
     expect(cameraSamples.every((sample) => sample.active === true)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.cinematicActive === true)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.cinematicAvailable === true)).toBe(true);
     expect(cameraSamples.every((sample) => sample.scoringRight === true)).toBe(true);
     expect(cameraSamples.every((sample) => sample.look.x < sample.target.x)).toBe(true);
     expect(cameraSamples.every((sample) => Math.abs(sample.position.x) <= 58)).toBe(true);
@@ -144,11 +147,52 @@ test.describe("TON-94 current-main golden match", () => {
     expect(cameraSamples.every((sample) => Math.abs(sample.position.z) <= 32)).toBe(true);
     expect(new Set(cameraSamples.map((sample) => Math.sign(sample.target.x - sample.look.x))).size).toBe(1);
 
+    const resetAccepted = await page.evaluate(() => window.__TONY_CAMERA_REPLAY_BRIDGE__?.resetForE2E?.() ?? null);
+    expect(resetAccepted, "golden harness must expose the presentation-only restore seam").toBe(true);
+    await renderTwoFrames(page);
+    const missingHistoryFallback = await page.evaluate(() => {
+      const debug = window.__TONY_DEBUG__?.diagnostics?.();
+      const bridge = window.__TONY_CAMERA_REPLAY_BRIDGE__;
+      const replaySnapshot = bridge?.replay?.currentSnapshot?.() ?? null;
+      return {
+        engineTick: debug?.engineSnapshot?.tick ?? null,
+        engineReplayActive: Boolean(debug?.engineSnapshot?.replayActive),
+        runtimeState: debug?.state ?? null,
+        replay: bridge?.diagnostics?.().replay ?? null,
+        framing: debug?.replayCameraFraming ?? null,
+        currentSnapshotTick: replaySnapshot?.tick ?? null,
+        currentSnapshotFrozen: Boolean(replaySnapshot && Object.isFrozen(replaySnapshot)),
+        currentSnapshotReplayActive: Boolean(replaySnapshot?.match?.replay?.active),
+      };
+    });
+    expect(missingHistoryFallback.engineReplayActive).toBe(true);
+    expect(missingHistoryFallback.runtimeState).toBe("playing");
+    expect(missingHistoryFallback.replay.active).toBe(true);
+    expect(missingHistoryFallback.replay.missingFrame).toBe(true);
+    expect(missingHistoryFallback.replay.cinematicAvailable).toBe(false);
+    expect(missingHistoryFallback.replay.playbackScoringRight).toBe(null);
+    expect(missingHistoryFallback.framing.active).toBe(true);
+    expect(missingHistoryFallback.framing.cinematicActive).toBe(false);
+    expect(missingHistoryFallback.framing.cinematicAvailable).toBe(false);
+    expect(missingHistoryFallback.framing.scoringRight).toBe(null);
+    expect(missingHistoryFallback.framing.frameIndex).toBe(-1);
+    expect(missingHistoryFallback.framing.missingFrame).toBe(true);
+    expect(missingHistoryFallback.currentSnapshotFrozen).toBe(true);
+    expect(missingHistoryFallback.currentSnapshotReplayActive).toBe(true);
+    expect(Math.abs(missingHistoryFallback.currentSnapshotTick - missingHistoryFallback.engineTick)).toBeLessThanOrEqual(1);
+    expect(runtimeErrors).toEqual([]);
+
     await advanceAuthoritativeRuntime(page, 600);
     await page.waitForFunction(() => {
       const snapshot = window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot;
       return snapshot?.replayActive === false && snapshot?.goalSequence === null && snapshot?.kickoffTimer === 0;
     }, null, { timeout: 15_000 });
+    await renderTwoFrames(page);
+    const restoredCamera = await page.evaluate(() => window.__TONY_DEBUG__?.diagnostics?.().replayCameraFraming ?? null);
+    expect(restoredCamera.active).toBe(false);
+    expect(restoredCamera.cinematicActive).toBe(false);
+    expect(restoredCamera.cinematicAvailable).toBe(false);
+    expect(restoredCamera.scoringRight).toBe(null);
 
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "paused");
