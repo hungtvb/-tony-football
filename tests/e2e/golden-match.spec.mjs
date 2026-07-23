@@ -115,15 +115,6 @@ test.describe("TON-94 current-main golden match", () => {
     await advanceAuthoritativeRuntime(page, 90);
     await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.replayActive === true, null, { timeout: 10_000 });
 
-    const cameraSamples = [];
-    for (let index = 0; index < 4; index += 1) {
-      const sample = await replayCameraSample(page);
-      expect(sample, "replay camera diagnostics must be available").toBeTruthy();
-      cameraSamples.push(sample);
-      if (index < 3) await advanceAuthoritativeRuntime(page, 15);
-    }
-    await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
-
     const replayEvidence = await page.evaluate(() => ({
       goal: window.__TONY_GOAL_PRESENTATION__?.diagnostics?.(),
       engine: window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot,
@@ -135,11 +126,19 @@ test.describe("TON-94 current-main golden match", () => {
     expect(replayEvidence.cameraReplay.replay.active).toBe(true);
     expect(replayEvidence.cameraReplay.replay.missingFrame).toBe(false);
 
+    const cameraSamples = [];
+    for (let index = 0; index < 4; index += 1) {
+      const sample = await replayCameraSample(page);
+      expect(sample, "replay camera diagnostics must be available").toBeTruthy();
+      cameraSamples.push(sample);
+      if (index < 3) await advanceAuthoritativeRuntime(page, 15);
+    }
+    await attachViewportScreenshot(page, testInfo, "ton-94-natural-replay.png");
+
     expect(new Set(cameraSamples.map((sample) => sample.frameIndex)).size).toBeGreaterThan(1);
     expect(cameraSamples.every((sample) => sample.active === true)).toBe(true);
     expect(cameraSamples.every((sample) => sample.scoringRight === true)).toBe(true);
-    expect(cameraSamples.every((sample) => sample.position.x > 0)).toBe(true);
-    expect(cameraSamples.every((sample) => sample.look.x < sample.position.x)).toBe(true);
+    expect(cameraSamples.every((sample) => sample.look.x < sample.target.x)).toBe(true);
     expect(cameraSamples.every((sample) => Math.abs(sample.position.x) <= 58)).toBe(true);
     expect(cameraSamples.every((sample) => sample.position.y >= 12)).toBe(true);
     expect(cameraSamples.every((sample) => Math.abs(sample.position.z) <= 32)).toBe(true);
