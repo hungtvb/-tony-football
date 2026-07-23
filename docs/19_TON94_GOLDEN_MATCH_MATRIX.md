@@ -2,85 +2,93 @@
 
 ## Baseline and policy
 
-- audited current-main baseline: `5202e53f79953f8e72788177f21cd5a6814c6b51`;
-- active incident: TON-94 / GitHub #100;
+- audited incident baseline: `5202e53f79953f8e72788177f21cd5a6814c6b51`;
+- active incident: TON-94 / GitHub #100 / PR #101;
 - TON-85 and PR #99 remain frozen;
-- this phase inventories and reproduces defects before broad repairs;
-- a green unit/adapter contract is not accepted as live product parity evidence;
-- a missing automated assertion is recorded as a **validation gap**, not falsely reported as a reproduced product defect;
-- every confirmed P0/P1 repair must later receive a focused regression that fails on this baseline.
+- a green unit/adapter contract is not accepted as live product-parity evidence;
+- a missing automated assertion is a **validation gap**, not a reproduced defect;
+- every reproduced P0/P1 repair keeps a focused regression and exact-head browser evidence.
 
-## Severity and status
+## Status vocabulary
 
 - **P0** — game cannot start/continue or authoritative match state is corrupted;
 - **P1** — core playable flow, visible match parity, scoring/replay or lifecycle is materially wrong;
 - **P2** — degraded feedback or presentation with a viable core flow;
-- **COVERED** — objective current-main browser evidence exists;
-- **GAP** — the current required lane does not prove the contract;
-- **REPRODUCED** — a deterministic current-main flow has failed and durable evidence exists;
-- **PENDING MANUAL** — PO evidence exists but the automated flow has not reproduced or isolated the first broken boundary yet.
+- **COVERED** — objective required evidence exists on the stabilization branch;
+- **COVERED (partial)** — the listed subset is proven but the complete row is not;
+- **GAP** — the current required lanes do not prove the complete contract;
+- **REPAIRED** — a deterministic defect was reproduced, repaired at its first owning boundary and retained by regression.
 
-## Current-main matrix
+## Stabilization checkpoint
 
-| ID | Area | Required objective flow | Current evidence | Status | Severity if failed | First owning boundary |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| GM-01 | Startup and menu | clean boot → main menu → quick-match setup | `smoke.spec.mjs` proves clean WebGL composition and menu routing | COVERED | P0 | browser bootstrap / UI shell |
-| GM-02 | WebGL match lifecycle | setup → match → kickoff complete → movement → pause → resume | required browser smoke covers this on desktop and narrow viewport | COVERED | P0 | input → engine → presentation composition |
-| GM-03 | Forced Canvas playable lifecycle | Canvas boot → actual match start → movement → pause → restart | existing smoke only boots Canvas in menu and checks projection diagnostics | GAP | P1 | Canvas renderer / shared projection / UI lifecycle |
-| GM-04 | Normal asset appearance | real GLB load → 12 rigs → differentiated home/away/keeper kit and real boots during play | CI #572 fetched the complete 515,208-byte GLB twice with HTTP 200, but the 10-second `loadAsync` wall-clock timeout fired during decode/scene construction, started a second parser and left all players in fallback on both attempts | REPRODUCED | P1 | `PlayerAssetLoader` attempt timeout / retry boundary |
-| GM-05 | Representative controls | move, switch, pass, through ball, shot, tackle/press, sprint and possession/stat changes | engine/input units exist; required browser smoke proves movement only | GAP | P1 | input adapter / MatchEngine action routing |
-| GM-06 | Natural goal chronology | command-driven shot → natural score → goal/score cards → exact replay incident → coherent kickoff | current browser goal test calls `recordGoalForE2E`; its harness explicitly says it is not natural-scoring acceptance evidence | GAP | P1 | input/engine scoring → goal presentation → replay projection |
-| GM-07 | Replay isolation | first goal completes → later goal uses only its own buildup/shot/goal/aftermath | deterministic adapter regression exists, but no full browser golden-match flow proves it | GAP | P1 | replay incident index / immutable projection |
-| GM-08 | Restart and second match | active match → restart → score/tick reset → main menu → second match | pause/resume is covered; restart and second-match lifecycle are not required CI evidence | GAP | P1 | UI lifecycle / runtime reset / presentation reset |
-| GM-09 | HUD, radar and statistics | live score/clock/player/radar/possession/shots/pass accuracy remain coherent through actions, goal and restart | isolated DOM projection and smoke assertions exist; the full chronology is not covered | GAP | P1 | HUD/radar adapters / immutable snapshots |
-| GM-10 | Settings and feedback | pitch/ball/weather/sound preferences plus audio/particles/trails/charge enabled, disabled, reset and missing-capability paths | TON-84 adapter tests are green; no integrated playable golden-match evidence | GAP | P2 | settings/effects adapters |
-| GM-11 | Narrow viewport | 844×390 startup → match → controls/HUD/radar → pause/resume with no overflow | current smoke proves basic match and no horizontal overflow | COVERED (partial) | P1 | responsive presentation shell |
-| GM-12 | Errors/assets/fallbacks | no uncaught errors; missing character/animation/audio/WebGL capabilities fail locally and remain recoverable | required smoke captures console/page errors; focused lifecycle tests cover several missing-capability paths | COVERED (partial) | P0/P1 | owning adapter fallback |
-| GM-13 | Full Time | natural clock completion → result UI → teardown/restart/new match | no current required browser evidence | GAP | P1 | MatchEngine lifecycle / UI shell |
+Implementation head `bd58ed96fcbd8ab9a4c7eed0621359ac48f91cf8` passed CI #590 / run `29941839610`:
 
-## Reproduced defect GM-04 — successful GLB response discarded during decode
+- Unit and contracts — success;
+- Browser composition smoke — success;
+- Real asset appearance smoke — success;
+- Golden match lifecycle — success;
+- CI gate — success.
 
-**Exact failing head:** `baa42931a00535607afb55311a20ce3a15d22f3c`
+Exact artifacts:
 
-**Evidence:** CI #572 / run `29936465831`, browser artifact `8536645953`.
+- fast-test evidence `8538509095`;
+- browser-smoke evidence `8538562373`;
+- golden-match evidence `8538564289`;
+- asset-smoke evidence `8538593672`.
 
-**Steps:**
+The golden artifact was visually inspected. Replay framing looks inward across the penalty area with both teams and goal context visible; stadium roof/stand geometry no longer blocks the incident.
 
-1. boot normal asset mode on the required Ubuntu/Chromium software-WebGL runner;
-2. wait for 12 asset-backed rigs;
-3. observe `football-character-v2.glb` return HTTP 200 with the complete 515,208-byte payload;
-4. observe retry request also return HTTP 200 with the same complete payload;
-5. asset readiness never reaches 12 rigged players before the 150-second golden assertion expires.
+## Matrix
 
-**Expected:** one successful response is allowed a bounded decode/scene-construction period and commits the asset rig before fallback.
+| ID | Area | Required objective flow | Stabilization evidence | Status | Severity if failed | First owning boundary |
+| --- | --- | --- | --- | --- | --- | --- |
+| GM-01 | Startup and menu | clean boot → main menu → quick-match setup | required browser smoke proves clean composition and menu routing | COVERED | P0 | browser bootstrap / UI shell |
+| GM-02 | WebGL match lifecycle | setup → match → kickoff complete → movement → pause/resume | browser smoke covers desktop and narrow viewport | COVERED | P0 | input → engine → presentation composition |
+| GM-03 | Forced Canvas playable lifecycle | Canvas boot → actual match → movement → pause → restart | golden lane runs an authoritative Canvas match and verifies shared replay/projection sequence | COVERED | P1 | Canvas renderer / shared projection / UI lifecycle |
+| GM-04 | Normal asset appearance | real GLB load → 12 rigs → differentiated kit and real boots during play | dedicated real-asset job proves 12 asset-backed rigs, visible kit nodes and boot geometry | REPAIRED | P1 | `PlayerAssetLoader` attempt timeout / retry boundary |
+| GM-05 | Representative controls | move, switch, pass, through ball, shot, tackle/press, sprint and possession/stat changes | browser lanes prove movement and a command-driven natural shot; remaining actions are unit-covered only | COVERED (partial) | P1 | input adapter / MatchEngine action routing |
+| GM-06 | Natural goal chronology | command-driven shot → natural score → cards → exact replay → kickoff | golden lane uses browser input for the score, then proves goal-card, score-card, replay frames and kickoff recovery | COVERED | P1 | input/engine scoring → goal presentation → replay projection |
+| GM-07 | Replay isolation | first goal completes → later goal uses only its own incident | deterministic adapter regression exists; a two-goal browser chronology is not yet required evidence | GAP | P1 | replay incident index / immutable projection |
+| GM-08 | Restart and second match | active match → restart → reset → main menu → second match | golden lane proves restart and a clean second match with zeroed score | COVERED | P1 | UI lifecycle / runtime reset / presentation reset |
+| GM-09 | HUD, radar and statistics | score/clock/player/radar/stats remain coherent through actions, goal and restart | score, match state and reset chronology are asserted; full statistics/radar chronology remains incomplete | COVERED (partial) | P1 | HUD/radar adapters / immutable snapshots |
+| GM-10 | Settings and feedback | pitch/ball/weather/sound plus audio/particles/trails/charge lifecycle | focused TON-84 contracts are green; no single integrated golden flow proves every feedback path | GAP | P2 | settings/effects adapters |
+| GM-11 | Narrow viewport | 844×390 startup → match → HUD/radar → pause/resume without overflow | required smoke proves basic narrow match and no horizontal overflow | COVERED (partial) | P1 | responsive presentation shell |
+| GM-12 | Errors/assets/fallbacks | no uncaught errors; missing capabilities remain recoverable | browser lanes capture console/page errors; focused adapter tests cover missing-capability paths | COVERED (partial) | P0/P1 | owning adapter fallback |
+| GM-13 | Full Time | natural clock completion → result UI → teardown/restart/new match | no required browser Full Time chronology yet | GAP | P1 | MatchEngine lifecycle / UI shell |
 
-**Actual:** `loadPlayerAssetWithRetry` applies a 10-second timer to the complete `GLTFLoader.loadAsync` operation, including Meshopt decode and scene construction. The successful parse is rejected as a timeout, a second parse begins, and the model adapter remains procedural fallback.
+## Repaired P1 — GM-04 asset decode timeout
 
-**Repair boundary:** increase the bounded attempt budget to 30 seconds in `PlayerAssetLoader`, preserve two attempts and late-result disposal, and guard the default budget with a deterministic unit test. The golden browser lane remains unchanged.
+Failing head: `baa42931a00535607afb55311a20ce3a15d22f3c`.
 
-## PO-reported live regressions
+CI #572 showed two complete HTTP 200 GLB responses, but the 10-second timer covered download, Meshopt decode and scene construction. A successful parse was discarded, a second parser started and procedural fallback remained active.
 
-The PO reports broad visible defects on the playable build after TON-93 and TON-84. Those observations remain blocking product evidence. Until a matrix row is reproduced by the automated golden flow or receives exact manual evidence, it remains `PENDING MANUAL` rather than being converted into an unsupported technical diagnosis.
+Repair:
 
-## Phase-1 executable evidence
+- bounded attempt budget increased to 30 seconds;
+- two attempts and late-result disposal preserved;
+- deterministic budget regression added;
+- unchanged normal-asset acceptance subsequently passed in CI #590.
 
-`tests/e2e/golden-match.spec.mjs` adds the first incident lane:
+## Repaired P1 — replay camera stadium occlusion
 
-1. normal asset-mode WebGL boot with 12 real rigs and explicit kit/boot geometry;
-2. real match start, kickoff completion and movement;
-3. command-driven natural shot using the existing deterministic formation override — no direct score mutation API;
-4. natural score, goal presentation, replay activation/completion and kickoff recovery;
-5. pause/restart and second-match reset;
-6. forced-Canvas actual match start, movement, pause and restart;
-7. uncaught console/page errors collected for both modes.
+CI #575 proved natural scoring and replay activation but captured the replay camera easing through stadium geometry. Early fixes cleared the roof but still looked outward because replay direction depended on legacy `game.goalSequence`, which can be absent when replay ownership is engine-driven.
 
-A failing assertion is incident evidence, not permission to weaken the test. The failure must be recorded with exact head, steps, expected/actual, first broken boundary and artifact before a bounded repair begins.
+Repair:
 
-## Recovery sequencing
+- replay entry snaps to a bounded stadium-safe pose;
+- camera position is exposed through immutable diagnostics;
+- goal side is derived from the immutable replay-frame ball position, not legacy mutable state;
+- inward framing is retained by migration/source guards;
+- golden artifact `8538564289` was visually inspected and accepted.
 
-1. Run the golden-match lane unchanged against the baseline branch.
-2. Record the first deterministic P0/P1 failure in this matrix and on TON-94 / GitHub #100.
-3. Repair one first-broken-boundary cluster only.
-4. Keep the new regression and rerun the complete golden lane.
-5. Repeat until no P0/P1 remains.
-6. Only then may PM consider TON-72 execution and eventual TON-85 reactivation.
+## Phase-one conclusion
+
+There are no open **reproduced** P0/P1 defects in the covered Phase-one lanes. Remaining `GAP` and `COVERED (partial)` rows are explicitly retained and must not be interpreted as permission to resume bridge deletion.
+
+Reviewer and SA must review the exact PR head and confirm:
+
+1. the new required jobs cannot be bypassed by the aggregate CI gate;
+2. natural score remains browser-command-driven and no direct score mutation is used;
+3. post-score deterministic stepping advances authoritative time only;
+4. asset timeout and replay-camera repairs stay inside their owning presentation boundaries;
+5. TON-85 / PR #99 remains frozen until PM explicitly reactivates it after TON-72 evidence.
