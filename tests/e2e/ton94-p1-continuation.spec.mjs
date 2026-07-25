@@ -131,6 +131,11 @@ async function recoverHomePossessionAfterAwayKickoff(page) {
       && snapshot?.ball?.ownerId?.startsWith("away-");
   }, null, { timeout: 15_000 });
 
+  // While defending, KeyS is the public switch command. Five switches return
+  // to the original home outfield selection before the fixed tackle sequence.
+  for (let index = 0; index < 5; index += 1) await page.keyboard.press("KeyS");
+  await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2));
+
   for (const movementMilliseconds of [120, 180, 240]) {
     await page.keyboard.down("ArrowRight");
     await page.waitForTimeout(movementMilliseconds);
@@ -148,9 +153,6 @@ async function recoverHomePossessionAfterAwayKickoff(page) {
     globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
   )), { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true);
 
-  // Five public switch commands cycle back to the same home outfield player.
-  for (let index = 0; index < 5; index += 1) await page.keyboard.press("KeyS");
-  await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2));
 }
 
 async function finishGoalSequence(page) {
