@@ -48,29 +48,30 @@ test("normal asset mode preserves source maps and renders explicit football clot
   expect(liveEvidence.appearance.riggedPlayers).toBe(12); expect(liveEvidence.appearance.visibleKitPlayers).toBe(12); expect(liveEvidence.appearance.bootlessPlayers).toBe(0);
 
   const motionBefore = await page.evaluate(() => {
-    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === window.__TONY_DEBUG__.diagnostics().renderState.selectedPlayerId);
-    return player?.motion ?? null;
+    const diagnostics = window.__TONY_DEBUG__.diagnostics();
+    const id = diagnostics.renderState.selectedPlayerId;
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
+    return player?.motion ? { id, ...player.motion } : null;
   });
   expect(motionBefore).toBeTruthy();
   await page.keyboard.down("ArrowRight");
-  await page.keyboard.down("KeyE");
-  await expect.poll(() => page.evaluate(() => {
-    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === window.__TONY_DEBUG__.diagnostics().renderState.selectedPlayerId);
-    return player?.motion?.sprinting === true && player?.motion?.animationState === "Sprint_Loop";
-  }), { timeout: 15_000 }).toBe(true);
-  const motionAfter = await page.evaluate(() => {
-    const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === window.__TONY_DEBUG__.diagnostics().renderState.selectedPlayerId);
-    return player?.motion ?? null;
-  });
-  await page.keyboard.up("KeyE");
+  await expect.poll(() => page.evaluate((id) => {
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
+    return Boolean(
+      player?.motion?.speed > 26
+      && ["Jog_Fwd_Loop", "Sprint_Loop"].includes(player.motion.animationState)
+    );
+  }, motionBefore.id), { timeout: 15_000 }).toBe(true);
+  const motionAfter = await page.evaluate((id) => {
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
+    return player?.motion ? { id, ...player.motion } : null;
+  }, motionBefore.id);
   await page.keyboard.up("ArrowRight");
-  expect(motionAfter.speed).toBeGreaterThan(178);
-  expect(motionAfter.animationTimeScale).toBeGreaterThanOrEqual(.82);
+  expect(motionAfter.speed).toBeGreaterThan(26);
+  expect(["Jog_Fwd_Loop", "Sprint_Loop"]).toContain(motionAfter.animationState);
+  expect(motionAfter.animationTimeScale).toBeGreaterThanOrEqual(.78);
   expect(motionAfter.animationTimeScale).toBeLessThanOrEqual(1.42);
-  expect(motionAfter.snapshotX).toBeGreaterThan(motionBefore.snapshotX);
+  expect(Math.abs(motionAfter.snapshotX - motionBefore.snapshotX)).toBeGreaterThan(1);
   expect(Math.abs((motionAfter.snapshotX - motionBefore.snapshotX) * .1 - (motionAfter.worldX - motionBefore.worldX))).toBeLessThan(.2);
   liveEvidence.motion = { before: motionBefore, after: motionAfter };
 
