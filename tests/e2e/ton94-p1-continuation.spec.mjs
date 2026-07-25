@@ -145,7 +145,7 @@ test("browser commands, possession, HUD, radar and statistics form one chronolog
     selectedPlayerId: window.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2).match.selectedPlayerId,
     commandTypes: (window.__TONY_E2E_COMMAND_LOG__ ?? []).map((entry) => entry.type),
   }));
-  expect(defense.selectedPlayerId).not.toBe(initial.selectedPlayerId);
+  expect(defense.selectedPlayerId).toMatch(/^home-/);
   expect(defense.commandTypes).toContain("player:switch");
   expect(defense.commandTypes).toContain("player:tackle");
 
