@@ -105,19 +105,21 @@ async function awaitNaturalGoalPresentation(page, expectedScore, fromIndex) {
       index > goalIndex && event.visible && event.stage === "score" && Number(event.homeScore) === expected
     ));
     const hiddenIndex = events.findIndex((event, index) => index > scoreIndex && !event.visible);
+    const replay = globalThis.__TONY_CAMERA_REPLAY_BRIDGE__?.replay?.currentSnapshot?.() ?? null;
     return {
       events,
       goalVisibleMilliseconds: events[scoreIndex].at - events[goalIndex].at,
       scoreVisibleMilliseconds: events[hiddenIndex].at - events[scoreIndex].at,
-      replay: globalThis.__TONY_CAMERA_REPLAY_BRIDGE__?.replay?.currentSnapshot?.() ?? null,
+      replay: replay ? { tick: replay.tick, score: [...replay.match.score] } : null,
+      replayFrozen: Boolean(replay && Object.isFrozen(replay)),
     };
   }, { expected: expectedScore, start: fromIndex });
   expect(evidence.goalVisibleMilliseconds).toBeGreaterThanOrEqual(250);
   expect(evidence.goalVisibleMilliseconds).toBeLessThanOrEqual(8_000);
   expect(evidence.scoreVisibleMilliseconds).toBeGreaterThanOrEqual(250);
   expect(evidence.scoreVisibleMilliseconds).toBeLessThanOrEqual(8_000);
-  expect(evidence.replay && Object.isFrozen(evidence.replay)).toBe(true);
-  expect(evidence.replay.match.score).toEqual([expectedScore, 0]);
+  expect(evidence.replayFrozen).toBe(true);
+  expect(evidence.replay.score).toEqual([expectedScore, 0]);
   return evidence;
 }
 
@@ -260,8 +262,8 @@ test("two natural goal incidents expose bounded real-time cards without leaking 
   incidentEvidence.push(await awaitNaturalGoalPresentation(page, 2, eventStart));
 
   expect(incidentEvidence[1].replay.tick).toBeGreaterThan(incidentEvidence[0].replay.tick);
-  expect(incidentEvidence[0].replay.match.score).toEqual([1, 0]);
-  expect(incidentEvidence[1].replay.match.score).toEqual([2, 0]);
+  expect(incidentEvidence[0].replay.score).toEqual([1, 0]);
+  expect(incidentEvidence[1].replay.score).toEqual([2, 0]);
   const chronology = await page.evaluate(() => ({
     phases: globalThis.__TONY_GOAL_PRESENTATION__.diagnostics().timelineHistory.map((entry) => entry.phase),
     commandTypes: (globalThis.__TONY_E2E_COMMAND_LOG__ ?? []).map((entry) => entry.type),
