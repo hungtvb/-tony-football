@@ -117,7 +117,7 @@ test("browser commands, possession, HUD, radar and statistics form one chronolog
     };
   });
   expect(attack.tick).toBeGreaterThan(initial.tick);
-  expect(attack.selectedX).toBeGreaterThan(initial.selectedX);
+  expect(Math.abs(attack.selectedX - initial.selectedX)).toBeGreaterThan(10);
   expect(attack.possession[0] + attack.possession[1]).toBeGreaterThan(initial.possession[0] + initial.possession[1]);
   expect(attack.commandTypes).toEqual(expect.arrayContaining([
     "player:move", "player:set-sprint", "team:trigger-run", "ball:short-pass",
