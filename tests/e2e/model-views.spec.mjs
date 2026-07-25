@@ -49,7 +49,7 @@ test("normal asset mode preserves source maps and renders explicit football clot
 
   const motionBefore = await page.evaluate(() => {
     const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === snapshot.match.selectedPlayerId);
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === window.__TONY_DEBUG__.diagnostics().renderState.selectedPlayerId);
     return player?.motion ?? null;
   });
   expect(motionBefore).toBeTruthy();
@@ -57,12 +57,12 @@ test("normal asset mode preserves source maps and renders explicit football clot
   await page.keyboard.down("KeyE");
   await expect.poll(() => page.evaluate(() => {
     const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === snapshot.match.selectedPlayerId);
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === window.__TONY_DEBUG__.diagnostics().renderState.selectedPlayerId);
     return player?.motion?.sprinting === true && player?.motion?.animationState === "Sprint_Loop";
   }), { timeout: 15_000 }).toBe(true);
   const motionAfter = await page.evaluate(() => {
     const snapshot = window.__TONY_DEBUG__.diagnostics().engineSnapshot;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === snapshot.match.selectedPlayerId);
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === window.__TONY_DEBUG__.diagnostics().renderState.selectedPlayerId);
     return player?.motion ?? null;
   });
   await page.keyboard.up("KeyE");
