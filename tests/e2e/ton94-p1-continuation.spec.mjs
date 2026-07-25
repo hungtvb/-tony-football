@@ -75,6 +75,14 @@ test("browser commands, possession, HUD, radar and statistics form one chronolog
   await installEngineRuntimeHarness(page);
   const runtimeErrors = captureRuntimeErrors(page);
   await openAndStart(page);
+  const attackOwnerPrepared = await page.evaluate(() => {
+    const runtime = window.__TONY_E2E_BROWSER_RUNTIME__;
+    const ownerId = runtime.snapshot.match.selectedPlayerId;
+    const accepted = runtime.setPossessionForE2E(ownerId, { reason: "ton94-browser-chronology" });
+    runtime.advanceForE2E(2);
+    return accepted && runtime.snapshot.ball.ownerId === ownerId;
+  });
+  expect(attackOwnerPrepared).toBe(true);
 
   const initial = await page.evaluate(() => {
     const snapshot = window.__TONY_E2E_BROWSER_RUNTIME__.snapshot;

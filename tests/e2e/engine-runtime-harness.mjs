@@ -47,6 +47,10 @@ export async function installEngineRuntimeHarness(page) {
     return this.#engine.recordGoal(team, options);
   }
 
+  setPossessionForE2E(ownerId, options = {}) {
+    return this.#engine.setPossession(ownerId, options);
+  }
+
 ${ADVANCE_ONLY_METHOD}`);
 }
 
