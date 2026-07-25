@@ -3,7 +3,7 @@
 ## Baseline and policy
 
 - audited incident baseline: `5202e53f79953f8e72788177f21cd5a6814c6b51`;
-- active incident: TON-94 / GitHub #100 / PR #101;
+- active incident: TON-94 / GitHub #100; PR #101 is the merged bounded Phase-one baseline and the P1 continuation uses a separate branch/PR;
 - TON-85 and PR #99 remain frozen;
 - a green unit/adapter contract is not accepted as live product-parity evidence;
 - a missing automated assertion is a **validation gap**, not a reproduced defect;
@@ -45,16 +45,16 @@ The golden artifact was visually inspected. Replay framing looks inward across t
 | GM-01 | Startup and menu | clean boot → main menu → quick-match setup | required browser smoke proves clean composition and menu routing | COVERED | P0 | browser bootstrap / UI shell |
 | GM-02 | WebGL match lifecycle | setup → match → kickoff complete → movement → pause/resume | browser smoke covers desktop and narrow viewport | COVERED | P0 | input → engine → presentation composition |
 | GM-03 | Forced Canvas playable lifecycle | Canvas boot → actual match → movement → pause → restart | golden lane runs an authoritative Canvas match and verifies shared replay/projection sequence | COVERED | P1 | Canvas renderer / shared projection / UI lifecycle |
-| GM-04 | Normal asset appearance | real GLB load → 12 rigs → differentiated kit and real boots during play | dedicated real-asset job proves 12 asset-backed rigs, visible kit nodes and boot geometry | REPAIRED | P1 | `PlayerAssetLoader` attempt timeout / retry boundary |
-| GM-05 | Representative controls | move, switch, pass, through ball, shot, tackle/press, sprint and possession/stat changes | browser lanes prove movement and a command-driven natural shot; remaining actions are unit-covered only | COVERED (partial) | P1 | input adapter / MatchEngine action routing |
+| GM-04 | Normal asset appearance | real GLB load → 12 rigs → differentiated kit and real boots during play | dedicated real-asset job now also proves live sprint speed, rig animation state and bounded time scale | COVERED | P1 | `PlayerAssetLoader` attempt timeout / retry boundary |
+| GM-05 | Representative controls | move, switch, pass, through ball, shot, tackle/press, sprint and possession/stat changes | required P1 lane records immutable browser-dispatched commands and authoritative possession/stat progression | COVERED | P1 | input adapter / MatchEngine action routing |
 | GM-06 | Natural goal chronology | command-driven shot → natural score → cards → exact replay → kickoff | golden lane uses browser input for the score, then proves goal-card, score-card, replay frames and kickoff recovery | COVERED | P1 | input/engine scoring → goal presentation → replay projection |
-| GM-07 | Replay isolation | first goal completes → later goal uses only its own incident | deterministic adapter regression exists; a two-goal browser chronology is not yet required evidence | GAP | P1 | replay incident index / immutable projection |
+| GM-07 | Replay isolation | first goal completes → later goal uses only its own incident | required browser lane proves two ordered incidents and a later frozen replay snapshot with only the second score | COVERED | P1 | replay incident index / immutable projection |
 | GM-08 | Restart and second match | active match → restart → reset → main menu → second match | golden lane proves restart and a clean second match with zeroed score | COVERED | P1 | UI lifecycle / runtime reset / presentation reset |
-| GM-09 | HUD, radar and statistics | score/clock/player/radar/stats remain coherent through actions, goal and restart | score, match state and reset chronology are asserted; full statistics/radar chronology remains incomplete | COVERED (partial) | P1 | HUD/radar adapters / immutable snapshots |
+| GM-09 | HUD, radar and statistics | score/clock/player/radar/stats remain coherent through actions, goal and restart | required P1 chronology asserts score, clock, stamina, radar repaint, possession, shots and pass UI against engine facts | COVERED | P1 | HUD/radar adapters / immutable snapshots |
 | GM-10 | Settings and feedback | pitch/ball/weather/sound plus audio/particles/trails/charge lifecycle | focused TON-84 contracts are green; no single integrated golden flow proves every feedback path | GAP | P2 | settings/effects adapters |
-| GM-11 | Narrow viewport | 844×390 startup → match → HUD/radar → pause/resume without overflow | required smoke proves basic narrow match and no horizontal overflow | COVERED (partial) | P1 | responsive presentation shell |
-| GM-12 | Errors/assets/fallbacks | no uncaught errors; missing capabilities remain recoverable | browser lanes capture console/page errors; focused adapter tests cover missing-capability paths | COVERED (partial) | P0/P1 | owning adapter fallback |
-| GM-13 | Full Time | natural clock completion → result UI → teardown/restart/new match | no required browser Full Time chronology yet | GAP | P1 | MatchEngine lifecycle / UI shell |
+| GM-11 | Narrow viewport | 844×390 startup → match → HUD/radar → pause/resume without overflow | required P1 lane runs forced Canvas on desktop and narrow, with complete HUD/radar/stat and overflow checks | COVERED | P1 | responsive presentation shell |
+| GM-12 | Errors/assets/fallbacks | no uncaught errors; missing capabilities remain recoverable | required smoke, restore tests and P1 Canvas lanes capture page/console errors across both viewports | COVERED | P0/P1 | owning adapter fallback |
+| GM-13 | Full Time | natural clock completion → result UI → teardown/restart/new match | authoritative browser stepping reaches time zero, verifies result UI/final facts and starts a clean play-again match | COVERED | P1 | MatchEngine lifecycle / UI shell |
 
 ## Repaired P1 — GM-04 asset decode timeout
 
@@ -83,7 +83,7 @@ Repair:
 
 ## Phase-one conclusion
 
-There are no open **reproduced** P0/P1 defects in the covered Phase-one lanes. Remaining `GAP` and `COVERED (partial)` rows are explicitly retained and must not be interpreted as permission to resume bridge deletion.
+There are no open **reproduced** P0/P1 defects in the covered Phase-one lanes. The P1 continuation closes GM-04/05/07/09/11/12/13 with required executable evidence. P2 GM-10 remains out of this bounded incident scope and must not be interpreted as permission to resume bridge deletion.
 
 Reviewer and SA must review the exact PR head and confirm:
 

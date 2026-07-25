@@ -4,13 +4,28 @@ async function exposeBrowserRuntime(page, methods) {
     const source = await response.text();
     const withRuntimeHandle = source.replace(
       "    this.#publishEvent = publishEvent;",
-      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;",
+      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;\n    globalThis.__TONY_E2E_COMMAND_LOG__ = [];",
     );
-    const patched = withRuntimeHandle.replace(
+    const withCommandEvidence = withRuntimeHandle.replace(
+      "  dispatch(command) {",
+      `  dispatch(command) {
+    const evidence = Object.freeze({
+      type: command?.type ?? null,
+      source: command?.source ?? null,
+      targetTick: command?.targetTick ?? null,
+      payload: command?.payload ?? null,
+    });
+    globalThis.__TONY_E2E_COMMAND_LOG__?.push(evidence);`,
+    );
+    const patched = withCommandEvidence.replace(
       "  step(deltaSeconds) {",
       `${methods}\n\n  step(deltaSeconds) {`,
     );
-    if (patched === source || !patched.includes("__TONY_E2E_BROWSER_RUNTIME__")) {
+    if (
+      patched === source
+      || !patched.includes("__TONY_E2E_BROWSER_RUNTIME__")
+      || !patched.includes("__TONY_E2E_COMMAND_LOG__")
+    ) {
       throw new Error("Could not install the isolated BrowserMatchRuntime E2E harness");
     }
     await route.fulfill({ response, body: patched });
