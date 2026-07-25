@@ -131,8 +131,15 @@ async function recoverHomePossessionAfterAwayKickoff(page) {
       && snapshot?.ball?.ownerId?.startsWith("away-");
   }, null, { timeout: 15_000 });
 
+  // Emit the public tackle while the authoritative snapshot still reports
+  // away possession, before any switch can change the selected defender.
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(120);
+  await page.keyboard.press("Space");
+  await page.keyboard.up("ArrowRight");
+
   // While defending, KeyS is the public switch command. Five switches return
-  // to the original home outfield selection before the fixed tackle sequence.
+  // to the original home outfield selection before the remaining fixed recovery steps.
   for (let index = 0; index < 5; index += 1) await page.keyboard.press("KeyS");
   await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2));
 
