@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.mjs";
-import { installEngineRuntimeHarness } from "./engine-runtime-harness.mjs";
+import { installEngineRuntimeHarness, installNaturalGoalRuntimeHarness } from "./engine-runtime-harness.mjs";
 
 test.describe.configure({ timeout: 180_000 });
 
@@ -30,34 +30,125 @@ async function openAndStart(page, search = "?visualTest=1&skipIntro=1&goalTest=1
   await clickById(page, "playButton");
   await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing");
   await page.evaluate(() => window.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(120));
+  await page.waitForFunction(() => window.__TONY_E2E_BROWSER_RUNTIME__?.snapshot?.match?.kickoffTimer === 0);
 }
 
 async function renderTwoFrames(page) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
-async function advanceToGoalPhase(page, phase) {
-  const evidence = await page.evaluate((targetPhase) => {
-    const runtime = window.__TONY_E2E_BROWSER_RUNTIME__;
-    for (let index = 0; index < 900; index += 1) {
-      if (runtime.snapshot.match.goalSequence?.phase === targetPhase) break;
-      runtime.advanceForE2E(1);
-    }
-    const snapshot = runtime.snapshot;
+async function installWallClockGoalObserver(page) {
+  await page.evaluate(() => {
     const overlay = document.getElementById("goalPresentationOverlay");
-    return {
-      phase: snapshot.match.goalSequence?.phase ?? null,
-      elapsed: snapshot.match.goalSequence?.elapsed ?? null,
-      duration: snapshot.match.goalSequence?.duration ?? null,
-      overlayVisible: overlay?.classList.contains("show") ?? false,
-      stage: overlay?.dataset.stage ?? null,
-      homeScore: document.getElementById("homeScore")?.textContent ?? "",
-      awayScore: document.getElementById("awayScore")?.textContent ?? "",
+    const homeScore = document.getElementById("homeScore");
+    if (!overlay || !homeScore) throw new Error("Goal presentation DOM is unavailable");
+    const events = [];
+    let previousKey = null;
+    const capture = () => {
+      const event = Object.freeze({
+        at: performance.now(),
+        visible: overlay.classList.contains("show"),
+        stage: overlay.dataset.stage ?? null,
+        homeScore: homeScore.textContent ?? "",
+        awayScore: document.getElementById("awayScore")?.textContent ?? "",
+      });
+      const key = JSON.stringify([event.visible, event.stage, event.homeScore, event.awayScore]);
+      if (key === previousKey) return;
+      previousKey = key;
+      events.push(event);
     };
-  }, phase);
-  expect(evidence.phase).toBe(phase);
-  await renderTwoFrames(page);
+    const observer = new MutationObserver(capture);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-stage"],
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    globalThis.__TONY_WALL_CLOCK_GOAL_EVENTS__ = events;
+    globalThis.__TONY_WALL_CLOCK_GOAL_OBSERVER__?.disconnect?.();
+    globalThis.__TONY_WALL_CLOCK_GOAL_OBSERVER__ = observer;
+    capture();
+  });
+}
+
+async function shootTowardRightGoal(page) {
+  await page.keyboard.down("ArrowRight");
+  await page.keyboard.down("KeyD");
+  await page.waitForTimeout(520);
+  await page.keyboard.up("KeyD");
+  await page.keyboard.up("ArrowRight");
+}
+
+async function awaitNaturalGoalPresentation(page, expectedScore, fromIndex) {
+  await shootTowardRightGoal(page);
+  await expect.poll(() => page.evaluate(() => (
+    Number(document.getElementById("homeScore")?.textContent ?? 0)
+  )), { timeout: 30_000, intervals: [100, 250, 500] }).toBe(expectedScore);
+  await page.waitForFunction(({ expected, start }) => {
+    const events = (globalThis.__TONY_WALL_CLOCK_GOAL_EVENTS__ ?? []).slice(start);
+    const goalIndex = events.findIndex((event) => (
+      event.visible && event.stage === "goal" && Number(event.homeScore) === expected
+    ));
+    const scoreIndex = events.findIndex((event, index) => (
+      index > goalIndex && event.visible && event.stage === "score" && Number(event.homeScore) === expected
+    ));
+    const hiddenIndex = events.findIndex((event, index) => index > scoreIndex && !event.visible);
+    return goalIndex >= 0 && scoreIndex > goalIndex && hiddenIndex > scoreIndex;
+  }, { expected: expectedScore, start: fromIndex }, { timeout: 30_000 });
+  const evidence = await page.evaluate(({ expected, start }) => {
+    const events = (globalThis.__TONY_WALL_CLOCK_GOAL_EVENTS__ ?? []).slice(start);
+    const goalIndex = events.findIndex((event) => (
+      event.visible && event.stage === "goal" && Number(event.homeScore) === expected
+    ));
+    const scoreIndex = events.findIndex((event, index) => (
+      index > goalIndex && event.visible && event.stage === "score" && Number(event.homeScore) === expected
+    ));
+    const hiddenIndex = events.findIndex((event, index) => index > scoreIndex && !event.visible);
+    return {
+      events,
+      goalVisibleMilliseconds: events[scoreIndex].at - events[goalIndex].at,
+      scoreVisibleMilliseconds: events[hiddenIndex].at - events[scoreIndex].at,
+      replay: globalThis.__TONY_CAMERA_REPLAY_BRIDGE__?.replay?.currentSnapshot?.() ?? null,
+    };
+  }, { expected: expectedScore, start: fromIndex });
+  expect(evidence.goalVisibleMilliseconds).toBeGreaterThanOrEqual(250);
+  expect(evidence.goalVisibleMilliseconds).toBeLessThanOrEqual(8_000);
+  expect(evidence.scoreVisibleMilliseconds).toBeGreaterThanOrEqual(250);
+  expect(evidence.scoreVisibleMilliseconds).toBeLessThanOrEqual(8_000);
+  expect(evidence.replay && Object.isFrozen(evidence.replay)).toBe(true);
+  expect(evidence.replay.match.score).toEqual([expectedScore, 0]);
   return evidence;
+}
+
+async function recoverHomePossessionAfterAwayKickoff(page) {
+  await page.waitForFunction(() => {
+    const snapshot = globalThis.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
+    return snapshot?.match?.goalSequence === null
+      && snapshot?.match?.kickoffTimer === 0
+      && snapshot?.ball?.ownerId?.startsWith("away-");
+  }, null, { timeout: 15_000 });
+
+  for (const movementMilliseconds of [120, 180, 240]) {
+    await page.keyboard.down("ArrowRight");
+    await page.waitForTimeout(movementMilliseconds);
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(760);
+    await page.keyboard.up("ArrowRight");
+    await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(45));
+    const recovered = await page.evaluate(() => (
+      globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
+    ));
+    if (recovered) break;
+  }
+
+  await expect.poll(() => page.evaluate(() => (
+    globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
+  )), { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true);
+
+  // Five public switch commands cycle back to the same home outfield player.
+  for (let index = 0; index < 5; index += 1) await page.keyboard.press("KeyS");
+  await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2));
 }
 
 async function finishGoalSequence(page) {
@@ -72,17 +163,13 @@ async function finishGoalSequence(page) {
 
 test("browser commands, possession, HUD, radar and statistics form one chronology", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one desktop command chronology is sufficient");
-  await installEngineRuntimeHarness(page);
+  await installNaturalGoalRuntimeHarness(page);
   const runtimeErrors = captureRuntimeErrors(page);
   await openAndStart(page);
-  const attackOwnerPrepared = await page.evaluate(() => {
-    const runtime = window.__TONY_E2E_BROWSER_RUNTIME__;
-    const ownerId = runtime.snapshot.match.selectedPlayerId;
-    const accepted = runtime.setPossessionForE2E(ownerId, { reason: "ton94-browser-chronology" });
-    runtime.advanceForE2E(2);
-    return accepted && runtime.snapshot.ball.ownerId === ownerId;
+  await page.waitForFunction(() => {
+    const snapshot = window.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
+    return snapshot?.ball?.ownerId === snapshot?.match?.selectedPlayerId;
   });
-  expect(attackOwnerPrepared).toBe(true);
 
   const initial = await page.evaluate(() => {
     const snapshot = window.__TONY_E2E_BROWSER_RUNTIME__.snapshot;
@@ -136,19 +223,6 @@ test("browser commands, possession, HUD, radar and statistics form one chronolog
   expect(attack.stamina).toMatch(/^\d+%$/);
   expect(attack.clock).toMatch(/^\d{2}:\d{2}$/);
 
-  const goalAccepted = await page.evaluate(() => window.__TONY_E2E_BROWSER_RUNTIME__.recordGoalForE2E(0));
-  expect(goalAccepted).toBe(true);
-  await finishGoalSequence(page);
-  await page.keyboard.press("KeyS");
-  await page.keyboard.press("Space");
-  const defense = await page.evaluate(() => ({
-    selectedPlayerId: window.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2).match.selectedPlayerId,
-    commandTypes: (window.__TONY_E2E_COMMAND_LOG__ ?? []).map((entry) => entry.type),
-  }));
-  expect(defense.selectedPlayerId).toMatch(/^home-/);
-  expect(defense.commandTypes).toContain("player:switch");
-  expect(defense.commandTypes).toContain("player:tackle");
-
   await page.keyboard.press("Escape");
   await expect(page.locator("#pauseOverlay")).toHaveClass(/show/);
   const paused = await page.evaluate(() => ({
@@ -165,56 +239,41 @@ test("browser commands, possession, HUD, radar and statistics form one chronolog
   expect(runtimeErrors).toEqual([]);
 });
 
-test("two goal incidents expose ordered real-time cards without leaking the first incident", async ({ page }, testInfo) => {
+test("two natural goal incidents expose bounded real-time cards without leaking the first incident", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one desktop two-goal presentation chronology is sufficient");
-  await installEngineRuntimeHarness(page);
+  await installNaturalGoalRuntimeHarness(page);
   const runtimeErrors = captureRuntimeErrors(page);
   await openAndStart(page);
+  await installWallClockGoalObserver(page);
+  await page.waitForFunction(() => {
+    const snapshot = globalThis.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
+    return snapshot?.ball?.ownerId === snapshot?.match?.selectedPlayerId;
+  });
+
   const incidentEvidence = [];
+  let eventStart = await page.evaluate(() => globalThis.__TONY_WALL_CLOCK_GOAL_EVENTS__.length);
+  incidentEvidence.push(await awaitNaturalGoalPresentation(page, 1, eventStart));
+  await finishGoalSequence(page);
+  await recoverHomePossessionAfterAwayKickoff(page);
 
-  for (const expectedScore of [1, 2]) {
-    const accepted = await page.evaluate(() => window.__TONY_E2E_BROWSER_RUNTIME__.recordGoalForE2E(0));
-    expect(accepted).toBe(true);
-    const goalCard = await advanceToGoalPhase(page, "goal-card");
-    expect(goalCard.overlayVisible).toBe(true);
-    expect(goalCard.stage).toBe("goal");
-    expect(goalCard.homeScore).toBe(String(expectedScore));
+  eventStart = await page.evaluate(() => globalThis.__TONY_WALL_CLOCK_GOAL_EVENTS__.length);
+  incidentEvidence.push(await awaitNaturalGoalPresentation(page, 2, eventStart));
 
-    const scoreCard = await advanceToGoalPhase(page, "score-card");
-    expect(scoreCard.overlayVisible).toBe(true);
-    expect(scoreCard.stage).toBe("score");
-    expect(scoreCard.elapsed).toBeGreaterThan(goalCard.elapsed);
-
-    const replay = await advanceToGoalPhase(page, "replay");
-    expect(replay.elapsed).toBeGreaterThan(scoreCard.elapsed);
-    await renderTwoFrames(page);
-    const replayEvidence = await page.evaluate(() => {
-      const bridge = window.__TONY_CAMERA_REPLAY_BRIDGE__;
-      const snapshot = bridge?.replay?.currentSnapshot?.() ?? null;
-      return {
-        overlayVisible: document.getElementById("goalPresentationOverlay")?.classList.contains("show") ?? false,
-        replayFlag: document.getElementById("goalPresentationReplayFlag")?.textContent ?? "",
-        replayTick: snapshot?.tick ?? null,
-        replayScore: snapshot?.match?.score ? [...snapshot.match.score] : null,
-        frozen: Boolean(snapshot && Object.isFrozen(snapshot)),
-      };
-    });
-    expect(replayEvidence.overlayVisible).toBe(false);
-    expect(replayEvidence.replayFlag).toBe("REPLAY AVAILABLE");
-    expect(replayEvidence.frozen).toBe(true);
-    expect(replayEvidence.replayScore?.[0]).toBe(expectedScore);
-    incidentEvidence.push(replayEvidence);
-    await finishGoalSequence(page);
-  }
-
-  expect(incidentEvidence[1].replayTick).toBeGreaterThan(incidentEvidence[0].replayTick);
-  expect(incidentEvidence[1].replayScore).toEqual([2, 0]);
-  const history = await page.evaluate(() => window.__TONY_GOAL_PRESENTATION__.diagnostics().timelineHistory);
-  expect(history.map((entry) => entry.phase).filter((phase) => (
-    ["native-highlight", "goal-card", "score-card", "replay"].includes(phase)
-  )).slice(-4)).toEqual([
-    "native-highlight", "goal-card", "score-card", "replay",
-  ]);
+  expect(incidentEvidence[1].replay.tick).toBeGreaterThan(incidentEvidence[0].replay.tick);
+  expect(incidentEvidence[0].replay.match.score).toEqual([1, 0]);
+  expect(incidentEvidence[1].replay.match.score).toEqual([2, 0]);
+  const chronology = await page.evaluate(() => ({
+    phases: globalThis.__TONY_GOAL_PRESENTATION__.diagnostics().timelineHistory.map((entry) => entry.phase),
+    commandTypes: (globalThis.__TONY_E2E_COMMAND_LOG__ ?? []).map((entry) => entry.type),
+    frozenCommands: (globalThis.__TONY_E2E_COMMAND_LOG__ ?? []).every(Object.isFrozen),
+  }));
+  expect(chronology.phases.filter((phase) => phase === "goal-card")).toHaveLength(2);
+  expect(chronology.phases.filter((phase) => phase === "score-card")).toHaveLength(2);
+  expect(chronology.phases.filter((phase) => phase === "replay")).toHaveLength(2);
+  expect(chronology.commandTypes.filter((type) => type === "ball:shoot").length).toBeGreaterThanOrEqual(2);
+  expect(chronology.commandTypes).toContain("player:tackle");
+  expect(chronology.commandTypes).toContain("player:switch");
+  expect(chronology.frozenCommands).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
 
