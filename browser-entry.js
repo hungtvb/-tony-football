@@ -10,6 +10,7 @@ import { createBrowserEffectsViewAdapter } from "./src/game/presentation/Browser
 import { FO4_CONTROLS } from "./src/game/input/FO4Controls.js";
 
 const BLOCKED_GAMEPLAY_PARAMS = Object.freeze(["runtime", "debugScenario"]);
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export function sanitizeBrowserRuntimeSearch(search = "") {
   const params = new URLSearchParams(search); let changed = false;
@@ -22,6 +23,32 @@ export function removeBrowserGameplayDebugMutators(debug = null) {
   const removed = Object.prototype.hasOwnProperty.call(debug, "applyScenario");
   if (removed) delete debug.applyScenario;
   return removed;
+}
+
+export function createReplayCameraFraming(projection = null) {
+  if (!projection?.camera || !projection?.replay || !projection?.renderSnapshot?.ball) return null;
+  const camera = projection.camera;
+  const replay = projection.replay;
+  const subject = projection.renderSnapshot.ball;
+  const target = Object.freeze({ x: (Number(subject.x) - 600) * .1, y: .8, z: (Number(subject.y) - 350) * .1 });
+  const cinematicActive = Boolean(replay.active && replay.cinematicAvailable);
+  const scoringDirection = replay.scoringRight === true ? -1 : 1;
+  const look = cinematicActive
+    ? Object.freeze({ x: target.x + scoringDirection * 6, y: 1.2, z: target.z })
+    : target;
+  const position = cinematicActive
+    ? Object.freeze({ x: clamp(look.x + scoringDirection * 18, -58, 58), y: 18, z: clamp(target.z + 14, -32, 32) })
+    : Object.freeze({ x: clamp((Number(camera.x) - 600) * .1, -58, 58), y: Math.max(12, 45 / Math.max(.5, Number(camera.zoom) || 1)), z: clamp((Number(camera.y) - 350) * .1 + 28, -32, 32) });
+  return Object.freeze({
+    active: Boolean(replay.active),
+    cinematicActive,
+    cinematicAvailable: Boolean(replay.cinematicAvailable),
+    scoringRight: replay.scoringRight ?? null,
+    frameIndex: Number(replay.frameIndex ?? -1),
+    target,
+    look,
+    position,
+  });
 }
 
 export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge, bridges = {}) {
@@ -39,6 +66,7 @@ export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge, bri
       threeScene: bridges.threeScene?.diagnostics?.() ?? null,
       canvasMatch: bridges.canvasMatch?.diagnostics?.() ?? null,
       cameraReplay: bridges.cameraReplay?.diagnostics?.() ?? null,
+      replayCameraFraming: createReplayCameraFraming(bridges.cameraReplay?.projection?.() ?? null),
       modelViews: modelViewBridge.diagnostics(),
     }),
   });
@@ -71,14 +99,31 @@ function wrapProjectedAdapter(adapter, getProjection, owner, projectEffects = (f
   });
 }
 
+function wrapProjectedSceneAdapter(adapter, getProjection, getScenePort) {
+  let consumedProjectionSequence = 0;
+  return Object.freeze({
+    attach: (...args) => adapter.attach?.(...args),
+    render(frame) {
+      const projection = getProjection();
+      const framing = createReplayCameraFraming(projection);
+      if (projection?.projectionSequence) consumedProjectionSequence = projection.projectionSequence;
+      if (framing) getScenePort()?.setCameraPose?.({ position: framing.position, lookAt: framing.look });
+      return adapter.render?.(projectedPresentationFrame(frame, projection));
+    },
+    reset: (...args) => { consumedProjectionSequence = 0; return adapter.reset?.(...args); },
+    teardown: (...args) => adapter.teardown?.(...args),
+    diagnostics: () => Object.freeze({ owner: "projected-three-scene", consumedProjectionSequence, replayCameraFraming: createReplayCameraFraming(getProjection()) }),
+  });
+}
+
 if (typeof globalThis.window !== "undefined") {
   const sceneFacade = createRebindableThreeSceneHostPort();
   const cameraReplayAdapter = createSnapshotCameraReplayAdapter({ worldWidth: 1200, worldHeight: 700, viewportWidth: 1200, viewportHeight: 700, cameraConfig: cameraHudConfig.camera });
   const settingsAdapter = createBrowserSettingsAdapter({ target: globalThis.window, document: globalThis.document, controlBindings: FO4_CONTROLS });
   const effectsAdapter = createBrowserEffectsAdapter({ target: globalThis.window, lowPowerDevice: globalThis.navigator?.hardwareConcurrency <= 4, reducedMotion: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches });
   const e2ePresentationSeams = new URLSearchParams(globalThis.location.search).has("goalTest");
-  let modelViewAdapter = null; let canvasMatchRenderer = null;
-  const sceneBridge = Object.freeze({ getPort: () => sceneFacade.bound ? sceneFacade.port : null, getStablePort: () => sceneFacade.port, diagnostics: () => sceneFacade.port.diagnostics() });
+  let modelViewAdapter = null; let canvasMatchRenderer = null; let sceneAdapter = null;
+  const sceneBridge = Object.freeze({ getPort: () => sceneFacade.bound ? sceneFacade.port : null, getStablePort: () => sceneFacade.port, diagnostics: () => Object.freeze({ ...sceneFacade.port.diagnostics(), projected: sceneAdapter?.diagnostics?.() ?? null }) });
   const cameraReplayBridge = Object.freeze({
     camera: cameraReplayAdapter.camera,
     replay: cameraReplayAdapter.replay,
@@ -111,7 +156,11 @@ if (typeof globalThis.window !== "undefined") {
     () => cameraReplayAdapter,
     () => settingsAdapter,
     () => effectsAdapter,
-    ({ target, document }) => createBrowserThreeSceneEnvironmentAdapter({ target, document, onHostChanged: (port) => sceneFacade.bind(port) }),
+    ({ target, document }) => {
+      const adapter = createBrowserThreeSceneEnvironmentAdapter({ target, document, onHostChanged: (port) => sceneFacade.bind(port) });
+      sceneAdapter = wrapProjectedSceneAdapter(adapter, () => cameraReplayAdapter.projection(), () => sceneFacade.bound ? sceneFacade.port : null);
+      return sceneAdapter;
+    },
     ({ target, document }) => {
       modelViewAdapter = createBrowserModelViewAdapter({ target, document, getScenePort: () => sceneFacade.port, isSceneBound: () => sceneFacade.bound });
       return wrapProjectedAdapter(modelViewAdapter, () => cameraReplayAdapter.projection(), "webgl-model", (frame) => effectsAdapter.projectFrame(frame));
@@ -126,7 +175,7 @@ if (typeof globalThis.window !== "undefined") {
 
   const sanitized = sanitizeBrowserRuntimeSearch(globalThis.location.search);
   if (sanitized.changed) globalThis.history.replaceState(globalThis.history.state, "", `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`);
-  await import("./generated/game.js?v=25.0.0");
+  await import("./generated/game.js?v=25.0.1");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
   exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge, { threeScene: sceneBridge, canvasMatch: canvasMatchBridge, cameraReplay: cameraReplayBridge });
   if (globalThis.window.__TONY_DEBUG__ && Object.isExtensible(globalThis.window.__TONY_DEBUG__)) Object.defineProperty(globalThis.window.__TONY_DEBUG__, "settingsEffects", { configurable: true, enumerable: true, get: () => settingsEffectsBridge.diagnostics() });
