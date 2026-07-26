@@ -175,7 +175,7 @@ if (typeof globalThis.window !== "undefined") {
 
   const sanitized = sanitizeBrowserRuntimeSearch(globalThis.location.search);
   if (sanitized.changed) globalThis.history.replaceState(globalThis.history.state, "", `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`);
-  await import("./generated/game.js?v=25.0.1");
+  await import("./generated/game.js?v=25.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
   exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge, { threeScene: sceneBridge, canvasMatch: canvasMatchBridge, cameraReplay: cameraReplayBridge });
   if (globalThis.window.__TONY_DEBUG__ && Object.isExtensible(globalThis.window.__TONY_DEBUG__)) Object.defineProperty(globalThis.window.__TONY_DEBUG__, "settingsEffects", { configurable: true, enumerable: true, get: () => settingsEffectsBridge.diagnostics() });
