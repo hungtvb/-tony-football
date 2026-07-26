@@ -24,11 +24,24 @@ export function removeBrowserGameplayDebugMutators(debug = null) {
   return removed;
 }
 
-export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge) {
+export function exposeBrowserPresentationDiagnostics(debug, modelViewBridge, bridges = {}) {
   if (!debug || typeof debug !== "object" || !Object.isExtensible(debug)) return false;
   const descriptor = Object.getOwnPropertyDescriptor(debug, "modelViews");
-  if (descriptor && descriptor.configurable === false) return false;
+  const diagnosticsDescriptor = Object.getOwnPropertyDescriptor(debug, "diagnostics");
+  if ((descriptor && descriptor.configurable === false) || (diagnosticsDescriptor && diagnosticsDescriptor.configurable === false)) return false;
+  const baseDiagnostics = typeof debug.diagnostics === "function" ? debug.diagnostics.bind(debug) : () => Object.freeze({});
   Object.defineProperty(debug, "modelViews", { configurable: true, enumerable: true, get: () => modelViewBridge.diagnostics() });
+  Object.defineProperty(debug, "diagnostics", {
+    configurable: true,
+    enumerable: true,
+    value: () => Object.freeze({
+      ...baseDiagnostics(),
+      threeScene: bridges.threeScene?.diagnostics?.() ?? null,
+      canvasMatch: bridges.canvasMatch?.diagnostics?.() ?? null,
+      cameraReplay: bridges.cameraReplay?.diagnostics?.() ?? null,
+      modelViews: modelViewBridge.diagnostics(),
+    }),
+  });
   return true;
 }
 
@@ -115,6 +128,6 @@ if (typeof globalThis.window !== "undefined") {
   if (sanitized.changed) globalThis.history.replaceState(globalThis.history.state, "", `${globalThis.location.pathname}${sanitized.search}${globalThis.location.hash}`);
   await import("./generated/game.js?v=25.0.0");
   removeBrowserGameplayDebugMutators(globalThis.window.__TONY_DEBUG__);
-  exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge);
+  exposeBrowserPresentationDiagnostics(globalThis.window.__TONY_DEBUG__, modelViewBridge, { threeScene: sceneBridge, canvasMatch: canvasMatchBridge, cameraReplay: cameraReplayBridge });
   if (globalThis.window.__TONY_DEBUG__ && Object.isExtensible(globalThis.window.__TONY_DEBUG__)) Object.defineProperty(globalThis.window.__TONY_DEBUG__, "settingsEffects", { configurable: true, enumerable: true, get: () => settingsEffectsBridge.diagnostics() });
 }

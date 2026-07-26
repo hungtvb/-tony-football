@@ -12,7 +12,8 @@ test("browser entry registers model views before scene rendering", async () => {
   assert.match(entry, /getStablePort: \(\) => sceneFacade\.port/);
   assert.match(entry, /getScenePort: \(\) => sceneFacade\.port/);
   assert.match(entry, /isSceneBound: \(\) => sceneFacade\.bound/);
-  assert.match(entry, /exposeBrowserPresentationDiagnostics\(globalThis\.window\.__TONY_DEBUG__, modelViewBridge\)/);
+  assert.match(entry, /exposeBrowserPresentationDiagnostics\\(globalThis\\.window\\.__TONY_DEBUG__, modelViewBridge, \\{ threeScene: sceneBridge, canvasMatch: canvasMatchBridge, cameraReplay: cameraReplayBridge \\}\\)/);
+  for (const contract of ["threeScene: bridges.threeScene?.diagnostics?.()", "canvasMatch: bridges.canvasMatch?.diagnostics?.()", "cameraReplay: bridges.cameraReplay?.diagnostics?.()"]) assert.equal(entry.includes(contract), true, `browser diagnostics must retain ${contract}`);
   assert.match(bootstrap, /const activeCharge = this\.#inputAdapter\.activeCharge/);
   assert.match(bootstrap, /const pressedCodes = this\.#inputAdapter\.pressedCodes/);
   assert.match(bootstrap, /activeCharge, pressedCodes/);
