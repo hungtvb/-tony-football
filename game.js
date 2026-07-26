@@ -752,6 +752,11 @@ function simulationStep(dt) {
       visualTestMode,
       legacyGameplayStepCount,
       selectedStamina: game.selected?.stamina ?? null,
+      engineSnapshot: compatibilitySnapshots.snapshot,
+      renderState: compatibilitySnapshots.snapshot ? {
+        selectedPlayerId: compatibilitySnapshots.snapshot.match.selectedPlayerId,
+        selectedX: compatibilitySnapshots.snapshot.players.find((player) => player.id === compatibilitySnapshots.snapshot.match.selectedPlayerId)?.x ?? null
+      } : null,
       snapshot: compatibilitySnapshots.snapshot ? {
         tick: compatibilitySnapshots.snapshot.tick,
         selectedPlayerId: compatibilitySnapshots.snapshot.match.selectedPlayerId,
