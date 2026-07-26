@@ -5,11 +5,10 @@ const CHARACTER_URL = "assets/models/football-character-v2.glb?v=16.0.0";
 const ANIMATION_URL = "assets/models/football-animations-v2.glb?v=16.0.0";
 
 // GLTFLoader.loadAsync resolves only after fetch, decode and scene construction.
-// A 10 second wall-clock budget incorrectly treated a successful 515 KB response
-// as a network failure while Meshopt/GLB parsing was still running, then started a
-// second parser and permanently committed procedural fallback. Keep the timeout
-// bounded, but give one software-rendered/low-power decode enough time to settle.
-export const PLAYER_ASSET_ATTEMPT_TIMEOUT_MILLISECONDS = 30000;
+// A 30 second wall-clock budget still false-falls back on software WebGL runners
+// after a complete local 200 response while Meshopt/GLB parsing is finishing.
+// Keep each attempt bounded and preserve retry, but allow one slow decode to settle.
+export const PLAYER_ASSET_ATTEMPT_TIMEOUT_MILLISECONDS = 45000;
 
 function disposeLateAsset(result) {
   disposePlayerAssetTemplate(result?.scene);
