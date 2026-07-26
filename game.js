@@ -765,7 +765,12 @@ function simulationStep(dt) {
     }),
   };
 
-  createTeams(); browserBootstrap.start();
+  createTeams();
+  // Configure the authoritative runtime before application controls can
+  // dispatch. Forced Canvas can expose the first user action before the
+  // first animation-frame snapshot capture.
+  captureCompatibilitySnapshot();
+  browserBootstrap.start();
   const debugScenario = new URLSearchParams(location.search).get("debugScenario");
   if (debugScenario) applyDebugScenario(debugScenario);
   window.__TONY_DEBUG__.ready = true;
