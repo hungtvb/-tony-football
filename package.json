@@ -25,7 +25,7 @@
     "test:e2e:goal": "npm run prepare:ton80-game && playwright test tests/e2e/goal-presentation.spec.mjs",
     "test:e2e:golden": "npm run prepare:ton80-game && playwright test tests/e2e/golden-match.spec.mjs --project=desktop-chromium",
     "test:e2e:asset-smoke": "npm run prepare:ton80-game && playwright test tests/e2e/model-views.spec.mjs --project=desktop-chromium",
-    "test:preflight": "npm run test:ci:fast && npm run test:e2e:smoke && npm run test:e2e:asset-smoke && npm run test:e2e:golden",
+    "test:preflight": "npm run test:ci:fast && npm run test:e2e:smoke && npm run test:e2e:asset-smoke && npm run test:e2e:golden && npm run test:e2e:p1-parity",
     "test": "npm run test:unit",
     "test:e2e:report": "playwright show-report",
     "test:engine:fast": "node --test tests/simulation/*.test.mjs tests/engine/*.test.mjs tests/gameplay/*.test.mjs tests/input/*.test.mjs tests/application/*.test.mjs tests/scenarios/*.test.mjs",
@@ -34,9 +34,16 @@
     "test:e2e:smoke": "npm run prepare:ton80-game && playwright test tests/e2e/smoke.spec.mjs tests/e2e/context-restore.spec.mjs",
     "test:e2e:broad": "npm run prepare:ton80-game && playwright test",
     "test:e2e:desktop:broad": "npm run prepare:ton80-game && playwright test --project=desktop-chromium",
-    "test:e2e:narrow:broad": "npm run prepare:ton80-game && playwright test --project=narrow-landscape"
+    "test:e2e:narrow:broad": "npm run prepare:ton80-game && playwright test --project=narrow-landscape",
+    "test:e2e:p1-parity": "npm run prepare:ton80-game && playwright test tests/e2e/ton94-p1-continuation.spec.mjs"
   },
-  "dependencies": { "three": "0.185.1" },
-  "engines": { "node": ">=18" },
-  "devDependencies": { "@playwright/test": "1.54.1" }
+  "dependencies": {
+    "three": "0.185.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.54.1"
+  }
 }

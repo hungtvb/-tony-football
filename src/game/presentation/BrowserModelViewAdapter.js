@@ -32,6 +32,7 @@ function appearanceDiagnostics(playerViews) {
       bootGeometryCount: overlay.bootGeometryCount,
       bootCount: diagnostics.rigged ? overlay.bootGeometryCount : Number(appearance.bootCount || 0),
       rigKitNodes: overlay.nodes,
+      motion: diagnostics.motion ?? null,
     });
   }));
   return Object.freeze({

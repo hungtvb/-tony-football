@@ -4,13 +4,28 @@ async function exposeBrowserRuntime(page, methods) {
     const source = await response.text();
     const withRuntimeHandle = source.replace(
       "    this.#publishEvent = publishEvent;",
-      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;",
+      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;\n    globalThis.__TONY_E2E_COMMAND_LOG__ = [];",
     );
-    const patched = withRuntimeHandle.replace(
+    const withCommandEvidence = withRuntimeHandle.replace(
+      "  dispatch(command) {",
+      `  dispatch(command) {
+    const evidence = Object.freeze({
+      type: command?.type ?? null,
+      source: command?.source ?? null,
+      targetTick: command?.targetTick ?? null,
+      payload: command?.payload ?? null,
+    });
+    globalThis.__TONY_E2E_COMMAND_LOG__?.push(evidence);`,
+    );
+    const patched = withCommandEvidence.replace(
       "  step(deltaSeconds) {",
       `${methods}\n\n  step(deltaSeconds) {`,
     );
-    if (patched === source || !patched.includes("__TONY_E2E_BROWSER_RUNTIME__")) {
+    if (
+      patched === source
+      || !patched.includes("__TONY_E2E_BROWSER_RUNTIME__")
+      || !patched.includes("__TONY_E2E_COMMAND_LOG__")
+    ) {
       throw new Error("Could not install the isolated BrowserMatchRuntime E2E harness");
     }
     await route.fulfill({ response, body: patched });
@@ -25,14 +40,10 @@ const ADVANCE_ONLY_METHOD = `  advanceForE2E(steps, deltaSeconds = 1 / 60) {
     return this.snapshot;
   }`;
 
-// Presentation-only fixture retained for existing projection tests. It is not
-// valid evidence for headless gameplay, natural scoring, or replay acceptance.
+// The generic E2E runtime handle is advance-only. Acceptance flows must use
+// browser input/public immutable commands for possession, actions and scoring.
 export async function installEngineRuntimeHarness(page) {
-  await exposeBrowserRuntime(page, `  recordGoalForE2E(team, options = {}) {
-    return this.#engine.recordGoal(team, options);
-  }
-
-${ADVANCE_ONLY_METHOD}`);
+  await exposeBrowserRuntime(page, ADVANCE_ONLY_METHOD);
 }
 
 export async function installNaturalGoalRuntimeHarness(page) {
