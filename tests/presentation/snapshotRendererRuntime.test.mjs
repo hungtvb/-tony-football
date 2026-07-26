@@ -19,7 +19,7 @@ test("presentation frames create one immutable render state before WebGL and Can
 });
 
 test("WebGL player and ball views consume immutable render-state poses", () => {
-  assert.match(modelViews, /frame\.renderState/);
+  assert.match(modelViews, /createSnapshotRenderState\(\{ previous: frame\.previousSnapshot, current: frame\.snapshot, alpha: frame\.alpha \}\)/);
   assert.match(modelViews, /renderState\.players/);
   assert.match(modelViews, /renderState\.ball/);
   assert.match(modelViews, /selectedPlayerId/);
@@ -28,15 +28,15 @@ test("WebGL player and ball views consume immutable render-state poses", () => {
 });
 
 test("rig facing uses interpolated ball facts and snapshot identities", () => {
-  assert.match(modelViews, /renderState\.ball/);
-  assert.match(modelViews, /selectedPlayerId/);
-  assert.match(modelViews, /ballOwnerId/);
+  assert.match(modelViews, /ball: renderState\.ball/);
+  assert.match(modelViews, /selectedPlayerId: snapshot\.match\.selectedPlayerId/);
+  assert.match(modelViews, /ballOwnerId: snapshot\.ball\.ownerId/);
   assert.doesNotMatch(modelViews, /player===game\.selected/);
-  assert.doesNotMatch(modelViews, /\bball\.owner/);
+  assert.doesNotMatch(modelViews, /\bball\.owner\b/);
 });
 
 test("Canvas player and ball transforms consume the same render state", () => {
-  assert.match(canvas, /frame\.renderState/);
+  assert.match(canvas, /createSnapshotRenderState\(\{ previous: frame\.previousSnapshot, current: snapshot, alpha: frame\.alpha \}\)/);
   assert.match(canvas, /renderState\.players/);
   assert.match(canvas, /renderState\.ball/);
   assert.match(canvas, /snapshot\.match\.selectedPlayerId/);

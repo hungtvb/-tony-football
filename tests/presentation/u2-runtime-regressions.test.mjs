@@ -22,7 +22,8 @@ test("replay snapshots and shared effect projection retain ball velocity and tra
   assert.match(snapshotAdapter, /trail: \(ball\.trail \?\? \[\]\)\.map/);
   assert.match(effectsAdapter, /trail: Object\.freeze\(trail\.map\(copyPoint\)\)/);
   assert.match(effectsAdapter, /Math\.hypot\(Number\(frame\.snapshot\?\.ball\?\.vx/);
-  assert.match(canvasRenderer, /effectFacts\.trail/);
+  assert.match(canvasRenderer, /drawEffects\(context, frame\.effects\)/);
+  assert.match(canvasRenderer, /effects\.trail/);
   assert.doesNotMatch(source, /game\.replay\.record\(/);
 });
 
