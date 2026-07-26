@@ -3,11 +3,17 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const runtimeSource = await readFile(new URL("../../game.js", import.meta.url), "utf8");
+const entrySource = await readFile(new URL("../../browser-entry.js", import.meta.url), "utf8");
+const cameraReplaySource = await readFile(new URL("../../src/game/presentation/SnapshotCameraReplayAdapter.js", import.meta.url), "utf8");
 
-test("browser runtime delegates camera, replay, and gameplay feedback to presentation adapters", () => {
-  assert.match(runtimeSource, /createSnapshotCameraController/);
-  assert.match(runtimeSource, /createSnapshotReplayController/);
+test("browser runtime delegates camera, replay, and feedback to presentation adapters", () => {
+  assert.match(entrySource, /createSnapshotCameraReplayAdapter/);
+  assert.match(entrySource, /createBrowserEffectsAdapter/);
+  assert.match(entrySource, /createBrowserEffectsViewAdapter/);
   assert.match(runtimeSource, /createBrowserPresentationFeedbackAdapter/);
+  assert.match(cameraReplaySource, /createSnapshotCameraController/);
+  assert.doesNotMatch(runtimeSource, /createSnapshotCameraController/);
+  assert.doesNotMatch(runtimeSource, /createSnapshotReplayController/);
   assert.doesNotMatch(runtimeSource, /game\.camera\b/);
   assert.doesNotMatch(runtimeSource, /function captureReplayFrame/);
   assert.doesNotMatch(runtimeSource, /game\.replay\.(?:frames|buffer|active|elapsed|accumulator)\s*=/);
@@ -22,7 +28,6 @@ test("browser runtime delegates camera, replay, and gameplay feedback to present
   assert.doesNotMatch(goalBody, /scorerId: possessionId\(scorer\)/);
 });
 
-
 test("compatibility kick events publish after action-specific ball mutations", () => {
   const releaseBallBody = runtimeSource.slice(runtimeSource.indexOf("function releaseBall"), runtimeSource.indexOf("function passBall"));
   const throughBallBody = runtimeSource.slice(runtimeSource.indexOf("function throughBall"), runtimeSource.indexOf("function loftBall"));
@@ -31,7 +36,6 @@ test("compatibility kick events publish after action-specific ball mutations", (
 
   assert.match(releaseBallBody, /return createDeferredCompatibilityKickPublisher/);
   assert.equal(releaseBallBody.includes("publishKickEvent()"), false);
-
   assert.ok(throughBallBody.indexOf("ball.vz=8.6+charge*4.2") < throughBallBody.indexOf("publishKickEvent()"));
   assert.ok(loftBallBody.indexOf("ball.vz*=lerp(.82,1.14,charge)") < loftBallBody.indexOf("publishKickEvent()"));
   assert.ok(shootBallBody.indexOf("ball.vz=10.5+power*4.5") < shootBallBody.indexOf("publishKickEvent()"));

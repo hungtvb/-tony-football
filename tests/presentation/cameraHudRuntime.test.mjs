@@ -3,18 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
+const entry = await readFile(new URL("../../browser-entry.js", import.meta.url), "utf8");
+const cameraOwner = await readFile(new URL("../../src/game/presentation/SnapshotCameraReplayAdapter.js", import.meta.url), "utf8");
 const cameraController = await readFile(new URL("../../src/game/presentation/SnapshotCameraController.js", import.meta.url), "utf8");
+const radarAdapter = await readFile(new URL("../../src/game/presentation/RadarSnapshotAdapter.js", import.meta.url), "utf8");
 const radarRenderer = await readFile(new URL("../../src/game/presentation/RadarSnapshotRenderer.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../../u3-camera-hud.css", import.meta.url), "utf8");
-
-function functionSource(name, nextName) {
-  const start = game.indexOf(`  function ${name}`);
-  const end = game.indexOf(`  function ${nextName}`, start + 1);
-  assert.ok(start >= 0, `${name} must exist`);
-  assert.ok(end > start, `${nextName} must follow ${name}`);
-  return game.slice(start, end);
-}
 
 function sourceBetween(startMarker, endMarker) {
   const start = game.indexOf(startMarker);
@@ -24,11 +19,13 @@ function sourceBetween(startMarker, endMarker) {
   return game.slice(start, end);
 }
 
-test("runtime delegates shared framing policy to the snapshot camera controller", () => {
-  assert.match(game, /cameraHudConfig/);
-  assert.match(game, /createSnapshotCameraController/);
+test("browser composition delegates shared framing to the snapshot camera owner", () => {
+  assert.match(entry, /cameraHudConfig/);
+  assert.match(entry, /createSnapshotCameraReplayAdapter/);
+  assert.match(cameraOwner, /createSnapshotCameraController/);
   assert.match(cameraController, /cameraFrameTarget/);
   assert.match(cameraController, /cameraZoomForSpeed/);
+  assert.doesNotMatch(game, /createSnapshotCameraController/);
 });
 
 test("snapshot camera controller removes the legacy speed zoom-in formula", () => {
@@ -38,20 +35,24 @@ test("snapshot camera controller removes the legacy speed zoom-in formula", () =
   assert.match(cameraController, /cameraFrameTarget/);
 });
 
-test("WebGL broadcast camera consumes the framed camera target", () => {
-  const source = functionSource("render3D", "drawFallbackPlayerDetail");
-  assert.match(source, /cameraController\.state/);
-  assert.match(source, /cameraState\.x/);
-  assert.match(source, /cameraState\.y/);
-  assert.match(source, /zoomScale/);
+test("WebGL and Canvas consumers receive the same framed camera projection", () => {
+  assert.match(entry, /wrapProjectedAdapter/);
+  assert.match(entry, /cameraReplay: projection/);
+  assert.match(entry, /cameraReplayConsumer: owner/);
+  assert.match(entry, /"webgl-model"/);
+  assert.match(entry, /"canvas-match"/);
+  assert.doesNotMatch(game, /function render3D/);
+  assert.doesNotMatch(game, /function renderFallback2D/);
 });
 
-test("radar plot contains no text rendering and uses configured markers", () => {
+test("radar adapter owns the configured marker renderer without text", () => {
   assert.doesNotMatch(radarRenderer, /fillText/);
   assert.match(radarRenderer, /snapshot\.match\.selectedPlayerId/);
   assert.match(radarRenderer, /selectedRadius/);
   assert.match(radarRenderer, /ballRadius/);
-  assert.match(game, /renderRadarSnapshot\(rctx,snapshot/);
+  assert.match(radarAdapter, /claimRadarSnapshotContext/);
+  assert.match(radarAdapter, /renderOwnedRadarSnapshot\(context, frame\.snapshot/);
+  assert.doesNotMatch(game, /renderRadarSnapshot/);
   assert.doesNotMatch(game, /function drawRadar/);
 });
 
