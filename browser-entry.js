@@ -63,9 +63,16 @@ if (typeof globalThis.window !== "undefined") {
   const cameraReplayAdapter = createSnapshotCameraReplayAdapter({ worldWidth: 1200, worldHeight: 700, viewportWidth: 1200, viewportHeight: 700, cameraConfig: cameraHudConfig.camera });
   const settingsAdapter = createBrowserSettingsAdapter({ target: globalThis.window, document: globalThis.document, controlBindings: FO4_CONTROLS });
   const effectsAdapter = createBrowserEffectsAdapter({ target: globalThis.window, lowPowerDevice: globalThis.navigator?.hardwareConcurrency <= 4, reducedMotion: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches });
+  const e2ePresentationSeams = new URLSearchParams(globalThis.location.search).has("goalTest");
   let modelViewAdapter = null; let canvasMatchRenderer = null;
   const sceneBridge = Object.freeze({ getPort: () => sceneFacade.bound ? sceneFacade.port : null, getStablePort: () => sceneFacade.port, diagnostics: () => sceneFacade.port.diagnostics() });
-  const cameraReplayBridge = Object.freeze({ camera: cameraReplayAdapter.camera, replay: cameraReplayAdapter.replay, projection: () => cameraReplayAdapter.projection(), diagnostics: () => cameraReplayAdapter.diagnostics() });
+  const cameraReplayBridge = Object.freeze({
+    camera: cameraReplayAdapter.camera,
+    replay: cameraReplayAdapter.replay,
+    projection: () => cameraReplayAdapter.projection(),
+    diagnostics: () => cameraReplayAdapter.diagnostics(),
+    ...(e2ePresentationSeams ? { resetForE2E: () => cameraReplayAdapter.reset() } : {}),
+  });
   const modelViewBridge = Object.freeze({ diagnostics: () => modelViewAdapter?.diagnostics?.() ?? Object.freeze({ owner: "browser-model-views", attached: false, playerCount: 0, ballAttached: false, assetState: "idle" }) });
   const canvasMatchBridge = Object.freeze({ diagnostics: () => canvasMatchRenderer?.diagnostics?.() ?? Object.freeze({ owner: "canvas-match-renderer", attached: false, active: false, status: "idle", renderCount: 0, lastFacts: null }) });
   const settingsEffectsBridge = Object.freeze({ settings: settingsAdapter, effects: effectsAdapter, diagnostics: () => Object.freeze({ settings: settingsAdapter.diagnostics(), effects: effectsAdapter.diagnostics() }) });

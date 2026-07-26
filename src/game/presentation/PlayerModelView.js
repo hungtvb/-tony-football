@@ -227,6 +227,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   if (typeof worldX !== "function" || typeof worldZ !== "function") throw new TypeError("PlayerModelView requires world projection functions");
   const THREE = three; const view = createProceduralPlayer({ THREE, document, player, lowPowerDevice });
   let attached = false; let disposed = false; let terminating = false; let rootDisposed = false; let currentAnimationReleased = false; let installError = ""; const retiredAnimationSets = [];
+  let motionDiagnostics = Object.freeze({ speed: 0, sprinting: false, animationState: "Idle_Loop", animationTimeScale: 1, snapshotX: player.x, snapshotY: player.y, worldX: worldX(player.x), worldZ: worldZ(player.y) });
   function unavailable() { return disposed || terminating; }
   function attach() { if (attached || unavailable()) return false; if (scenePort.addObject(view.root) === false) return false; attached = true; return true; }
   function retryRetiredAnimationSets(errors = null) {
@@ -265,6 +266,16 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
       view.root.rotation.y = pose.motionYaw ?? Math.atan2(pose.dirX || 0, pose.dirY || 1); const progress = pose.animDuration ? 1 - pose.animTime / pose.animDuration : 1; const wave = pose.animTime > 0 ? Math.sin(clamp(progress, 0, 1) * Math.PI) : 0; const kick = pose.anim === "shoot" || pose.anim === "pass" ? wave : 0; const tackle = pose.anim === "tackle" ? wave : 0;
       view.body.position.y = running ? Math.abs(Math.sin(pose.stepPhase || 0)) * .12 : 0; view.body.rotation.z = stride * .025 - (pose.turnLean || 0) * .16; view.body.rotation.x = tackle * .6 - kick * .08; view.leftLeg.rotation.x = stride * .72 - tackle * 1.05; view.rightLeg.rotation.x = -stride * .72 - kick * (pose.anim === "shoot" ? 1.45 : 1.05); view.leftArm.rotation.x = -stride * .62 - kick * .45; view.rightArm.rotation.x = stride * .62 + kick * .72;
     }
+    motionDiagnostics = Object.freeze({
+      speed,
+      sprinting: Boolean(pose.sprinting),
+      animationState: view.rig?.state ?? (running ? "procedural-run" : "procedural-idle"),
+      animationTimeScale: Number(view.rig?.active?.timeScale ?? 1),
+      snapshotX: pose.x,
+      snapshotY: pose.y,
+      worldX: view.root.position.x,
+      worldZ: view.root.position.z,
+    });
     const selected = !replayActive && pose.id === selectedPlayerId; view.marker.visible = selected;
     if (selected) { view.marker.scale.setScalar(1 + Math.sin(nowMilliseconds * .006) * .08); view.marker.material.color.set(controlMode === "defense" && pressedCodes.length ? 0x47c9d4 : 0xffd86b); }
     view.label.visible = !replayActive && (selected || speed < 10); return true;
@@ -293,7 +304,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     attach, installAsset, installAnimations, render, reset, teardown,
     diagnostics: () => Object.freeze({
       id: player.id, team: player.team, role: player.role, attached, rigged: Boolean(view.rig), disposed, terminating, installError,
-      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance,
+      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance, motion: motionDiagnostics,
     }),
   });
 }

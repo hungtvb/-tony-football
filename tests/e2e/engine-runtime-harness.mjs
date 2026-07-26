@@ -4,36 +4,52 @@ async function exposeBrowserRuntime(page, methods) {
     const source = await response.text();
     const withRuntimeHandle = source.replace(
       "    this.#publishEvent = publishEvent;",
-      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;",
+      "    this.#publishEvent = publishEvent;\n    globalThis.__TONY_E2E_BROWSER_RUNTIME__ = this;\n    globalThis.__TONY_E2E_COMMAND_LOG__ = [];",
     );
-    const patched = withRuntimeHandle.replace(
+    const withCommandEvidence = withRuntimeHandle.replace(
+      "  dispatch(command) {",
+      `  dispatch(command) {
+    const evidence = Object.freeze({
+      type: command?.type ?? null,
+      source: command?.source ?? null,
+      targetTick: command?.targetTick ?? null,
+      payload: command?.payload ?? null,
+    });
+    globalThis.__TONY_E2E_COMMAND_LOG__?.push(evidence);`,
+    );
+    const patched = withCommandEvidence.replace(
       "  step(deltaSeconds) {",
       `${methods}\n\n  step(deltaSeconds) {`,
     );
-    if (patched === source || !patched.includes("__TONY_E2E_BROWSER_RUNTIME__")) {
+    if (
+      patched === source
+      || !patched.includes("__TONY_E2E_BROWSER_RUNTIME__")
+      || !patched.includes("__TONY_E2E_COMMAND_LOG__")
+    ) {
       throw new Error("Could not install the isolated BrowserMatchRuntime E2E harness");
     }
     await route.fulfill({ response, body: patched });
   });
 }
 
-// Presentation-only fixture retained for existing projection tests. It is not
-// valid evidence for headless gameplay, natural scoring, or replay acceptance.
-export async function installEngineRuntimeHarness(page) {
-  await exposeBrowserRuntime(page, `  recordGoalForE2E(team, options = {}) {
-    return this.#engine.recordGoal(team, options);
-  }
-
-  advanceForE2E(steps, deltaSeconds = 1 / 60) {
+const ADVANCE_ONLY_METHOD = `  advanceForE2E(steps, deltaSeconds = 1 / 60) {
     if (!Number.isInteger(steps) || steps < 0) {
       throw new RangeError("E2E runtime steps must be a non-negative integer");
     }
     for (let index = 0; index < steps; index += 1) this.step(deltaSeconds);
     return this.snapshot;
-  }`);
+  }`;
+
+// The generic E2E runtime handle is advance-only. Acceptance flows must use
+// browser input/public immutable commands for possession, actions and scoring.
+export async function installEngineRuntimeHarness(page) {
+  await exposeBrowserRuntime(page, ADVANCE_ONLY_METHOD);
 }
 
 export async function installNaturalGoalRuntimeHarness(page) {
+  // Clock stepping is exposed only to finish an already naturally-scored
+  // incident deterministically on software-rendered CI. It cannot mutate score.
+  await exposeBrowserRuntime(page, ADVANCE_ONLY_METHOD);
   await page.route("**/game.js*", async (route) => {
     const response = await route.fetch();
     const source = await response.text();

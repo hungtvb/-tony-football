@@ -4,11 +4,18 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 const CHARACTER_URL = "assets/models/football-character-v2.glb?v=16.0.0";
 const ANIMATION_URL = "assets/models/football-animations-v2.glb?v=16.0.0";
 
+// GLTFLoader.loadAsync resolves only after fetch, decode and scene construction.
+// A 10 second wall-clock budget incorrectly treated a successful 515 KB response
+// as a network failure while Meshopt/GLB parsing was still running, then started a
+// second parser and permanently committed procedural fallback. Keep the timeout
+// bounded, but give one software-rendered/low-power decode enough time to settle.
+export const PLAYER_ASSET_ATTEMPT_TIMEOUT_MILLISECONDS = 30000;
+
 function disposeLateAsset(result) {
   disposePlayerAssetTemplate(result?.scene);
 }
 
-export async function loadPlayerAssetWithRetry(loader, url, label, { timeoutMilliseconds = 10000, attempts = 2, setTimer = setTimeout, clearTimer = clearTimeout, disposeLateResult = disposeLateAsset } = {}) {
+export async function loadPlayerAssetWithRetry(loader, url, label, { timeoutMilliseconds = PLAYER_ASSET_ATTEMPT_TIMEOUT_MILLISECONDS, attempts = 2, setTimer = setTimeout, clearTimer = clearTimeout, disposeLateResult = disposeLateAsset } = {}) {
   let lastError = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const source = attempt === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}retry=${attempt}`;

@@ -80,13 +80,53 @@ replace_once(
     'render frame remains projection-free',
 )
 replace_once(
+    '''    if (replayFrame) {
+      const scoringRight = game.goalSequence?.team === HOME;
+      cameraTarget.set(targetX + (scoringRight ? -16 : 16), 13, clamp(targetZ + 22, -19, 19));
+      cameraLook.set(targetX, 1.2, targetZ);
+    }''',
+    '''    const replayScoringRight = game.replay.scoringRight;
+    const replayCameraActive = Boolean(replayFrame) && game.replay.cinematicAvailable === true && typeof replayScoringRight === "boolean";
+    if (replayCameraActive) {
+      const scoringRight = replayScoringRight;
+      cameraTarget.set(targetX + (scoringRight ? 18 : -18), 24, clamp(targetZ + 24, -26, 26));
+      cameraLook.set(targetX + (scoringRight ? -24 : 24), 1.5, targetZ);
+    }''',
+    'replay incident framing',
+)
+replace_once(
+    '''    const cameraDt = Math.min(0.05, Math.max(0, (render3D.lastNow ? now - render3D.lastNow : 16.667) / 1000));
+    render3D.lastNow = now;
+    cameraPosition.lerp(cameraTarget, gameFeel.cameraEase(cameraDt, Boolean(replayFrame)));
+    const feelOffset = gameFeel.sampleCameraOffset(now);
+    cameraPosition.x += feelOffset.x * 0.42 + feelOffset.z * 0.12;
+    cameraPosition.y += feelOffset.y * 0.28;
+    cameraPosition.z += feelOffset.z * 0.28;''',
+    '''    const cameraDt = Math.min(0.05, Math.max(0, (render3D.lastNow ? now - render3D.lastNow : 16.667) / 1000));
+    render3D.lastNow = now;
+    const enteringReplayCamera = replayCameraActive && !render3D.replayCameraActive;
+    render3D.replayCameraActive = replayCameraActive;
+    if (enteringReplayCamera) cameraPosition.copy(cameraTarget);
+    else cameraPosition.lerp(cameraTarget, gameFeel.cameraEase(cameraDt, replayCameraActive));
+    const feelOffset = gameFeel.sampleCameraOffset(now);
+    cameraPosition.x += feelOffset.x * 0.42 + feelOffset.z * 0.12;
+    cameraPosition.y += feelOffset.y * 0.28;
+    cameraPosition.z += feelOffset.z * 0.28;
+    if (replayCameraActive) {
+      cameraPosition.x = clamp(cameraPosition.x, -58, 58);
+      cameraPosition.y = Math.max(12, cameraPosition.y);
+      cameraPosition.z = clamp(cameraPosition.z, -32, 32);
+    }''',
+    'replay camera stadium clearance',
+)
+replace_once(
     '    createPresentationFeedback,\n',
     '''    createPresentationFeedback,
     getPresentationFrameFacts: () => Object.freeze({
       cameraMode: game.cameraMode,
       goalScorerId: game.goalScorer ? compatibilityPlayerId(game.goalScorer) : null,
     }),
-''',
+  ''',
     'presentation frame facts',
 )
 replace_once('    game.replay.start(captureCompatibilitySnapshot());\n', '    // Engine snapshots exclusively activate and advance replay.\n', 'manual goal replay activation')
@@ -99,13 +139,30 @@ replace_once(
       // Debug scenarios cannot inject or activate presentation replay.''',
     'debug replay frame injection',
 )
-replace_once('      camera: { ...cameraController.state },\n', '      camera: { ...cameraController.state },\n      cameraReplay: cameraReplayBridge.diagnostics(),\n', 'camera/replay diagnostics')
+replace_once(
+    '      camera: { ...cameraController.state },\n',
+    '''      camera: { ...cameraController.state },
+      cameraReplay: cameraReplayBridge.diagnostics(),
+      replayCameraFraming: Object.freeze({
+        active: Boolean(game.replay.active),
+        cinematicActive: Boolean(render3D.replayCameraActive),
+        cinematicAvailable: Boolean(game.replay.cinematicAvailable),
+        scoringRight: game.replay.scoringRight,
+        frameIndex: cameraReplayBridge.diagnostics().replay.frameIndex,
+        missingFrame: cameraReplayBridge.diagnostics().replay.missingFrame,
+        position: Object.freeze({ x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z }),
+        target: Object.freeze({ x: cameraTarget.x, y: cameraTarget.y, z: cameraTarget.z }),
+        look: Object.freeze({ x: cameraLook.x, y: cameraLook.y, z: cameraLook.z }),
+      }),
+''',
+    'camera/replay diagnostics',
+)
 
 forbidden_tokens = [
     'createSnapshotCameraController', 'createSnapshotReplayController', 'game.replay.update(',
     'game.replay.record(', 'game.replay.start(', 'game.replay.loadFrames(', 'game.replay.syncElapsed(',
     'recordReplaySnapshot', 'cameraController.update(compatibilitySnapshots.snapshot',
-    'cameraReplayBridge.project(',
+    'cameraReplayBridge.project(', 'const scoringRight = framedX >= W / 2',
 ]
 remaining = []
 for line_number, line in enumerate(text.splitlines(), start=1):
@@ -116,5 +173,17 @@ if remaining:
     raise RuntimeError("forbidden camera/replay ownership remains:\n" + "\n".join(remaining))
 if 'window.__TONY_CAMERA_REPLAY_BRIDGE__' not in text or 'getPresentationFrameFacts' not in text:
     raise RuntimeError("camera/replay bridge or immutable frame facts are missing")
+if 'enteringReplayCamera' not in text or 'cameraPosition.z = clamp(cameraPosition.z, -32, 32)' not in text:
+    raise RuntimeError("replay camera stadium clearance is missing")
+if 'const replayScoringRight = game.replay.scoringRight;' not in text or 'const scoringRight = replayScoringRight;' not in text:
+    raise RuntimeError("replay side must remain latched for the immutable incident")
+if 'const replayCameraActive = Boolean(replayFrame) && game.replay.cinematicAvailable === true' not in text:
+    raise RuntimeError("missing-history replay must fall back without activating cinematic camera")
+if 'Replay incident side is unavailable' in text:
+    raise RuntimeError("missing-history replay still throws instead of using current-frame fallback")
+if 'scoringRight ? 18 : -18' not in text or 'scoringRight ? -24 : 24' not in text:
+    raise RuntimeError("replay incident inward framing is missing")
+if 'replayCameraFraming: Object.freeze({' not in text or 'cinematicActive: Boolean(render3D.replayCameraActive)' not in text:
+    raise RuntimeError("multi-frame replay camera diagnostics are missing")
 
 path.write_text(text, encoding="utf-8")

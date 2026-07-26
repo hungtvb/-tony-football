@@ -10,11 +10,15 @@ test("visual-test composition owns snapshot-driven fallback player and ball view
 
 test("normal asset mode preserves source maps and renders explicit football clothing and boots", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one desktop live-match asset proof is sufficient");
-  test.setTimeout(180_000);
+  // Hosted software-rendering runners can make each Playwright/CDP boundary take
+  // several seconds even after all asset and motion assertions are satisfied.
+  // Keep the job bounded while allowing the unchanged acceptance proof to attach
+  // its diagnostics and screenshot under that observed runner slowdown.
+  test.setTimeout(240_000);
   await page.goto("/?skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
-    return diagnostics?.playerCount === 12 && diagnostics?.appearance?.riggedPlayers === 12 && diagnostics?.appearance?.visibleKitPlayers === 12;
+    return diagnostics?.playerCount === 12 && diagnostics?.animationClips > 0 && diagnostics?.appearance?.riggedPlayers === 12 && diagnostics?.appearance?.visibleKitPlayers === 12;
   }, null, { timeout: 150_000 });
   const result = await page.evaluate(() => ({ model: window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics(), scene: window.__TONY_THREE_SCENE_BRIDGE__.diagnostics() }));
   expect(result.model.appearance.riggedPlayers).toBe(12);
@@ -46,6 +50,34 @@ test("normal asset mode preserves source maps and renders explicit football clot
   }));
   expect(liveEvidence.state).toBe("playing"); expect(liveEvidence.engineTick).toBeGreaterThan(0);
   expect(liveEvidence.appearance.riggedPlayers).toBe(12); expect(liveEvidence.appearance.visibleKitPlayers).toBe(12); expect(liveEvidence.appearance.bootlessPlayers).toBe(0);
+
+  const motionBefore = await page.evaluate(() => {
+    const diagnostics = window.__TONY_DEBUG__.diagnostics();
+    const id = diagnostics.renderState.selectedPlayerId;
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
+    return player?.motion ? { id, ...player.motion } : null;
+  });
+  expect(motionBefore).toBeTruthy();
+  await page.keyboard.down("ArrowRight");
+  await expect.poll(() => page.evaluate((id) => {
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
+    return Boolean(
+      player?.motion?.speed > 26
+      && ["Jog_Fwd_Loop", "Sprint_Loop"].includes(player.motion.animationState)
+    );
+  }, motionBefore.id), { timeout: 15_000 }).toBe(true);
+  const motionAfter = await page.evaluate((id) => {
+    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
+    return player?.motion ? { id, ...player.motion } : null;
+  }, motionBefore.id);
+  await page.keyboard.up("ArrowRight");
+  expect(motionAfter.speed).toBeGreaterThan(26);
+  expect(["Jog_Fwd_Loop", "Sprint_Loop"]).toContain(motionAfter.animationState);
+  expect(motionAfter.animationTimeScale).toBeGreaterThanOrEqual(.78);
+  expect(motionAfter.animationTimeScale).toBeLessThanOrEqual(1.42);
+  expect(Math.abs(motionAfter.snapshotX - motionBefore.snapshotX)).toBeGreaterThan(1);
+  expect(Math.abs((motionAfter.snapshotX - motionBefore.snapshotX) * .1 - (motionAfter.worldX - motionBefore.worldX))).toBeLessThan(.2);
+  liveEvidence.motion = { before: motionBefore, after: motionAfter };
 
   const devtools = await page.context().newCDPSession(page);
   const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });

@@ -66,7 +66,7 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Run minimal browser smoke
+      - name: Run core browser smoke
         run: npm run test:e2e:smoke
       - name: Upload browser smoke evidence
         if: always()
@@ -79,15 +79,120 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  asset-smoke:
+    name: Real asset appearance smoke
+    needs:
+      - fast-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run normal asset-mode proof
+        run: npm run test:e2e:asset-smoke
+      - name: Upload asset evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: asset-smoke-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  golden-match:
+    name: Golden match lifecycle
+    needs:
+      - fast-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run natural goal and Canvas lifecycle
+        run: npm run test:e2e:golden
+      - name: Upload golden-match evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: golden-match-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  p1-parity:
+    name: TON-94 P1 browser parity
+    needs:
+      - fast-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run P1 parity chronology
+        run: npm run test:e2e:p1-parity
+      - name: Upload P1 parity evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ton94-p1-parity-evidence
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   ci-gate:
     name: CI gate
     if: always()
     needs:
       - fast-validation
       - browser-smoke
+      - asset-smoke
+      - golden-match
+      - p1-parity
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs
         run: |
           test "${{ needs.fast-validation.result }}" = "success"
           test "${{ needs.browser-smoke.result }}" = "success"
+          test "${{ needs.asset-smoke.result }}" = "success"
+          test "${{ needs.golden-match.result }}" = "success"
+          test "${{ needs.p1-parity.result }}" = "success"
