@@ -10,7 +10,11 @@ test("visual-test composition owns snapshot-driven fallback player and ball view
 
 test("normal asset mode preserves source maps and renders explicit football clothing and boots", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one desktop live-match asset proof is sufficient");
-  test.setTimeout(180_000);
+  // Hosted software-rendering runners can make each Playwright/CDP boundary take
+  // several seconds even after all asset and motion assertions are satisfied.
+  // Keep the job bounded while allowing the unchanged acceptance proof to attach
+  // its diagnostics and screenshot under that observed runner slowdown.
+  test.setTimeout(240_000);
   await page.goto("/?skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
