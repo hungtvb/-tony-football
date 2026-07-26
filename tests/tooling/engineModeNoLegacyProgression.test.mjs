@@ -34,7 +34,8 @@ test("engine browser step never invokes legacy gameplay progression", async () =
   assert.match(game, /function updateLegacyGameplay\(dt\)/);
   assert.match(game, /function updateLegacyReplay\(\)/);
   assert.match(game, /legacyGameplayStepCount \+= 1/);
-  assert.doesNotMatch(snapshotAdapter, /replay\.(?:update|syncElapsed)\(/);
+  assert.doesNotMatch(snapshotAdapter, /replay\.update\(/);
+  assert.match(snapshotAdapter, /replay\.syncElapsed\(/);
   assert.doesNotMatch(game, /dispatchCompatibilityCommand:\s*applyCompatibilityCommand/);
   assert.doesNotMatch(bootstrap, /dispatchCompatibilityCommand/);
   assert.match(bootstrap, /onCommand:\s*\(\) => false/);

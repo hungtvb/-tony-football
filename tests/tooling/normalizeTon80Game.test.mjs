@@ -36,7 +36,7 @@ test("normalization is idempotent", () => {
 
 for (const marker of ["__TONY_COMPATIBILITY_PRESENTATION_PORT__", "new BrowserBootstrapComposition", "createBrowserPresentationFeedbackAdapter"]) {
   test(`fails closed without ${marker}`, () => {
-    assert.throws(() => normalizeTon80GameSource(finalRuntime.replace(marker, "")), /Missing TON-85 runtime boundary/);
+    assert.throws(() => normalizeTon80GameSource(finalRuntime.replaceAll(marker, "")), /Missing TON-85 runtime boundary/);
   });
 }
 
