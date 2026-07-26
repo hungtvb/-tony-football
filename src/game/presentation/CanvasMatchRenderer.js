@@ -157,6 +157,20 @@ function drawCharge(context, selectedPlayer, activeCharge) {
   context.fillStyle = activeCharge.color ?? (power > .82 ? "#ff5b45" : "#ffcf58"); context.fillRect(selectedPlayer.x - 30, selectedPlayer.y - 49, 60 * power, 6);
 }
 
+function drawEffects(context, effects) {
+  if (!effects?.enabled) return;
+  for (let index = effects.trail.length - 1; index >= 0; index -= 1) {
+    const point = effects.trail[index]; context.globalAlpha = clamp(Number(point.opacity ?? 0), 0, 1);
+    context.fillStyle = "#dff8ff"; context.beginPath(); context.arc(point.x, point.y - Number(point.height || 0) * 2.5, 2.5, 0, Math.PI * 2); context.fill();
+  }
+  context.globalAlpha = 1;
+  for (const particle of effects.particles) {
+    context.globalAlpha = clamp(Number(particle.life ?? 0) / Math.max(.001, Number(particle.max ?? 1)), 0, 1);
+    context.fillStyle = particle.color; context.fillRect(particle.x, particle.y, Math.max(1, Number(particle.size || 2)), Math.max(1, Number(particle.size || 2)));
+  }
+  context.globalAlpha = 1;
+}
+
 function drawGoalFlash(context, world, goalSequence) {
   if (!goalSequence) return;
   const duration = Math.max(.001, Number(goalSequence.duration || 1));
@@ -199,10 +213,11 @@ export function createCanvasMatchRenderer({ target, document, canvasId = "gameCa
       context.save(); context.setTransform?.(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, canvas.width || world.width, canvas.height || world.height); context.restore();
       context.save(); context.setTransform?.(transform.a, 0, 0, transform.d, transform.e, transform.f);
       drawPitch(context, world, field, settings.pitchStyle);
+      drawEffects(context, frame.effects);
       for (const player of [...renderState.players].sort((left, right) => left.y - right.y)) drawPlayer(context, player, { selected: !cameraReplay.replay.active && player.id === snapshot.match.selectedPlayerId, defenseSelection, nowMilliseconds: frame.nowMilliseconds });
       drawBall(context, renderState.ball, settings.ballStyle);
       if (settings.weather === "rain") drawRain(context, world, frame.nowMilliseconds, lowPowerDevice);
-      if (!cameraReplay.replay.active && snapshot.ball.ownerId === snapshot.match.selectedPlayerId) drawCharge(context, selectedPlayer, frame.activeCharge);
+      if (!cameraReplay.replay.active && snapshot.ball.ownerId === snapshot.match.selectedPlayerId) drawCharge(context, selectedPlayer, frame.effects?.charge ?? frame.activeCharge);
       drawGoalFlash(context, world, snapshot.match.goalSequence);
       context.restore();
       renderCount += 1;
@@ -217,6 +232,7 @@ export function createCanvasMatchRenderer({ target, document, canvasId = "gameCa
         ballX: renderState.ball.x,
         ballY: renderState.ball.y,
         cameraReplay: Object.freeze({ projectionSequence: cameraReplay.projectionSequence, camera: cameraReplay.camera, replay: cameraReplay.replay }),
+        effectsProjectionSequence: frame.effects?.projectionSequence ?? 0,
         transform,
       });
       return true;

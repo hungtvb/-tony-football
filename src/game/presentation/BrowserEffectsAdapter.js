@@ -1,5 +1,6 @@
 import { createContextualParticlePolicy } from "./ContextualParticlePolicy.js";
 import { createGameFeelController } from "./GameFeelController.js";
+import { createSnapshotRenderState } from "./SnapshotRenderState.js";
 
 const OWNERS = new WeakMap();
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -54,13 +55,24 @@ export function createBrowserEffectsAdapter({ target, lowPowerDevice = false, re
   function projectFrame(frame) {
     if (!frame || typeof frame !== "object") return frame;
     const cached = projectedFrames.get(frame); if (cached) return cached;
+    const renderState = frame.renderState ?? (frame.snapshot ? createSnapshotRenderState({ previous: frame.previousSnapshot ?? frame.snapshot, current: frame.snapshot, alpha: frame.alpha ?? 1 }) : null);
     const selectedPlayerId = frame.snapshot?.match?.selectedPlayerId;
-    const selectedPlayer = frame.renderState?.players?.find?.((player) => player.id === selectedPlayerId) ?? null;
+    const selectedPlayer = renderState?.players?.find?.((player) => player.id === selectedPlayerId) ?? null;
     const projectedCharge = frame.activeCharge ? projectCharge({ active: true, power: frame.activeCharge.power, player: selectedPlayer }) : null;
-    const projected = Object.freeze({ ...frame, activeCharge: projectedCharge?.active ? projectedCharge : null });
+    const speed = Math.hypot(Number(frame.snapshot?.ball?.vx ?? 0), Number(frame.snapshot?.ball?.vy ?? 0));
+    const state = snapshot();
+    const effects = Object.freeze({
+      projectionSequence: state.projectionSequence,
+      enabled: state.enabled,
+      particles: state.particles,
+      trail: projectTrail(state.trail, { speed }),
+      speed,
+      charge: projectedCharge ?? Object.freeze({ active: false, power: 0, player: null, color: "#ffcf58" }),
+    });
+    const projected = Object.freeze({ ...frame, renderState, activeCharge: effects.charge.active ? effects.charge : null, effects });
     projectedFrames.set(frame, projected); return projected;
   }
-  function snapshot() { cachedSnapshot ??= Object.freeze({ projectionSequence, particles: Object.freeze(particles.map((particle) => Object.freeze({ ...particle }))), enabled }); return cachedSnapshot; }
+  function snapshot() { cachedSnapshot ??= Object.freeze({ projectionSequence, particles: Object.freeze(particles.map((particle) => Object.freeze({ ...particle }))), trail: Object.freeze(trail.map(copyPoint)), enabled }); return cachedSnapshot; }
   function setEnabled(value) { if (disposed) return false; enabled = Boolean(value); if (!enabled) particles = []; projectionSequence += 1; cachedSnapshot = null; return true; }
   function reset() { if (disposed) return false; particles = []; trail = []; feel.clear(); projectionSequence = 0; cachedSnapshot = null; projectedFrames = new WeakMap(); return true; }
   function teardown() { if (disposed) return false; reset(); if (OWNERS.get(target) === api) OWNERS.delete(target); attached = false; disposed = true; return true; }

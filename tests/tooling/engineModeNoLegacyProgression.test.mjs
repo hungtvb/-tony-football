@@ -3,10 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const rootUrl = new URL("../../", import.meta.url);
-
-async function read(path) {
-  return readFile(new URL(path, rootUrl), "utf8");
-}
+async function read(path) { return readFile(new URL(path, rootUrl), "utf8"); }
 
 function functionBody(source, name) {
   const signature = `function ${name}(`;
@@ -23,7 +20,7 @@ function functionBody(source, name) {
 }
 
 test("engine browser step never invokes legacy gameplay progression", async () => {
-  const [game, bootstrap, replayAdapter] = await Promise.all([
+  const [game, bootstrap, snapshotAdapter] = await Promise.all([
     read("game.js"),
     read("src/game/application/BrowserBootstrapComposition.js"),
     read("src/game/presentation/CompatibilitySnapshotAdapter.js"),
@@ -35,10 +32,10 @@ test("engine browser step never invokes legacy gameplay progression", async () =
   const presentation = functionBody(game, "updatePresentation");
   assert.doesNotMatch(presentation, /updateLegacyReplay\(|updateReplay\(/);
   assert.match(game, /function updateLegacyGameplay\(dt\)/);
-  assert.match(game, /function updateLegacyReplay\(dt\)/);
+  assert.match(game, /function updateLegacyReplay\(\)/);
   assert.match(game, /legacyGameplayStepCount \+= 1/);
-  assert.doesNotMatch(replayAdapter, /replay\.update\(/);
-  assert.match(replayAdapter, /replay\.syncElapsed\(/);
+  assert.doesNotMatch(snapshotAdapter, /replay\.update\(/);
+  assert.match(snapshotAdapter, /replay\.syncElapsed\(/);
   assert.doesNotMatch(game, /dispatchCompatibilityCommand:\s*applyCompatibilityCommand/);
   assert.doesNotMatch(bootstrap, /dispatchCompatibilityCommand/);
   assert.match(bootstrap, /onCommand:\s*\(\) => false/);
