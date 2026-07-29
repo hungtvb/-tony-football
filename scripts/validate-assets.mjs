@@ -34,9 +34,9 @@ for (const [sourceName, source, contracts] of [
   ["BrowserSettingsAdapter.js", settingsSource, ["user-preference", "browser settings owner already attached", "controlBindings", "previewCount"]],
   ["BrowserEffectsAdapter.js", effectsSource, ["browser effects owner already attached", "emitContextParticles", "projectTrail", "projectCharge", "projectionSequence"]],
 ]) for (const contract of contracts) if (!source.includes(contract)) throw new Error(`${sourceName}: missing presentation contract: ${contract}`);
-if (playerSource.includes("material.map = null")) throw new Error,"PlayerModelView.js: semantic source texture maps must not be cleared");
+if (playerSource.includes("material.map = null")) throw new Error("PlayerModelView.js: semantic source texture maps must not be cleared");
 for (const rigidPrimitive of ["new THREE.BoxGeometry", "new THREE.CylinderGeometry", "bone.add(mesh)"]) if (rigAppearanceSource.includes(rigidPrimitive)) throw new Error(`RigFootballKitOverlay.js: rigid bone-attached appearance primitive remains: ${rigidPrimitive}`);
 for (const pageContract of ["u1-match-experience.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing U1 match experience contract: ${pageContract}`);
-if (!entrySource.includes('await import("./generated/game.js?v=24.0.0")')) throw new Error,"browser-entry.js: missing corrected TON-83 generated game entry import");
+if (!entrySource.includes('await import("./generated/game.js?v=24.0.0")')) throw new Error("browser-entry.js: missing corrected TON-83 generated game entry import");
 for (const contract of ["createBrowserModelViewAdapter", "createCanvasMatchRenderer", "createSnapshotCameraReplayAdapter", "__TONY_CAMERA_REPLAY_BRIDGE__", "cameraReplay: projection", "cameraReplayConsumer: owner", "createBrowserSettingsAdapter", "createBrowserEffectsAdapter", "__TONY_SETTINGS_EFFECTS_BRIDGE__"]) if (!entrySource.includes(contract)) throw new Error(`browser-entry.js: missing presentation contract ${contract}`);
 console.log(`Player assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
