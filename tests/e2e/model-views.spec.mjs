@@ -65,13 +65,21 @@ test("normal asset mode preserves source maps and renders body-conforming footba
     expect(player).toBeTruthy();
     expect(player.mode).toBe("asset");
     expect(player.rigKitInstalled).toBe(true);
+    expect(player.appearanceMode).toBe("integrated-body-material");
+    expect(player.integratedBodySurfaceCount).toBe(1);
+    expect(player.skinnedSurfaceCount).toBe(1);
+    expect(player.bootRegionCount).toBe(2);
     expect(player.visibleKitNodeCount).toBe(7);
     expect(player.bootGeometryCount).toBe(2);
+    expect(player.hairGeometryCount).toBeGreaterThanOrEqual(1);
+    expect(player.rigidPrimitiveCount).toBe(0);
     expect(player.preservedMapCount).toBeGreaterThan(0);
-    expect(player.rigKitNodes.map((node) => node.name)).toEqual(expect.arrayContaining(["TonyRigKitSurface", "TonyRigBootSurfaceLeft", "TonyRigBootSurfaceRight", "TonyRigHair"]));
-    const fitted = player.rigKitNodes.filter((node) => node.skinned && node.bodyConforming);
-    expect(fitted).toHaveLength(3);
-    expect(fitted.filter((node) => node.boot)).toHaveLength(2);
+    expect(player.surfaceMapPreservedCount).toBeGreaterThan(0);
+    expect(player.rigKitNodes.map((node) => node.name)).toEqual(expect.arrayContaining(["SuperHero_Male", "TonyRigHair"]));
+    const fitted = player.rigKitNodes.filter((node) => node.integratedBody && node.skinned && node.bodyConforming);
+    expect(fitted).toHaveLength(1);
+    expect(fitted[0].bootRegions).toBe(2);
+    expect(fitted[0].kitRegions).toBe(5);
     expect(player.rigKitNodes.filter((node) => node.hair)).toHaveLength(1);
     expect(player.rigKitNodes.filter((node) => !node.skinned && !node.hair)).toHaveLength(0);
   }

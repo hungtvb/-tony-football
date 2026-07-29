@@ -1,10 +1,8 @@
 import * as THREE_NAMESPACE from "three";
 
-const OVERLAY_MARKER = "TonyRigFootballAppearance";
-const OVERLAY_FLAG = "tonyRigAppearanceSurface";
-const BOOT_FLAG = "tonyRigBootSurface";
+const APPEARANCE_MARKER = "TonyRigFootballAppearance";
+const APPEARANCE_FLAG = "tonyRigAppearanceSurface";
 const HAIR_FLAG = "tonyRigHairGeometry";
-const SHARED_GEOMETRY_FLAG = "tonySharedGeometry";
 
 function colorsFor(player) {
   const home = Number(player?.team ?? 0) === 0;
@@ -25,34 +23,29 @@ function shaderColor(THREE, value) {
   return `vec3(${color.r.toFixed(5)}, ${color.g.toFixed(5)}, ${color.b.toFixed(5)})`;
 }
 
-function sourceMaterials(source) {
-  return Array.isArray(source?.material) ? source.material : [source?.material];
+function materialsOf(node) {
+  return Array.isArray(node?.material) ? node.material : [node?.material];
 }
 
-function appearanceMaterial(THREE, source, palette, kind) {
-  const material = source?.clone?.() ?? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .58, metalness: .02 });
+function createIntegratedAppearanceMaterial(THREE, source, palette) {
+  const material = source?.clone?.() ?? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .6, metalness: .01 });
   const previousCompile = typeof material.onBeforeCompile === "function" ? material.onBeforeCompile.bind(material) : null;
   const previousCacheKey = typeof material.customProgramCacheKey === "function" ? material.customProgramCacheKey.bind(material) : () => "";
   const sourceMap = source?.map ?? null;
-  material.name = `TonyRig${kind}SurfaceMaterial`;
+  material.name = "TonyRigIntegratedAppearanceMaterial";
   material.userData = {
     ...(material.userData ?? {}),
     tonyOwnedRigAppearanceMaterial: true,
     tonySharedTextures: true,
     tonySourceMapPreserved: Boolean(sourceMap && material.map === sourceMap),
-    tonyAppearanceSurfaceKind: kind,
+    tonyAppearanceSemantic: "integrated-appearance",
+    tonyAppearanceSurfaceKind: "integrated-body-material",
   };
   material.color?.set?.(0xffffff);
-  material.roughness = kind.startsWith("boot") ? .44 : .6;
-  material.metalness = kind.startsWith("boot") ? .08 : .01;
-  material.polygonOffset = true;
-  material.polygonOffsetFactor = -1;
-  material.polygonOffsetUnits = -1;
+  material.roughness = .6;
+  material.metalness = .01;
   material.onBeforeCompile = (shader) => {
     previousCompile?.(shader);
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vTonyBodyPosition;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvTonyBodyPosition = position;\ntransformed += normalize(objectNormal) * 0.0035;");
     const paletteSource = {
       jersey: shaderColor(THREE, palette.jersey),
       jerseyLight: shaderColor(THREE, palette.jerseyLight),
@@ -61,36 +54,33 @@ function appearanceMaterial(THREE, source, palette, kind) {
       boots: shaderColor(THREE, palette.boots),
       accent: shaderColor(THREE, palette.accent),
     };
-    const mask = kind === "kit"
-      ? `
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vTonyBodyPosition;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvTonyBodyPosition = position;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vTonyBodyPosition;")
+      .replace("#include <map_fragment>", `#include <map_fragment>
         float tonyY = vTonyBodyPosition.y;
         float tonyX = abs(vTonyBodyPosition.x);
         bool tonyTorso = tonyY > 0.15 && tonyY < 0.69 && tonyX < 0.27;
         bool tonySleeve = tonyY > 0.48 && tonyY < 0.70 && tonyX >= 0.18 && tonyX < 0.50;
         bool tonyShorts = tonyY > -0.08 && tonyY < 0.20 && tonyX < 0.32;
         bool tonySocks = tonyY >= -0.85 && tonyY < -0.54;
-        if (!(tonyTorso || tonySleeve || tonyShorts || tonySocks)) discard;
-        vec3 tonyTone = ${paletteSource.jersey};
-        if (tonyShorts) tonyTone = ${paletteSource.shorts};
-        else if (tonySocks) tonyTone = ${paletteSource.socks};
-        else if ((tonyTorso && tonyY > 0.42 && tonyY < 0.47) || (tonySleeve && tonyX > 0.445)) tonyTone = ${paletteSource.accent};
-        else if (tonyTorso && tonyY > 0.63 && tonyX < 0.16) tonyTone = ${paletteSource.jerseyLight};
-      `
-      : `
-        float tonyY = vTonyBodyPosition.y;
-        float tonyX = vTonyBodyPosition.x;
-        bool tonyBoot = tonyY < -0.82 && ${kind === "boot-left" ? "tonyX < 0.0" : "tonyX >= 0.0"};
-        if (!tonyBoot) discard;
-        vec3 tonyTone = ${paletteSource.boots};
-      `;
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vTonyBodyPosition;")
-      .replace("#include <map_fragment>", `#include <map_fragment>${mask}
-        float tonyDetail = clamp(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 0.20, 1.20);
-        diffuseColor.rgb = tonyTone * mix(0.72, 1.18, tonyDetail);
+        bool tonyBoots = tonyY < -0.82;
+        bool tonyAppearanceRegion = tonyTorso || tonySleeve || tonyShorts || tonySocks || tonyBoots;
+        if (tonyAppearanceRegion) {
+          vec3 tonyTone = ${paletteSource.jersey};
+          if (tonyBoots) tonyTone = ${paletteSource.boots};
+          else if (tonySocks) tonyTone = ${paletteSource.socks};
+          else if (tonyShorts) tonyTone = ${paletteSource.shorts};
+          else if ((tonyTorso && tonyY > 0.42 && tonyY < 0.47) || (tonySleeve && tonyX > 0.445)) tonyTone = ${paletteSource.accent};
+          else if (tonyTorso && tonyY > 0.63 && tonyX < 0.16) tonyTone = ${paletteSource.jerseyLight};
+          float tonyDetail = clamp(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 0.20, 1.20);
+          diffuseColor.rgb = tonyTone * mix(0.72, 1.18, tonyDetail);
+        }
       `);
   };
-  material.customProgramCacheKey = () => `${previousCacheKey()}|tony-body-conforming-${kind}-${palette.jersey}-${palette.shorts}-${palette.socks}-${palette.boots}`;
+  material.customProgramCacheKey = () => `${previousCacheKey()}|tony-integrated-appearance-${palette.jersey}-${palette.shorts}-${palette.socks}-${palette.boots}`;
   material.needsUpdate = true;
   return material;
 }
@@ -106,36 +96,6 @@ function findIntegratedBody(root) {
   return preferred ?? fallback;
 }
 
-function cloneSkinnedSurface({ THREE, source, palette, kind, name, semantic, boot = false }) {
-  const materials = sourceMaterials(source).map((material) => appearanceMaterial(THREE, material, palette, kind));
-  const surface = new THREE.SkinnedMesh(source.geometry, Array.isArray(source.material) ? materials : materials[0]);
-  surface.name = name;
-  surface.position.copy(source.position);
-  surface.quaternion.copy(source.quaternion);
-  surface.scale.copy(source.scale);
-  surface.matrix.copy(source.matrix);
-  surface.matrixAutoUpdate = source.matrixAutoUpdate;
-  surface.bindMode = THREE.DetachedBindMode;
-  surface.bind(source.skeleton, source.bindMatrix);
-  if (source.morphTargetDictionary) surface.morphTargetDictionary = { ...source.morphTargetDictionary };
-  if (source.morphTargetInfluences) surface.morphTargetInfluences = [...source.morphTargetInfluences];
-  surface.userData = {
-    ...(surface.userData ?? {}),
-    [OVERLAY_FLAG]: true,
-    [SHARED_GEOMETRY_FLAG]: true,
-    tonyAppearanceSemantic: semantic,
-    tonyBodyConforming: true,
-    tonyAppearanceSurfaceKind: kind,
-  };
-  if (boot) surface.userData[BOOT_FLAG] = true;
-  surface.castShadow = true;
-  surface.receiveShadow = true;
-  surface.frustumCulled = false;
-  surface.renderOrder = Number(source.renderOrder ?? 0) + 1;
-  source.parent.add(surface);
-  return surface;
-}
-
 function createHair({ THREE, root, palette, player, lowPowerDevice }) {
   const head = root.getObjectByName("Head");
   if (!head) throw new Error("football appearance requires bone Head");
@@ -148,7 +108,7 @@ function createHair({ THREE, root, palette, player, lowPowerDevice }) {
   hair.name = "TonyRigHair";
   hair.position.set(0, .105, -.004);
   hair.scale.set(style === 2 ? 1.06 : .98, style === 1 ? .78 : .94, .94);
-  hair.userData[OVERLAY_FLAG] = true;
+  hair.userData[APPEARANCE_FLAG] = true;
   hair.userData[HAIR_FLAG] = true;
   hair.userData.tonyAppearanceSemantic = "hair";
   hair.castShadow = true;
@@ -158,56 +118,53 @@ function createHair({ THREE, root, palette, player, lowPowerDevice }) {
   return hair;
 }
 
-function disposeCreated(nodes) {
-  for (const node of nodes) {
-    try { node.parent?.remove?.(node); } catch {}
-    if (!node.userData?.[SHARED_GEOMETRY_FLAG]) {
-      try { node.geometry?.dispose?.(); } catch {}
-    }
-    const materials = Array.isArray(node.material) ? node.material : [node.material];
-    for (const material of materials) {
-      try { material?.dispose?.(); } catch {}
-    }
+function disposeMaterials(materials) {
+  for (const material of materials ?? []) {
+    try { material?.dispose?.(); } catch {}
   }
 }
 
 export function rigFootballKitEvidence(root) {
-  let skinnedSurfaceCount = 0;
-  let bootSurfaceCount = 0;
+  const body = findIntegratedBody(root);
+  const bodyOwned = Boolean(body?.userData?.[APPEARANCE_FLAG] && body?.userData?.tonyIntegratedAppearance);
   let hairGeometryCount = 0;
   let rigidPrimitiveCount = 0;
   let surfaceMapPreservedCount = 0;
   const nodes = [];
   root?.traverse?.((node) => {
-    if (!node.isMesh || !node.userData?.[OVERLAY_FLAG]) return;
-    if (node.userData?.[HAIR_FLAG]) hairGeometryCount += 1;
-    else if (node.isSkinnedMesh && node.userData?.tonyBodyConforming) skinnedSurfaceCount += 1;
-    else rigidPrimitiveCount += 1;
-    if (node.userData?.[BOOT_FLAG]) bootSurfaceCount += 1;
-    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    if (!node.isMesh) return;
+    const isBody = node === body && bodyOwned;
+    const isHair = Boolean(node.userData?.[HAIR_FLAG]);
+    if (!isBody && !isHair) return;
+    if (isHair) hairGeometryCount += 1;
+    if (!isBody && !isHair) rigidPrimitiveCount += 1;
+    const materials = materialsOf(node);
     surfaceMapPreservedCount += materials.filter((material) => material?.userData?.tonySourceMapPreserved).length;
     nodes.push(Object.freeze({
       name: node.name,
-      semantic: node.userData.tonyAppearanceSemantic ?? "unknown",
+      semantic: node.userData.tonyAppearanceSemantic ?? (isBody ? "integrated-appearance" : "unknown"),
       skinned: Boolean(node.isSkinnedMesh),
-      bodyConforming: Boolean(node.userData.tonyBodyConforming),
-      boot: Boolean(node.userData?.[BOOT_FLAG]),
-      hair: Boolean(node.userData?.[HAIR_FLAG]),
+      bodyConforming: Boolean(isBody),
+      integratedBody: Boolean(isBody),
+      bootRegions: isBody ? 2 : 0,
+      kitRegions: isBody ? 5 : 0,
+      hair: isHair,
       surfaceKind: node.userData.tonyAppearanceSurfaceKind ?? null,
     }));
   });
+  const installed = Boolean(root?.getObjectByName?.(APPEARANCE_MARKER) && bodyOwned);
   return Object.freeze({
-    installed: Boolean(root?.getObjectByName?.(OVERLAY_MARKER)),
-    appearanceMode: "skinned-surface",
-    skinnedSurfaceCount,
-    bootSurfaceCount,
+    installed,
+    appearanceMode: "integrated-body-material",
+    skinnedSurfaceCount: bodyOwned ? 1 : 0,
+    integratedBodySurfaceCount: bodyOwned ? 1 : 0,
+    bootSurfaceCount: bodyOwned ? 2 : 0,
+    bootRegionCount: bodyOwned ? 2 : 0,
     hairGeometryCount,
     rigidPrimitiveCount,
     surfaceMapPreservedCount,
-    // Compatibility field counts the seven football semantics represented by
-    // the fitted surfaces: jersey, shorts, two socks and two boots plus trim.
-    visibleKitNodeCount: skinnedSurfaceCount === 3 && bootSurfaceCount === 2 ? 7 : 0,
-    bootGeometryCount: bootSurfaceCount,
+    visibleKitNodeCount: installed && hairGeometryCount >= 1 ? 7 : 0,
+    bootGeometryCount: bodyOwned ? 2 : 0,
     nodes: Object.freeze(nodes),
   });
 }
@@ -215,32 +172,47 @@ export function rigFootballKitEvidence(root) {
 export function ensureRigFootballKitOverlay({ root, player, three = THREE_NAMESPACE, lowPowerDevice = false } = {}) {
   if (!root || typeof root.getObjectByName !== "function" || typeof root.traverse !== "function") throw new TypeError("rig football appearance requires a player root");
   if (!player || typeof player !== "object") throw new TypeError("rig football appearance requires player facts");
-  const existing = root.getObjectByName(OVERLAY_MARKER);
-  if (existing) return rigFootballKitEvidence(root);
+  if (root.getObjectByName(APPEARANCE_MARKER)) return rigFootballKitEvidence(root);
 
   const THREE = three;
   const palette = colorsFor(player);
   const body = findIntegratedBody(root);
   if (!body) throw new Error("football appearance requires an integrated skinned body");
-  const created = [];
+  const head = root.getObjectByName("Head");
+  if (!head) throw new Error("football appearance requires bone Head");
+  const originalMaterial = body.material;
+  const originalUserData = { ...(body.userData ?? {}) };
+  const createdMaterials = materialsOf(body).map((material) => createIntegratedAppearanceMaterial(THREE, material, palette));
+  let hair = null;
+  let marker = null;
   try {
-    created.push(cloneSkinnedSurface({ THREE, source: body, palette, kind: "kit", name: "TonyRigKitSurface", semantic: "kit" }));
-    created.push(cloneSkinnedSurface({ THREE, source: body, palette, kind: "boot-left", name: "TonyRigBootSurfaceLeft", semantic: "boots", boot: true }));
-    created.push(cloneSkinnedSurface({ THREE, source: body, palette, kind: "boot-right", name: "TonyRigBootSurfaceRight", semantic: "boots", boot: true }));
-    created.push(createHair({ THREE, root, palette, player, lowPowerDevice }));
-
-    const marker = new THREE.Group();
-    marker.name = OVERLAY_MARKER;
+    body.material = Array.isArray(originalMaterial) ? createdMaterials : createdMaterials[0];
+    body.userData = {
+      ...originalUserData,
+      [APPEARANCE_FLAG]: true,
+      tonyIntegratedAppearance: true,
+      tonyBodyConforming: true,
+      tonyAppearanceSemantic: "integrated-appearance",
+      tonyAppearanceSurfaceKind: "integrated-body-material",
+      tonyBootRegionCount: 2,
+      tonyKitRegionCount: 5,
+    };
+    hair = createHair({ THREE, root, palette, player, lowPowerDevice });
+    marker = new THREE.Group();
+    marker.name = APPEARANCE_MARKER;
     marker.userData.tonyRigAppearanceMarker = true;
     root.add(marker);
     const evidence = rigFootballKitEvidence(root);
-    if (evidence.skinnedSurfaceCount !== 3 || evidence.bootSurfaceCount !== 2 || evidence.hairGeometryCount < 1 || evidence.rigidPrimitiveCount !== 0) {
-      throw new Error("football appearance installed incomplete body-conforming surfaces");
-    }
+    if (evidence.skinnedSurfaceCount !== 1 || evidence.bootRegionCount !== 2 || evidence.hairGeometryCount < 1 || evidence.rigidPrimitiveCount !== 0) throw new Error("football appearance installed incomplete integrated body material");
     return evidence;
   } catch (error) {
-    disposeCreated(created);
-    root.getObjectByName?.(OVERLAY_MARKER)?.removeFromParent?.();
+    marker?.removeFromParent?.();
+    hair?.removeFromParent?.();
+    try { hair?.geometry?.dispose?.(); } catch {}
+    disposeMaterials(materialsOf(hair));
+    body.material = originalMaterial;
+    body.userData = originalUserData;
+    disposeMaterials(createdMaterials);
     throw error;
   }
 }
