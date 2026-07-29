@@ -135,9 +135,10 @@ export function rigFootballKitEvidence(root) {
     if (!node.isMesh) return;
     const isBody = node === body && bodyOwned;
     const isHair = Boolean(node.userData?.[HAIR_FLAG]);
-    if (!isBody && !isHair) return;
+    const isAppearanceNode = Boolean(node.userData?.[APPEARANCE_FLAG]);
+    if (!isBody && !isHair && !isAppearanceNode) return;
     if (isHair) hairGeometryCount += 1;
-    if (!isBody && !isHair) rigidPrimitiveCount += 1;
+    else if (!isBody) rigidPrimitiveCount += 1;
     const materials = materialsOf(node);
     surfaceMapPreservedCount += materials.filter((material) => material?.userData?.tonySourceMapPreserved).length;
     nodes.push(Object.freeze({
