@@ -6,12 +6,12 @@ const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
 const menuFlow = await readFile(new URL("../../src/game/presentation/MainMenuFlow.js", import.meta.url), "utf8");
 const browserApplication = await readFile(new URL("../../src/game/application/BrowserApplicationAdapter.js", import.meta.url), "utf8");
-const css = await readFile(new URL("../../u3-match-flow.css", import.meta.url), "utf8");
+const css = await readFile(new URL("../../src/styles/match-flow.css", import.meta.url), "utf8");
 
 test("pause menu exposes setup and main menu navigation", () => {
   assert.match(index, /id="setupButton"/);
   assert.match(index, /id="mainMenuButton"/);
-  assert.match(index, /u3-match-flow\.css/);
+  assert.match(index, /src\/styles\/app\.css/);
 });
 
 test("runtime has explicit simulation-safe menu transition functions", () => {

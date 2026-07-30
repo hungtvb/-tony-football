@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
-const css = await readFile(new URL("../../u3-camera-hud.css", import.meta.url), "utf8");
+const css = await readFile(new URL("../../src/styles/match.css", import.meta.url), "utf8");
 
 function functionSource(name, nextName) {
   const start = game.indexOf(`  function ${name}`);

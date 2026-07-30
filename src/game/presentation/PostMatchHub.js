@@ -26,11 +26,11 @@ let resultMainMenuButton = null;
 let presentationCount = 0;
 
 function ensureStylesheet() {
-  if (document.querySelector('link[data-u3-post-match="true"]')) return;
+  if (document.querySelector('link[data-post-match="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("../../../u3-post-match.css", import.meta.url).href;
-  link.dataset.u3PostMatch = "true";
+  link.href = new URL("../../styles/post-match.css", import.meta.url).href;
+  link.dataset.postMatch = "true";
   document.head.append(link);
 }
 

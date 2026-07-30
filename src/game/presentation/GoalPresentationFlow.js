@@ -36,11 +36,11 @@ const TEAMS = Object.freeze({
 });
 
 function ensureStylesheet() {
-  if (document.querySelector('link[data-u3-goal-presentation="true"]')) return;
+  if (document.querySelector('link[data-goal-presentation="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("../../../u3-goal-presentation.css", import.meta.url).href;
-  link.dataset.u3GoalPresentation = "true";
+  link.href = new URL("../../styles/goal-presentation.css", import.meta.url).href;
+  link.dataset.goalPresentation = "true";
   document.head.append(link);
 }
 
@@ -58,7 +58,7 @@ function ensureOverlay() {
     <div class="goal-presentation-lines" aria-hidden="true"></div>
     <div class="goal-presentation-card">
       <header class="goal-presentation-header">
-        <span><i></i> MATCHDAY LIVE</span>
+        <span><i></i> GOAL</span>
         <b id="goalPresentationReplayFlag">GOAL CONFIRMED</b>
       </header>
       <div class="goal-presentation-main">

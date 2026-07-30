@@ -24,7 +24,7 @@ function rebaseGeneratedModuleImports(source) {
 }
 
 export function normalizeTon80GameSource(source) {
-  let normalized = source;
+  let normalized = source.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   for (const [duplicate, replacement] of DUPLICATE_BOUNDARIES) {
     const occurrences = normalized.split(duplicate).length - 1;
     if (occurrences > 1) throw new Error(`Generated boundary repeated unexpectedly: ${replacement.trim()}`);

@@ -47,6 +47,7 @@
 - Browser HUD, camera, radar, WebGL, and Canvas consumers now use live MatchEngine frames with no deployed compatibility runtime switch.
 
 ### Fixed
+- Windows `npm start` now canonicalizes CRLF output from the Python migration pipeline before validating generated runtime boundaries.
 - Browser replay playback now synchronizes start, elapsed progress, and stop exclusively from authoritative engine snapshots; the presentation fixed step no longer double-advances or ends replay early.
 - Goal announcement no longer hides the first `1.34s` of replay; authoritative replay starts only after announcement phases finish, visibly advances for its full duration, ends once, and resets directly to kickoff without the former `0.60s` dead gap.
 - Replay events now agree with the immutable snapshot returned from the same runtime step.
