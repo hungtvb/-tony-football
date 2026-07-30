@@ -33,11 +33,11 @@ const ballLabels = Object.freeze({ classic: "CLASSIC", volt: "VOLT", crimson: "C
 const weatherLabels = Object.freeze({ clear: "TRỜI QUANG", rain: "TRỜI MƯA" });
 
 function ensureStylesheet() {
-  if (document.querySelector('link[data-u3-match-intro="true"]')) return;
+  if (document.querySelector('link[data-match-intro="true"]')) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("../../../u3-match-intro.css", import.meta.url).href;
-  link.dataset.u3MatchIntro = "true";
+  link.href = new URL("../../styles/match-intro.css", import.meta.url).href;
+  link.dataset.matchIntro = "true";
   document.head.append(link);
 }
 
@@ -54,7 +54,7 @@ function ensureOverlay() {
     <div class="match-intro-backdrop" aria-hidden="true"></div>
     <div class="overlay-card match-intro-card">
       <header class="match-intro-header">
-        <span class="eyebrow"><i></i> MATCHDAY PRESENTATION</span>
+        <span class="eyebrow"><i></i> TRẬN ĐẤU</span>
         <span id="introLoadingLabel" class="intro-loading-label">ĐANG CHUẨN BỊ SÂN</span>
       </header>
       <section class="intro-versus-stage" aria-label="Cặp đấu">

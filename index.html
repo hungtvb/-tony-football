@@ -9,11 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="u1-match-experience.css" />
-    <link rel="stylesheet" href="u3-camera-hud.css" />
-    <link rel="stylesheet" href="u3-match-flow.css" />
-    <link rel="stylesheet" href="u3-match-intro.css?v=1.0.0" data-u3-match-intro="true" />
+    <link rel="stylesheet" href="src/styles/app.css" />
     <link rel="preload" href="assets/models/football-character-v2.glb?v=16.0.0" as="fetch" type="model/gltf-binary" crossorigin />
     <script type="importmap">
       {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}
@@ -26,7 +22,7 @@
           <span class="brand-mark">TF</span>
           <div>
             <div class="brand-line"><h1>TONY FOOTBALL <em>MAX</em></h1><span>6V6</span></div>
-            <p>MATCHDAY ENGINE</p>
+            <p>FOOTBALL GAME</p>
           </div>
         </div>
 
@@ -76,7 +72,7 @@
           <div id="mainMenuOverlay" class="game-overlay show main-menu-overlay" role="dialog" aria-modal="true" aria-labelledby="mainMenuTitle">
             <div class="overlay-card main-menu-card">
               <section class="main-menu-hero">
-                <span class="eyebrow"><i></i> TONY FOOTBALL EXPERIENCE</span>
+                <span class="eyebrow"><i></i> TONY FOOTBALL</span>
                 <div class="main-menu-logo" aria-hidden="true"><span>TF</span><b>MAX</b></div>
                 <h2 id="mainMenuTitle">SẴN SÀNG RA SÂN?</h2>
                 <p>Chọn chế độ chơi, chuẩn bị đội hình và bước vào trận cầu 6v6 tốc độ cao.</p>
@@ -95,7 +91,7 @@
               <div class="pre-match-header">
                 <button id="setupBackButton" class="setup-back-button" aria-label="Quay lại màn hình đầu">← MÀN HÌNH ĐẦU</button>
                 <span class="eyebrow"><i></i> QUICK MATCH · 6V6</span>
-                <span class="match-chip">150 GIÂY</span>
+                <span class="match-chip">6V6</span>
               </div>
 
               <div class="matchup" aria-label="Cặp đấu">
@@ -103,7 +99,7 @@
                   <span class="team-crest">TF</span>
                   <div><small>HOME</small><h2>TONY FC</h2><p>Pressing · Direct play</p></div>
                 </article>
-                <div class="versus"><span>VS</span><small>MATCHDAY</small></div>
+                <div class="versus"><span>VS</span><small>HÔM NAY</small></div>
                 <article class="team-card away-card">
                   <div><small>AWAY</small><h2>NEON UTD</h2><p>Possession · Counter</p></div>
                   <span class="team-crest neon">NU</span>
@@ -163,7 +159,7 @@
                 <div class="pause-help"><kbd>ESC</kbd><span>Quay lại trận đấu</span></div>
               </div>
               <aside class="pause-summary">
-                <div class="summary-heading"><span>THỐNG KÊ TRẬN</span><b>LIVE</b></div>
+                <div class="summary-heading"><span>THỐNG KÊ</span><b>TRẬN ĐẤU</b></div>
                 <div class="stat"><span>Kiểm soát bóng</span><strong id="possessionStat">50%</strong></div>
                 <div class="split-meter"><i id="possessionBar"></i></div>
                 <div class="stat"><span>Sút</span><strong><b id="homeShots">0</b> : <b id="awayShots">0</b></strong></div>

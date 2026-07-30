@@ -1,0 +1,17 @@
+:root {
+  --bg: #06090b;
+  --surface: rgba(14, 20, 22, .94);
+  --surface-2: rgba(21, 29, 31, .9);
+  --line: rgba(174, 198, 188, .16);
+  --line-strong: rgba(225, 187, 88, .36);
+  --text: #f4f7f5;
+  --muted: #a8b3ae;
+  --muted-2: #74817b;
+  --gold: #e7bd50;
+  --gold-2: #ffdc72;
+  --cyan: #4bd2dc;
+  --green: #36d68a;
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}

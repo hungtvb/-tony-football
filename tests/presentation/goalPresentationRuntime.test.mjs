@@ -6,7 +6,7 @@ const menuFlow = await readFile(new URL("../../src/game/presentation/MainMenuFlo
 const goalFlow = await readFile(new URL("../../src/game/presentation/GoalPresentationFlow.js", import.meta.url), "utf8");
 const goalProjection = await readFile(new URL("../../src/game/presentation/GoalPresentationPhaseProjection.js", import.meta.url), "utf8");
 const goalState = await readFile(new URL("../../src/game/state/GoalPresentationState.js", import.meta.url), "utf8");
-const css = await readFile(new URL("../../u3-goal-presentation.css", import.meta.url), "utf8");
+const css = await readFile(new URL("../../src/styles/goal-presentation.css", import.meta.url), "utf8");
 
 
 test("main menu loads goal presentation beside match intro", () => {
@@ -46,8 +46,8 @@ test("authoritative phases decide card visibility and replay exposure", () => {
   assert.match(goalFlow, /case GoalSequencePhase\.REPLAY/);
   assert.match(goalFlow, /case GoalSequencePhase\.KICKOFF/);
   assert.match(goalProjection, /NATIVE_HIGHLIGHT/);
-  assert.match(goalProjection, /visible: true,\n    state: "goal"/);
-  assert.match(goalProjection, /visible: false,\n    state: "replay"/);
+  assert.match(goalProjection, /visible: true,\r?\n    state: "goal"/);
+  assert.match(goalProjection, /visible: false,\r?\n    state: "replay"/);
   assert.match(goalFlow, /timelineHistory: timelineHistory\.map/);
 });
 

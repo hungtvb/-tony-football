@@ -5,7 +5,7 @@ import test from "node:test";
 const menuFlow = await readFile(new URL("../../src/game/presentation/MainMenuFlow.js", import.meta.url), "utf8");
 const introFlow = await readFile(new URL("../../src/game/presentation/MatchIntroFlow.js", import.meta.url), "utf8");
 const introState = await readFile(new URL("../../src/game/state/MatchPresentationState.js", import.meta.url), "utf8");
-const css = await readFile(new URL("../../u3-match-intro.css", import.meta.url), "utf8");
+const css = await readFile(new URL("../../src/styles/match-intro.css", import.meta.url), "utf8");
 
 test("main menu loads the match intro presentation before its own bindings", () => {
   assert.match(menuFlow, /^import "\.\/MatchIntroFlow\.js";/);

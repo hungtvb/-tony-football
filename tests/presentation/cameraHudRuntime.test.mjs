@@ -6,7 +6,7 @@ const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
 const cameraController = await readFile(new URL("../../src/game/presentation/SnapshotCameraController.js", import.meta.url), "utf8");
 const radarRenderer = await readFile(new URL("../../src/game/presentation/RadarSnapshotRenderer.js", import.meta.url), "utf8");
 const index = await readFile(new URL("../../index.html", import.meta.url), "utf8");
-const css = await readFile(new URL("../../u3-camera-hud.css", import.meta.url), "utf8");
+const css = await readFile(new URL("../../src/styles/match.css", import.meta.url), "utf8");
 
 function functionSource(name, nextName) {
   const start = game.indexOf(`  function ${name}`);
@@ -55,11 +55,12 @@ test("radar plot contains no text rendering and uses configured markers", () => 
   assert.doesNotMatch(game, /function drawRadar/);
 });
 
-test("U3 HUD stylesheet is loaded after U1 and reserves a desktop toast gap above radar", () => {
-  const u1 = index.indexOf('href="u1-match-experience.css"');
-  const u3 = index.indexOf('href="u3-camera-hud.css"');
-  assert.ok(u1 >= 0 && u3 > u1);
-  assert.match(css, /\.match-toast\s*\{[^}]*bottom:\s*clamp\(190px, 15vw, 236px\)/s);
+test("shared match stylesheet preserves camera HUD refinements after match experience rules", () => {
+  assert.match(index, /href="src\/styles\/app\.css"/);
+  const matchExperience = css.indexOf("/* Match experience and HUD");
+  const cameraHud = css.indexOf("/* Camera and HUD refinements");
+  assert.ok(matchExperience >= 0 && cameraHud > matchExperience);
+  assert.match(css, /\.match-toast\s*\{[^}]*bottom:\s*clamp\(160px, 12vw, 200px\)/s);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.match-toast\s*\{[^}]*top:\s*8px/s);
 });
 
