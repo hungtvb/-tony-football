@@ -24,6 +24,10 @@ Before modifying code:
 | Entry point | Responsibility | Ownership note |
 | --- | --- | --- |
 | `index.html` | Browser shell, import map, canvas, HUD, menus and overlays | Loads guarded `browser-entry.js`; never gameplay authority |
+| `src/styles/app.css` | Sole static stylesheet entry and explicit import order | Imports tokens, foundation, match/HUD and match-flow layers; no sprint-prefixed production styles remain |
+| `src/styles/tokens.css`, `src/styles/foundation.css` | Theme primitives, reset, shell and shared browser UI rules | Shared presentation foundation; CSS state never becomes gameplay input |
+| `src/styles/match.css`, `src/styles/match-flow.css` | Match/HUD/radar plus menu, setup and pause presentation | Match rules preserve the approved experience-to-camera/HUD cascade |
+| `src/styles/match-intro.css`, `src/styles/goal-presentation.css`, `src/styles/post-match.css` | Presentation-owned overlay styles | Loaded once by `MatchIntroFlow`, `GoalPresentationFlow` and `PostMatchHub` through module-relative URLs |
 | `browser-entry.js` | Removes blocked runtime/debug URL seams, exposes frozen scene/model/Canvas/camera-replay bridges, registers browser presentation factories, then imports generated runtime | Entry composition only; no mutable gameplay state |
 | `game.js` | Canonical compatibility input used to generate remaining settings/particles/trails/preview-tone presentation bridges | Does not own WebGL environment, player/ball model views, match Canvas drawing or deployed camera/replay timing; fixed steps capture immutable engine snapshots |
 | `generated/game.js` | Deterministic compatibility artifact created from tracked `game.js` | Never edited directly; contains only still-deferred presentation bridges |
