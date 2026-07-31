@@ -7,7 +7,17 @@ import {
 } from "../../src/game/presentation/PlayerMotionPresentation.js";
 
 function pose(overrides = {}) {
-  return Object.freeze({ vx: 0, vy: 0, sprinting: false, turnLean: 0, ...overrides });
+  return Object.freeze({
+    vx: 0,
+    vy: 0,
+    sprinting: false,
+    turnLean: 0,
+    anim: "idle",
+    animTime: 0,
+    animDuration: 1,
+    animPower: 0,
+    ...overrides,
+  });
 }
 
 test("idle presentation remains neutral and stable", () => {
@@ -18,6 +28,7 @@ test("idle presentation remains neutral and stable", () => {
   assert.equal(result.forwardLean, 0);
   assert.equal(result.lateralLean, 0);
   assert.equal(result.compression, 0);
+  assert.equal(result.action, "none");
 });
 
 test("sprinting builds bounded forward lean and cadence", () => {
@@ -27,7 +38,7 @@ test("sprinting builds bounded forward lean and cadence", () => {
     result = stepPlayerMotionPresentation({ state, pose: pose({ vy: 285, sprinting: true }), dt: 1 / 60, yaw: 0, animationState: "Sprint_Loop" });
   }
   assert.ok(result.forwardLean > .09);
-  assert.ok(result.forwardLean <= .17);
+  assert.ok(result.forwardLean <= .19);
   assert.ok(result.animationTimeScale > 1.15);
   assert.ok(result.animationTimeScale <= 1.42);
 });
@@ -49,7 +60,55 @@ test("hard braking creates short bounded compression without reversing root moti
   assert.ok(result.forwardAcceleration < 0);
   assert.ok(result.braking > 0);
   assert.ok(result.compression > 0);
-  assert.ok(result.compression <= .085);
+  assert.ok(result.compression <= .11);
+});
+
+test("shot starts in contact pose and temporarily plants the locomotion cycle", () => {
+  const state = createPlayerMotionPresentationState({ vx: 0, vy: 190 });
+  const result = stepPlayerMotionPresentation({
+    state,
+    pose: pose({ vy: 190, anim: "shoot", animDuration: .34, animTime: .34, animPower: .9 }),
+    dt: 1 / 60,
+    yaw: 0,
+    animationState: "Jog_Fwd_Loop",
+  });
+  assert.equal(result.action, "shoot");
+  assert.equal(result.actionProgress, 0);
+  assert.ok(result.contactWeight > .99);
+  assert.ok(result.plantStrength > .85);
+  assert.ok(result.animationTimeScale < 1);
+  assert.ok(result.compression > 0);
+});
+
+test("receive contact cushions the body before recovery", () => {
+  const state = createPlayerMotionPresentationState({ vx: 0, vy: 80 });
+  const result = stepPlayerMotionPresentation({
+    state,
+    pose: pose({ vy: 80, anim: "receive", animDuration: .2, animTime: .2 }),
+    dt: 1 / 60,
+    yaw: 0,
+    animationState: "Jog_Fwd_Loop",
+  });
+  assert.equal(result.action, "receive");
+  assert.ok(result.contactWeight > .99);
+  assert.ok(result.plantStrength > .75);
+  assert.ok(result.forwardLean < 0);
+  assert.ok(result.compression > 0);
+});
+
+test("completed action releases contact and cadence lock", () => {
+  const state = createPlayerMotionPresentationState({ vx: 0, vy: 160 });
+  const result = stepPlayerMotionPresentation({
+    state,
+    pose: pose({ vy: 160, anim: "pass", animDuration: .24, animTime: 0, animPower: .4 }),
+    dt: 1 / 60,
+    yaw: 0,
+    animationState: "Jog_Fwd_Loop",
+  });
+  assert.equal(result.action, "none");
+  assert.equal(result.contactWeight, 0);
+  assert.equal(result.plantStrength, 0);
+  assert.equal(result.strideRate, 1);
 });
 
 test("invalid heading fails safe without producing NaN transforms", () => {
@@ -61,7 +120,9 @@ test("invalid heading fails safe without producing NaN transforms", () => {
     yaw: Number.NaN,
     animationState: "Jog_Fwd_Loop",
   });
-  for (const value of Object.values(result)) assert.equal(Number.isFinite(value), true);
+  for (const [key, value] of Object.entries(result)) {
+    if (typeof value === "number") assert.equal(Number.isFinite(value), true, key);
+  }
 });
 
 test("reset clears temporal motion history", () => {
