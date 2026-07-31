@@ -138,7 +138,7 @@ export function repairPlayerV3Hair({ root, three = THREE_NAMESPACE, lowPowerDevi
   const style = body.userData?.tonyPlayerV3HairStyle ?? "crop";
   const variantIndex = Number(body.userData?.tonyPlayerV3VariantIndex ?? 0);
   const sourceColor = previousHair.flatMap(materialsOf).find((material) => material?.color)?.color?.getHex?.() ?? 0x1a120f;
-  const material = new THREE.MeshStandardMaterial({ color: sourceColor, roughness: .82, metalness: 0 });
+  const material = new THREE.MeshStandardMaterial({ color: sourceColor, roughness: .84, metalness: 0 });
   material.name = "TonyPlayerV3SkinnedHairMaterial";
   material.polygonOffset = true;
   material.polygonOffsetFactor = -1;
@@ -153,8 +153,8 @@ export function repairPlayerV3Hair({ root, three = THREE_NAMESPACE, lowPowerDevi
   const depth = bounds.depth;
   const centerX = (bounds.minX + bounds.maxX) * .5;
   const centerZ = (bounds.minZ + bounds.maxZ) * .5;
-  const capCenterY = bounds.minY + (height * .63);
-  const crownCenterY = bounds.minY + (height * .83);
+  const capCenterY = bounds.minY + (height * .67);
+  const crownCenterY = bounds.minY + (height * .86);
   const meshes = [];
 
   const add = (geometry, name, layer, position, scale, rotation = [0, 0, 0]) => {
@@ -167,26 +167,26 @@ export function repairPlayerV3Hair({ root, three = THREE_NAMESPACE, lowPowerDevi
 
   try {
     add(
-      new THREE.SphereGeometry(.5, segments, verticalSegments, 0, Math.PI * 2, 0, Math.PI * .68),
+      new THREE.SphereGeometry(.5, segments, verticalSegments, 0, Math.PI * 2, 0, Math.PI * .58),
       "TonyPlayerV3Hair",
       "scalp-cap",
-      [centerX, capCenterY, centerZ + (depth * .015)],
-      [width * 1.20, height * .92, depth * 1.20],
+      [centerX, capCenterY, centerZ + (depth * .01)],
+      [width * 1.08, height * .72, depth * 1.09],
     );
     add(
       new THREE.SphereGeometry(.5, segments, verticalSegments),
       "TonyPlayerV3HairCrown",
       "crown",
-      [centerX, crownCenterY, centerZ + (depth * .01)],
-      [width * .94, height * .35, depth * .96],
+      [centerX, crownCenterY, centerZ + (depth * .005)],
+      [width * .86, height * .25, depth * .88],
     );
 
-    const frontZ = bounds.minZ - (depth * .015);
-    const styleY = bounds.minY + (height * .86);
+    const frontZ = bounds.minZ - (depth * .01);
+    const styleY = bounds.minY + (height * .88);
     const sphere = () => new THREE.SphereGeometry(.5, segments, verticalSegments);
     switch (style) {
       case "fade":
-        add(sphere(), "TonyPlayerV3HairTop", "style", [centerX, styleY, centerZ], [width * .80, height * .23, depth * .80], [-.08, 0, 0]);
+        add(sphere(), "TonyPlayerV3HairTop", "style", [centerX, styleY, centerZ], [width * .72, height * .20, depth * .72], [-.08, 0, 0]);
         break;
       case "curly": {
         const offsets = [[-.28, .01, -.12], [0, .09, -.18], [.28, .01, -.12], [-.18, .04, .18], [.18, .04, .18]];
@@ -195,28 +195,28 @@ export function repairPlayerV3Hair({ root, three = THREE_NAMESPACE, lowPowerDevi
           `TonyPlayerV3Curl${index + 1}`,
           "style",
           [centerX + (width * x), styleY + (height * y), centerZ + (depth * z)],
-          [width * .25, height * .19, depth * .23],
+          [width * .22, height * .17, depth * .20],
         ));
         break;
       }
       case "quiff":
-        add(sphere(), "TonyPlayerV3HairQuiffLeft", "style", [centerX - (width * .14), styleY, frontZ], [width * .45, height * .24, depth * .34], [-.18, 0, -.10]);
-        add(sphere(), "TonyPlayerV3HairQuiffRight", "style", [centerX + (width * .15), styleY + (height * .025), frontZ], [width * .47, height * .26, depth * .35], [-.21, 0, .12]);
+        add(sphere(), "TonyPlayerV3HairQuiffLeft", "style", [centerX - (width * .13), styleY, frontZ], [width * .40, height * .21, depth * .30], [-.18, 0, -.10]);
+        add(sphere(), "TonyPlayerV3HairQuiffRight", "style", [centerX + (width * .14), styleY + (height * .02), frontZ], [width * .42, height * .23, depth * .31], [-.21, 0, .12]);
         break;
       case "mohawk":
         [-.30, -.10, .10, .30].forEach((z, index) => add(
           new THREE.ConeGeometry(.5, 1, lowPowerDevice ? 6 : 8),
           `TonyPlayerV3HairMohawk${index + 1}`,
           "style",
-          [centerX, styleY + (height * .10), centerZ + (depth * z)],
-          [width * .14, height * .38, depth * .14],
+          [centerX, styleY + (height * .08), centerZ + (depth * z)],
+          [width * .12, height * .32, depth * .12],
         ));
         break;
       case "buzz":
         break;
       case "crop":
       default:
-        add(sphere(), "TonyPlayerV3HairFringe", "style", [centerX, styleY - (height * .03), frontZ], [width * .64, height * .16, depth * .28], [-.14, 0, 0]);
+        add(sphere(), "TonyPlayerV3HairFringe", "style", [centerX, styleY - (height * .03), frontZ], [width * .56, height * .14, depth * .24], [-.14, 0, 0]);
         break;
     }
 
