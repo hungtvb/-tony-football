@@ -1,0 +1,75 @@
+name: TON-193 Publish Transaction Fix
+
+on:
+  push:
+    branches:
+      - ton193-publish-transaction
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-193-player-model-v3
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Recover audited patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          curl --fail --location \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.raw+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/.github/workflows/ton193-apply-transaction.yml?ref=a7527480acdf62b484b49d3d44c21cd632151773" \
+            --output /tmp/bootstrap.yml
+          python - <<'PY'
+          import base64, gzip, pathlib, re
+          source = pathlib.Path('/tmp/bootstrap.yml').read_text()
+          match = re.search(r"printf '%s' '([^']+)' \\| base64 -d \\| gzip -d", source)
+          if not match:
+              raise SystemExit('encoded audited patch was not found')
+          pathlib.Path('/tmp/ton193.patch').write_bytes(gzip.decompress(base64.b64decode(match.group(1))))
+          PY
+
+      - name: Apply and verify exact files
+        shell: bash
+        run: |
+          patch -p4 --forward < /tmp/ton193.patch
+          git diff --check
+          cat > /tmp/expected.sha256 <<'EOF'
+          3a53c34350f6c7df57071cfbb4528d8dfae7bb39aba1a158fd6517d9d7d40117  src/game/presentation/PlayerModelView.js
+          b0e1f909b5adee8245f2efeed959ea52031b4d11d1aa76dc86aa76098244b136  src/game/presentation/BrowserModelViewAdapter.js
+          e4eb1338b0c1b592e47ad9f64bcc27d2d751c7327cc723ffa47db9efeb173292  tests/presentation/modelViewAtomicLifecycle.test.mjs
+          1ab2d6ce2c450ce217cb08bab9fa7852da8782d6ec971c6cc6070e5af5d71023  scripts/validate-assets.mjs
+          039a641dae4302dbdaff7689ae543ac9b75e52058874e74d7d3025fd49f5f081  docs/11_SOURCE_MAP.md
+          90b9ff24b0415ca61c0b689f1d602cde47a50e3f35cc96d72f9ab38e3bbc24d3  docs/14_MODEL_VIEW_CONTRACT.md
+          EOF
+          sha256sum --check /tmp/expected.sha256
+          node --check src/game/presentation/PlayerModelView.js
+          node --check src/game/presentation/BrowserModelViewAdapter.js
+          node --check tests/presentation/modelViewAtomicLifecycle.test.mjs
+          node --check scripts/validate-assets.mjs
+          node scripts/validate-assets.mjs
+
+      - name: Commit and push target
+        shell: bash
+        run: |
+          git config user.name 'Tony Football DEV'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            src/game/presentation/PlayerModelView.js \
+            src/game/presentation/BrowserModelViewAdapter.js \
+            tests/presentation/modelViewAtomicLifecycle.test.mjs \
+            scripts/validate-assets.mjs \
+            docs/11_SOURCE_MAP.md \
+            docs/14_MODEL_VIEW_CONTRACT.md
+          git commit -m 'fix(ton-193): keep fallback until appearance candidate is ready'
+          git push origin HEAD:feat/ton-193-player-model-v3
+          git push origin --delete ton193-publish-transaction || true
