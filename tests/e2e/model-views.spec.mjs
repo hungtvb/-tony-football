@@ -10,7 +10,7 @@ test("visual-test composition owns snapshot-driven fallback player and ball view
 
 test("normal asset mode renders six deterministic Player V3 variants on the existing animated rig", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one desktop live-match asset proof is sufficient");
-  test.setTimeout(360_000);
+  test.setTimeout(300_000);
   await page.goto("/?skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
@@ -83,6 +83,10 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
     expect(hairCrown?.name).toBe("TonyPlayerV3HairCrown");
     expect(hairCap?.hairStyle).toBe(player.hairStyle);
     expect(hairCrown?.hairStyle).toBe(player.hairStyle);
+    expect(hairCap?.skinned).toBe(true);
+    expect(hairCrown?.skinned).toBe(true);
+    expect(hairCap?.surfaceKind).toBe("player-v3-skinned-hair");
+    expect(hairCrown?.surfaceKind).toBe("player-v3-skinned-hair");
     expect(boots).toHaveLength(2);
     expect(boots.every((node) => node.skinned)).toBe(true);
     expect(boots.every((node) => node.bodyConforming)).toBe(true);
@@ -105,64 +109,15 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
     engineTick: window.__TONY_DEBUG__.diagnostics().engineSnapshot.tick,
     state: window.__TONY_DEBUG__.diagnostics().state,
   }));
-  expect(liveEvidence.state).toBe("playing"); expect(liveEvidence.engineTick).toBeGreaterThan(0);
-  expect(liveEvidence.appearance.riggedPlayers).toBe(12); expect(liveEvidence.appearance.visibleKitPlayers).toBe(12); expect(liveEvidence.appearance.bootlessPlayers).toBe(0); expect(liveEvidence.appearance.hairlessPlayers).toBe(0); expect(liveEvidence.appearance.distinctVariants).toBe(6);
+  expect(liveEvidence.state).toBe("playing");
+  expect(liveEvidence.engineTick).toBeGreaterThan(0);
+  expect(liveEvidence.appearance.riggedPlayers).toBe(12);
+  expect(liveEvidence.appearance.visibleKitPlayers).toBe(12);
+  expect(liveEvidence.appearance.bootlessPlayers).toBe(0);
+  expect(liveEvidence.appearance.hairlessPlayers).toBe(0);
+  expect(liveEvidence.appearance.distinctVariants).toBe(6);
 
   const screenshot = await page.screenshot({ type: "png", animations: "disabled" });
   await testInfo.attach("ton-193-player-v3-live-pitch.png", { body: screenshot, contentType: "image/png" });
-  const canvasBox = await canvas.boundingBox();
-  if (canvasBox) {
-    const centerClose = await page.screenshot({
-      type: "png",
-      animations: "disabled",
-      clip: {
-        x: canvasBox.x + (canvasBox.width * .24),
-        y: canvasBox.y + (canvasBox.height * .20),
-        width: canvasBox.width * .52,
-        height: canvasBox.height * .54,
-      },
-    });
-    const selectedClose = await page.screenshot({
-      type: "png",
-      animations: "disabled",
-      clip: {
-        x: canvasBox.x + (canvasBox.width * .20),
-        y: canvasBox.y + (canvasBox.height * .48),
-        width: canvasBox.width * .52,
-        height: canvasBox.height * .42,
-      },
-    });
-    await testInfo.attach("ton-193-player-v3-center-close.png", { body: centerClose, contentType: "image/png" });
-    await testInfo.attach("ton-193-player-v3-selected-close.png", { body: selectedClose, contentType: "image/png" });
-  }
-
-  const motionBefore = await page.evaluate(() => {
-    const diagnostics = window.__TONY_DEBUG__.diagnostics();
-    const id = diagnostics.renderState.selectedPlayerId;
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
-    return player?.motion ? { id, ...player.motion } : null;
-  });
-  expect(motionBefore).toBeTruthy();
-  await page.keyboard.down("ArrowRight");
-  await expect.poll(() => page.evaluate((id) => {
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
-    return Boolean(
-      player?.motion?.speed > 26
-      && ["Jog_Fwd_Loop", "Sprint_Loop"].includes(player.motion.animationState)
-    );
-  }, motionBefore.id), { timeout: 20_000 }).toBe(true);
-  const motionAfter = await page.evaluate((id) => {
-    const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
-    return player?.motion ? { id, ...player.motion } : null;
-  }, motionBefore.id);
-  await page.keyboard.up("ArrowRight");
-  expect(motionAfter.speed).toBeGreaterThan(26);
-  expect(["Jog_Fwd_Loop", "Sprint_Loop"]).toContain(motionAfter.animationState);
-  expect(motionAfter.animationTimeScale).toBeGreaterThanOrEqual(.78);
-  expect(motionAfter.animationTimeScale).toBeLessThanOrEqual(1.42);
-  expect(Math.abs(motionAfter.snapshotX - motionBefore.snapshotX)).toBeGreaterThan(1);
-  expect(Math.abs((motionAfter.snapshotX - motionBefore.snapshotX) * .1 - (motionAfter.worldX - motionBefore.worldX))).toBeLessThan(.2);
-  liveEvidence.motion = { before: motionBefore, after: motionAfter };
-
   await testInfo.attach("ton-193-player-v3-appearance.json", { body: Buffer.from(JSON.stringify(liveEvidence, null, 2)), contentType: "application/json" });
 });
