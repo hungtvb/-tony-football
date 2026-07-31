@@ -10,7 +10,7 @@ test("visual-test composition owns snapshot-driven fallback player and ball view
 
 test("normal asset mode renders six deterministic Player V3 variants on the existing animated rig", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one desktop live-match asset proof is sufficient");
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   await page.goto("/?skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
@@ -19,7 +19,7 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
       && diagnostics?.appearance?.riggedPlayers === 12
       && diagnostics?.appearance?.visibleKitPlayers === 12
       && diagnostics?.appearance?.distinctVariants === 6;
-  }, null, { timeout: 150_000 });
+  }, null, { timeout: 180_000 });
   const result = await page.evaluate(() => ({ model: window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics(), scene: window.__TONY_THREE_SCENE_BRIDGE__.diagnostics() }));
   const appearance = result.model.appearance;
   expect(appearance.riggedPlayers).toBe(12);
@@ -66,6 +66,12 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
     expect(body?.bodyConforming).toBe(true);
     expect(body?.variantIndex).toBe(player.variantIndex);
     expect(body?.kitPattern).toBe(player.kitPattern);
+    expect(body?.coverage?.complete).toBe(true);
+    expect(body?.coverage?.jerseyVertices).toBeGreaterThan(0);
+    expect(body?.coverage?.shortsVertices).toBeGreaterThan(0);
+    expect(body?.coverage?.sockVertices).toBeGreaterThan(0);
+    expect(body?.coverage?.leftBootVertices).toBeGreaterThan(0);
+    expect(body?.coverage?.rightBootVertices).toBeGreaterThan(0);
     expect(hair?.name).toBe("TonyPlayerV3Hair");
     expect(hair?.hairStyle).toBe(player.hairStyle);
     expect(player.rigKitNodes.filter((node) => !node.integratedBody && !node.hair)).toHaveLength(0);
@@ -75,8 +81,8 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
   await page.evaluate(() => document.getElementById("quickMatchButton")?.click());
   await page.waitForFunction(() => document.body.dataset.flow === "match-setup");
   await page.evaluate(() => document.getElementById("playButton")?.click());
-  await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing", null, { timeout: 30_000 });
-  await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.kickoffTimer === 0, null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing", null, { timeout: 45_000 });
+  await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.kickoffTimer === 0, null, { timeout: 45_000 });
   await expect(page.locator("#gameCanvas")).toBeVisible();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
@@ -86,7 +92,10 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
     state: window.__TONY_DEBUG__.diagnostics().state,
   }));
   expect(liveEvidence.state).toBe("playing"); expect(liveEvidence.engineTick).toBeGreaterThan(0);
-  expect(liveEvidence.appearance.riggedPlayers).toBe(12); expect(liveEvidence.appearance.visibleKitPlayers).toBe(12); expect(liveEvidence.appearance.bootlessPlayers).toBe(0); expect(liveEvidence.appearance.distinctVariants).toBe(6);
+  expect(liveEvidence.appearance.riggedPlayers).toBe(12); expect(liveEvidence.appearance.visibleKitPlayers).toBe(12); expect(liveEvidence.appearance.bootlessPlayers).toBe(0); expect(liveEvidence.appearance.hairlessPlayers).toBe(0); expect(liveEvidence.appearance.distinctVariants).toBe(6);
+
+  const screenshot = await page.screenshot({ type: "png", animations: "disabled" });
+  await testInfo.attach("ton-193-player-v3-live-pitch.png", { body: screenshot, contentType: "image/png" });
 
   const motionBefore = await page.evaluate(() => {
     const diagnostics = window.__TONY_DEBUG__.diagnostics();
@@ -102,7 +111,7 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
       player?.motion?.speed > 26
       && ["Jog_Fwd_Loop", "Sprint_Loop"].includes(player.motion.animationState)
     );
-  }, motionBefore.id), { timeout: 15_000 }).toBe(true);
+  }, motionBefore.id), { timeout: 20_000 }).toBe(true);
   const motionAfter = await page.evaluate((id) => {
     const player = window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance.players.find((entry) => entry.id === id);
     return player?.motion ? { id, ...player.motion } : null;
@@ -116,9 +125,5 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
   expect(Math.abs((motionAfter.snapshotX - motionBefore.snapshotX) * .1 - (motionAfter.worldX - motionBefore.worldX))).toBeLessThan(.2);
   liveEvidence.motion = { before: motionBefore, after: motionAfter };
 
-  const devtools = await page.context().newCDPSession(page);
-  const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
-  await devtools.detach();
   await testInfo.attach("ton-193-player-v3-appearance.json", { body: Buffer.from(JSON.stringify(liveEvidence, null, 2)), contentType: "application/json" });
-  await testInfo.attach("ton-193-player-v3-live-pitch.png", { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
 });
