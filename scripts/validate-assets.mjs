@@ -7,8 +7,10 @@ const character = await readGLB(characterPath); const animation = await readGLB(
 const playerSource = await readFile("src/game/presentation/PlayerModelView.js", "utf8");
 const adapterSource = await readFile("src/game/presentation/BrowserModelViewAdapter.js", "utf8");
 const rigAppearanceSource = await readFile("src/game/presentation/RigFootballKitOverlay.js", "utf8");
+const playerMotionSource = await readFile("src/game/presentation/PlayerMotionPresentation.js", "utf8");
 const loaderSource = await readFile("src/game/presentation/PlayerAssetLoader.js", "utf8");
 const ballSource = await readFile("src/game/presentation/BallModelView.js", "utf8");
+const ballMotionSource = await readFile("src/game/presentation/BallMotionPresentation.js", "utf8");
 const canvasSource = await readFile("src/game/presentation/CanvasMatchRenderer.js", "utf8");
 const cameraReplaySource = await readFile("src/game/presentation/SnapshotCameraReplayAdapter.js", "utf8");
 const settingsSource = await readFile("src/game/presentation/BrowserSettingsAdapter.js", "utf8");
@@ -27,8 +29,10 @@ for (const [sourceName, source, contracts] of [
   ["PlayerAssetLoader.js", loaderSource, ["loader.setMeshoptDecoder(MeshoptDecoder)", "football-character-v2.glb?v=16.0.0", "football-animations-v2.glb?v=16.0.0"]],
   ["BrowserModelViewAdapter.js", adapterSource, ["createSnapshotRenderState", "createDefaultPlayerAssetLoader", "disposePlayerAssetTemplate", "appearanceDiagnostics(playerViews)", "integratedBodySurfaceCount", "bootRegionCount", "hairlessPlayers", "distinctVariants", "visibleKitPlayers", "player-v3-integrated-body-material"]],
   ["RigFootballKitOverlay.js", rigAppearanceSource, ["TonyPlayerV3IntegratedAppearanceMaterial", "TonyRigFootballAppearanceV3", "BODY_VARIANTS", "vTonyBodyPosition", "tonyUpperMask", "tonyPatternAccent", "tonyPlayerV3IntegratedAppearance", "tonyPlayerV3VariantIndex", "tonyPlayerV3VariantName", "tonyPlayerV3KitPattern", "player-v3-integrated-body-material", "TonyPlayerV3Hair", "tonyRigHairGeometry", "tonySourceMapPreserved", "bootRegionCount", "rigidPrimitiveCount"]],
-  ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState"]],
-  ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(0.56, 48, 32)", "createBallSurfaceTextures", "chargeRoot"]],
+  ["PlayerMotionPresentation.js", playerMotionSource, ["actionProfile", "contactWeight", "followThrough", "plantStrength", "targetForwardLean", "targetCompression", "animationTimeScale", "safeYaw"]],
+  ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState", "stepPlayerMotionPresentation"]],
+  ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(0.56, 48, 32)", "createBallSurfaceTextures", "chargeRoot", "TonyBallContactShadow", "stepBallMotionPresentation", "shadowOpacity", "impactPulse"]],
+  ["BallMotionPresentation.js", ballMotionSource, ["createBallMotionPresentationState", "resetBallMotionPresentationState", "stepBallMotionPresentation", "previousVz", "bounced", "impactPulse", "meshVerticalOffset", "shadowScale", "rollX", "rollZ"]],
   ["CanvasMatchRenderer.js", canvasSource, ["createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
   ["SnapshotCameraReplayAdapter.js", cameraReplaySource, ["snapshot-camera-replay", "snapshot.match.replay", "match: current.match", "goalIncidentKey(snapshot)", "recordIncident(snapshot, key)", "playbackIncidentKey", "update() { return false; }"]],
   ["BrowserSettingsAdapter.js", settingsSource, ["user-preference", "browser settings owner already attached", "controlBindings", "previewCount"]],
@@ -37,7 +41,9 @@ for (const [sourceName, source, contracts] of [
 if (playerSource.includes("material.map = null")) throw new Error("PlayerModelView.js: semantic source texture maps must not be cleared");
 for (const forbidden of ["TonyRigJersey", "TonyRigJerseyBand", "TonyRigShorts", "TonyRigSockLeft", "TonyRigSockRight", "TonyRigBootLeft", "TonyRigBootRight", "tonyRigBootGeometry", "bone.add(mesh)"]) if (rigAppearanceSource.includes(forbidden)) throw new Error(`RigFootballKitOverlay.js: rigid V2 appearance primitive remains: ${forbidden}`);
 if ((rigAppearanceSource.match(/Object\.freeze\(\{ name:/g) || []).length !== 6) throw new Error("RigFootballKitOverlay.js: Player V3 must define exactly six deterministic variants");
+for (const forbidden of ["pose.vx =", "pose.vy =", "pose.x =", "pose.y =", "pose.animTime =", "pose.animDuration =", "MatchEngine", "dispatchEvent"]) if (playerMotionSource.includes(forbidden)) throw new Error(`PlayerMotionPresentation.js: presentation attempted engine ownership: ${forbidden}`);
+for (const forbidden of ["ball.x =", "ball.y =", "ball.vx =", "ball.vy =", "ball.vz =", "ball.height =", "MatchEngine", "BallSimulationSystem", "dispatchEvent"]) if (ballMotionSource.includes(forbidden)) throw new Error(`BallMotionPresentation.js: presentation attempted engine ownership: ${forbidden}`);
 for (const pageContract of ["src/styles/app.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing match experience contract: ${pageContract}`);
 if (!entrySource.includes('await import("./generated/game.js?v=24.0.0")')) throw new Error("browser-entry.js: missing corrected TON-83 generated game entry import");
 for (const contract of ["createBrowserModelViewAdapter", "createCanvasMatchRenderer", "createSnapshotCameraReplayAdapter", "__TONY_CAMERA_REPLAY_BRIDGE__", "cameraReplay: projection", "cameraReplayConsumer: owner", "createBrowserSettingsAdapter", "createBrowserEffectsAdapter", "__TONY_SETTINGS_EFFECTS_BRIDGE__"]) if (!entrySource.includes(contract)) throw new Error(`browser-entry.js: missing presentation contract ${contract}`);
-console.log(`Player V3 assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, six variants, ${clipNames.size} clips.`);
+console.log(`Player V3 assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, six variants, contact-synced motion, dynamic ball presentation, ${clipNames.size} clips.`);
