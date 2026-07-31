@@ -26,12 +26,13 @@ jobs:
         run: |
           curl --fail --location \
             -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.raw+json" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/.github/workflows/ton193-apply-transaction.yml?ref=a7527480acdf62b484b49d3d44c21cd632151773" \
-            --output /tmp/bootstrap.yml
+            --output /tmp/bootstrap.json
           python - <<'PY'
-          import base64, gzip, pathlib, re
-          source = pathlib.Path('/tmp/bootstrap.yml').read_text()
+          import base64, gzip, json, pathlib, re
+          payload = json.loads(pathlib.Path('/tmp/bootstrap.json').read_text())
+          source = base64.b64decode(payload['content']).decode()
           match = re.search(r"printf '%s' '([^']+)' \\| base64 -d \\| gzip -d", source)
           if not match:
               raise SystemExit('encoded audited patch was not found')
