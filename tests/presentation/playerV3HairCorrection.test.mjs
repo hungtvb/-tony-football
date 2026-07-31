@@ -74,8 +74,10 @@ test("repairs Head-attached hair into body-rest skinned scalp and crown surfaces
     assert.equal(node.geometry.getAttribute("skinWeight")?.itemSize, 4);
     node.geometry.computeBoundingBox();
     assert.equal(node.geometry.boundingBox.max.y > .9, true);
-    assert.equal(node.geometry.boundingBox.min.y < .8, true);
   }
+  assert.equal(cap.geometry.boundingBox.min.y < .75, true, "scalp cap must cover the upper sides of the head");
+  assert.equal(crown.geometry.boundingBox.min.y > cap.geometry.boundingBox.min.y, true, "crown must remain above the scalp cap lower edge");
+  assert.equal(crown.geometry.boundingBox.max.y >= .97, true, "crown must cover the top of the measured head bounds");
 });
 
 test("body-rest skinned hair correction is idempotent", () => {
