@@ -42,7 +42,7 @@ jobs:
       - name: Apply and verify exact files
         shell: bash
         run: |
-          patch -p4 --forward < /tmp/ton193.patch
+          patch -p5 --forward < /tmp/ton193.patch
           git diff --check
           cat > /tmp/expected.sha256 <<'EOF'
           3a53c34350f6c7df57071cfbb4528d8dfae7bb39aba1a158fd6517d9d7d40117  src/game/presentation/PlayerModelView.js
