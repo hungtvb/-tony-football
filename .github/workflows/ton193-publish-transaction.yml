@@ -1,7 +1,7 @@
 name: TON-193 Publish Transaction Fix
 
 on:
-  push:
+  pull_request:
     branches:
       - ton193-publish-transaction
 
@@ -72,4 +72,3 @@ jobs:
             docs/14_MODEL_VIEW_CONTRACT.md
           git commit -m 'fix(ton-193): keep fallback until appearance candidate is ready'
           git push origin HEAD:feat/ton-193-player-model-v3
-          git push origin --delete ton193-publish-transaction || true
