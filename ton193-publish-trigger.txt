@@ -1,1 +1,2 @@
 Trigger the audited TON-193 transactional appearance publish workflow.
+Attempt 2: decode the GitHub Contents API payload before extracting the verified patch.
