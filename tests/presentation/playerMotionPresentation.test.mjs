@@ -52,6 +52,18 @@ test("hard braking creates short bounded compression without reversing root moti
   assert.ok(result.compression <= .085);
 });
 
+test("invalid heading fails safe without producing NaN transforms", () => {
+  const state = createPlayerMotionPresentationState({ vx: 30, vy: 40 });
+  const result = stepPlayerMotionPresentation({
+    state,
+    pose: pose({ vx: 120, vy: 80, turnLean: Number.NaN }),
+    dt: 1 / 60,
+    yaw: Number.NaN,
+    animationState: "Jog_Fwd_Loop",
+  });
+  for (const value of Object.values(result)) assert.equal(Number.isFinite(value), true);
+});
+
 test("reset clears temporal motion history", () => {
   const state = createPlayerMotionPresentationState({ vx: 20, vy: 30 });
   stepPlayerMotionPresentation({ state, pose: pose({ vx: 200, vy: 50, turnLean: -.5 }), dt: 1 / 60, yaw: Math.PI / 2, animationState: "Jog_Fwd_Loop" });
