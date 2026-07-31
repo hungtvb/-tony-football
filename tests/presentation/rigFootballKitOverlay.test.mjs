@@ -10,26 +10,47 @@ function rigRoot({ includeHead = true, includeBody = true, missingRightBootWeigh
   const skeletonRoot = new THREE.Bone();
   skeletonRoot.name = "Root";
   const names = ["spine_02", "pelvis", "calf_l", "calf_r", "foot_l", "foot_r", ...(includeHead ? ["Head"] : [])];
-  const bones = names.map((name) => { const bone = new THREE.Bone(); bone.name = name; skeletonRoot.add(bone); return bone; });
-  if (!includeBody) { root.add(skeletonRoot); return root; }
+  const bones = names.map((name) => {
+    const bone = new THREE.Bone();
+    bone.name = name;
+    skeletonRoot.add(bone);
+    return bone;
+  });
+  if (!includeBody) {
+    root.add(skeletonRoot);
+    return root;
+  }
 
-  const geometry = new THREE.BoxGeometry(1, 2, .5, 2, 4, 2);
-  const vertexCount = geometry.attributes.position.count;
+  const geometry = new THREE.BoxGeometry(1, 2, .5, 4, 8, 4);
+  const position = geometry.getAttribute("position");
+  const vertexCount = position.count;
   const skinIndices = new Uint16Array(vertexCount * 4);
   const skinWeights = new Float32Array(vertexCount * 4);
-  const weightedBoneIndices = missingRightBootWeights ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6];
+  const indexByName = new Map([["Root", 0], ...names.map((name, index) => [name, index + 1])]);
+
   for (let index = 0; index < vertexCount; index += 1) {
-    skinIndices[index * 4] = weightedBoneIndices[index % weightedBoneIndices.length];
+    const x = position.getX(index);
+    const y = position.getY(index);
+    let boneName;
+    if (includeHead && y > .68) boneName = "Head";
+    else if (y > .18) boneName = "spine_02";
+    else if (y > -.24) boneName = "pelvis";
+    else if (y > -.68) boneName = x < 0 ? "calf_l" : "calf_r";
+    else boneName = x < 0 || missingRightBootWeights ? "foot_l" : "foot_r";
+    skinIndices[index * 4] = indexByName.get(boneName);
     skinWeights[index * 4] = 1;
   }
+
   geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(skinIndices, 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWeights, 4));
-  const texture = new THREE.Texture(); texture.name = "source-body-map";
+  const texture = new THREE.Texture();
+  texture.name = "source-body-map";
   const body = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial({ map: texture, color: 0xffffff }));
   body.name = "SuperHero_Male";
   body.add(skeletonRoot);
   root.add(body);
   body.bind(new THREE.Skeleton([skeletonRoot, ...bones]));
+  root.updateMatrixWorld(true);
   return root;
 }
 
@@ -44,7 +65,7 @@ function compileSource(material) {
   return shader;
 }
 
-test("Player V3 reuses one authoritative skinned body and preserves its source map", () => {
+test("Player V3 keeps one authoritative body and adds measured hair plus two skinned boot silhouettes", () => {
   const root = rigRoot();
   const body = mesh(root, "SuperHero_Male");
   const originalGeometry = body.geometry;
@@ -52,7 +73,11 @@ test("Player V3 reuses one authoritative skinned body and preserves its source m
   const originalMaterial = body.material;
   const sourceMap = originalMaterial.map;
 
-  const evidence = ensureRigFootballKitOverlay({ root, player: { id: "home-0", team: 0, role: "FW", index: 0 }, three: THREE });
+  const evidence = ensureRigFootballKitOverlay({
+    root,
+    player: { id: "home-0", team: 0, role: "FW", index: 0 },
+    three: THREE,
+  });
 
   assert.equal(evidence.installed, true);
   assert.equal(evidence.appearanceMode, "player-v3-integrated-body-material");
@@ -61,11 +86,14 @@ test("Player V3 reuses one authoritative skinned body and preserves its source m
   assert.equal(evidence.skinnedSurfaceCount, 1);
   assert.equal(evidence.integratedBodySurfaceCount, 1);
   assert.equal(evidence.bootRegionCount, 2);
-  assert.equal(evidence.hairGeometryCount >= 1, true);
+  assert.equal(evidence.bootGeometryCount, 2);
+  assert.equal(evidence.bootSurfaceCount, 2);
+  assert.equal(evidence.hairCoverageComplete, true);
+  assert.equal(evidence.measuredHeadBounds, true);
+  assert.equal(evidence.hairGeometryCount >= 2, true);
   assert.equal(evidence.rigidPrimitiveCount, 0);
   assert.equal(evidence.surfaceMapPreservedCount, 1);
   assert.equal(evidence.visibleKitNodeCount, 7);
-  assert.equal(evidence.bootGeometryCount, 2);
   assert.equal(evidence.kitCoverageComplete, true);
   assert.equal(evidence.kitCoverage.jerseyVertices > 0, true);
   assert.equal(evidence.kitCoverage.shortsVertices > 0, true);
@@ -79,21 +107,41 @@ test("Player V3 reuses one authoritative skinned body and preserves its source m
   assert.equal(body.material.map, sourceMap);
   assert.equal(body.material.userData.tonySourceMapPreserved, true);
   assert.equal(body.userData.tonyPlayerV3IntegratedAppearance, true);
-  assert.equal(mesh(root, "TonyPlayerV3Hair")?.parent?.name, "Head");
-  let skinnedMeshes = 0;
-  root.traverse((node) => { if (node.isSkinnedMesh) skinnedMeshes += 1; });
-  assert.equal(skinnedMeshes, 1, "appearance must never duplicate the high-detail body");
+
+  const hairCap = mesh(root, "TonyPlayerV3Hair");
+  const hairCrown = mesh(root, "TonyPlayerV3HairCrown");
+  assert.equal(hairCap?.parent?.name, "Head");
+  assert.equal(hairCrown?.parent?.name, "Head");
+  assert.equal(hairCap?.userData?.tonyHairCoverageLayer, "scalp-cap");
+  assert.equal(hairCrown?.userData?.tonyHairCoverageLayer, "crown");
+
+  const boots = [mesh(root, "TonyPlayerV3BootLeft"), mesh(root, "TonyPlayerV3BootRight")];
+  assert.equal(boots.every(Boolean), true);
+  assert.equal(boots.every((node) => node.isSkinnedMesh), true);
+  assert.equal(boots.every((node) => node.geometry?.type === "TonyFootballBootGeometry"), true);
+  assert.equal(boots.every((node) => node.skeleton === body.skeleton), true);
+  assert.equal(boots.every((node) => Array.isArray(node.material) && node.material.length === 2), true);
+
+  const skinnedMeshes = [];
+  root.traverse((node) => { if (node.isSkinnedMesh) skinnedMeshes.push(node); });
+  assert.equal(skinnedMeshes.length, 3, "one body plus two skinned footwear surfaces are expected");
+  assert.equal(skinnedMeshes.filter((node) => node.name === "SuperHero_Male").length, 1);
   for (const removedPrimitive of ["TonyRigJersey", "TonyRigShorts", "TonyRigBootLeft", "TonyRigBootRight"]) {
     assert.equal(mesh(root, removedPrimitive), undefined);
   }
 });
 
-test("six stable player indices produce six body, hair and kit variants without box hair", () => {
+test("six stable player indices produce six restrained body, hair and kit variants without box hair", () => {
   const variants = [];
   const cacheKeys = new Set();
   for (let index = 0; index < 6; index += 1) {
     const root = rigRoot();
-    const evidence = ensureRigFootballKitOverlay({ root, player: { id: `home-${index}`, team: 0, role: index === 0 ? "GK" : "FW", index }, three: THREE, lowPowerDevice: true });
+    const evidence = ensureRigFootballKitOverlay({
+      root,
+      player: { id: `home-${index}`, team: 0, role: index === 0 ? "GK" : "FW", index },
+      three: THREE,
+      lowPowerDevice: true,
+    });
     variants.push({
       index: evidence.variantIndex,
       name: evidence.variantName,
@@ -102,8 +150,10 @@ test("six stable player indices produce six body, hair and kit variants without 
     });
     cacheKeys.add(mesh(root, "SuperHero_Male").material.customProgramCacheKey());
     const hairNodes = evidence.nodes.filter((node) => node.hair).map((node) => mesh(root, node.name));
-    assert.equal(hairNodes.length >= 1, true);
+    assert.equal(hairNodes.length >= 2, true);
     assert.equal(hairNodes.every((node) => node?.geometry?.type !== "BoxGeometry"), true);
+    assert.equal(evidence.hairCoverageComplete, true);
+    assert.equal(evidence.bootGeometryCount, 2);
   }
   assert.deepEqual(variants.map((variant) => variant.index), [0, 1, 2, 3, 4, 5]);
   assert.equal(new Set(variants.map((variant) => variant.name)).size, 6);
@@ -112,11 +162,15 @@ test("six stable player indices produce six body, hair and kit variants without 
   assert.equal(cacheKeys.size, 6);
 });
 
-test("bone-weight shader owns kit, socks and footwear without discarding source pixels", () => {
+test("hybrid rest-space shader owns kit regions and blends patterns without discarding source pixels", () => {
   const root = rigRoot();
   const body = mesh(root, "SuperHero_Male");
   const sourceMap = body.material.map;
-  ensureRigFootballKitOverlay({ root, player: { id: "away-4", team: 1, role: "FW", index: 4 }, three: THREE });
+  ensureRigFootballKitOverlay({
+    root,
+    player: { id: "away-4", team: 1, role: "FW", index: 4 },
+    three: THREE,
+  });
   const shader = compileSource(body.material);
   assert.equal(body.material.map, sourceMap);
   assert.match(shader.vertexShader, /attribute vec4 tonyKitWeights/);
@@ -124,17 +178,26 @@ test("bone-weight shader owns kit, socks and footwear without discarding source 
   assert.match(shader.vertexShader, /tonyLayerThickness/);
   assert.match(shader.fragmentShader, /vTonyKitWeights/);
   assert.match(shader.fragmentShader, /tonyAppearanceRegion/);
-  assert.match(shader.fragmentShader, /tonyBootLaces/);
-  assert.match(shader.fragmentShader, /tonyPatternAccent/);
+  assert.match(shader.fragmentShader, /tonyPatternMix/);
+  assert.match(shader.fragmentShader, /mix\(.*tonyPatternMix/);
+  assert.doesNotMatch(shader.fragmentShader, /tonyPatternAccent/);
   assert.doesNotMatch(shader.fragmentShader, /discard/);
 });
 
-test("installation is idempotent and evidence fails visible acceptance for foreign appearance primitives", () => {
+test("installation is idempotent and foreign rigid appearance geometry fails acceptance", () => {
   const root = rigRoot();
   const body = mesh(root, "SuperHero_Male");
-  const first = ensureRigFootballKitOverlay({ root, player: { id: "away-2", team: 1, role: "FW", index: 2 }, three: THREE });
+  const first = ensureRigFootballKitOverlay({
+    root,
+    player: { id: "away-2", team: 1, role: "FW", index: 2 },
+    three: THREE,
+  });
   const firstMaterial = body.material;
-  const second = ensureRigFootballKitOverlay({ root, player: { id: "away-2", team: 1, role: "FW", index: 2 }, three: THREE });
+  const second = ensureRigFootballKitOverlay({
+    root,
+    player: { id: "away-2", team: 1, role: "FW", index: 2 },
+    three: THREE,
+  });
   assert.deepEqual(second, first);
   assert.equal(body.material, firstMaterial);
 
@@ -143,25 +206,35 @@ test("installation is idempotent and evidence fails visible acceptance for forei
   root.add(foreign);
   const degraded = rigFootballKitEvidence(root);
   assert.equal(degraded.rigidPrimitiveCount, 1);
+  assert.equal(degraded.installed, false);
   assert.equal(degraded.skinnedSurfaceCount, 1);
 });
 
 test("missing integrated body, Head bone or one boot side fails closed", () => {
   const noBody = rigRoot({ includeBody: false });
-  assert.throws(() => ensureRigFootballKitOverlay({ root: noBody, player: { team: 0, role: "FW" }, three: THREE }), /integrated skinned body/);
+  assert.throws(
+    () => ensureRigFootballKitOverlay({ root: noBody, player: { team: 0, role: "FW" }, three: THREE }),
+    /integrated skinned body/,
+  );
   assert.equal(rigFootballKitEvidence(noBody).installed, false);
 
   const noHead = rigRoot({ includeHead: false });
   const body = mesh(noHead, "SuperHero_Male");
   const originalMaterial = body.material;
-  assert.throws(() => ensureRigFootballKitOverlay({ root: noHead, player: { team: 0, role: "FW" }, three: THREE }), /requires bone Head/);
+  assert.throws(
+    () => ensureRigFootballKitOverlay({ root: noHead, player: { team: 0, role: "FW" }, three: THREE }),
+    /requires bone Head/,
+  );
   assert.equal(body.material, originalMaterial);
   assert.equal(rigFootballKitEvidence(noHead).installed, false);
 
   const oneBoot = rigRoot({ missingRightBootWeights: true });
   const oneBootBody = mesh(oneBoot, "SuperHero_Male");
   const oneBootMaterial = oneBootBody.material;
-  assert.throws(() => ensureRigFootballKitOverlay({ root: oneBoot, player: { team: 0, role: "FW" }, three: THREE }), /rightBoot=0/);
+  assert.throws(
+    () => ensureRigFootballKitOverlay({ root: oneBoot, player: { team: 0, role: "FW" }, three: THREE }),
+    /rightBoot=0/,
+  );
   assert.equal(oneBootBody.material, oneBootMaterial);
   assert.equal(rigFootballKitEvidence(oneBoot).installed, false);
 });
