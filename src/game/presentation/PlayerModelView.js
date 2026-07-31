@@ -24,8 +24,17 @@ function disposeMaterial(material) {
   }
   material.dispose?.();
 }
-function disposeOwned(root) {
-  root?.traverse?.((node) => { if (!node.userData?.tonySharedGeometry) node.geometry?.dispose?.(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(disposeMaterial); });
+function disposeOwned(root, additionalMaterials = []) {
+  const geometries = new Set();
+  const materials = new Set(additionalMaterials ?? []);
+  root?.traverse?.((node) => {
+    if (node.geometry && !node.userData?.tonySharedGeometry) geometries.add(node.geometry);
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+      if (material) materials.add(material);
+    }
+  });
+  for (const geometry of geometries) geometry.dispose?.();
+  for (const material of materials) disposeMaterial(material);
 }
 
 function normalizedSurfaceLabel(nodeName = "", materialName = "") {
@@ -183,14 +192,14 @@ function prepareAnimationSet({ THREE, model, animations = [] }) {
 }
 function releaseRigCandidate(rig, errors = null) {
   try { releaseAnimationSet(rig, errors); } catch (error) { if (errors) errors.push(error); }
-  disposeCandidateMaterials(rig?.ownedMaterials);
+  disposeOwned(rig?.model, rig?.ownedMaterials);
 }
 function countFootwearNodes(model) {
   let count = 0;
   model?.traverse?.((node) => { if (/(^|[^a-z])(boot|shoe|cleat|foot)([^a-z]|$)/i.test(node.name ?? "")) count += 1; });
   return count;
 }
-function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }) {
+function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations, prepareModel = null }) {
   let model = null; let animationSet = null; const ownedMaterials = []; const appearance = createAppearance("asset");
   try {
     model = cloneModel(characterScene); model.scale.set(2.96, 3.28, 2.96); model.rotation.y = 0;
@@ -201,6 +210,10 @@ function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animat
       node.material = Array.isArray(node.material) ? mapped : mapped[0];
     });
     appearance.footwearNodeCount = countFootwearNodes(model);
+    if (prepareModel !== null) {
+      if (typeof prepareModel !== "function") throw new TypeError("player rig prepareModel must be a function");
+      prepareModel(Object.freeze({ root: model, player }));
+    }
     animationSet = prepareAnimationSet({ THREE, model, animations: animations ?? [] });
     return {
       model,
@@ -219,7 +232,9 @@ function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animat
     };
   } catch (error) {
     if (animationSet) { try { releaseAnimationSet(animationSet); } catch {} }
-    disposeCandidateMaterials(ownedMaterials); throw error;
+    if (model) disposeOwned(model, ownedMaterials);
+    else disposeCandidateMaterials(ownedMaterials);
+    throw error;
   }
 }
 function commitRig(view, rig) {
@@ -284,10 +299,18 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
       catch (error) { errors?.push(error); }
     }
   }
-  function installAsset({ characterScene, animations = [] } = {}) {
+  function installAsset({ characterScene, animations = [], prepareModel = null } = {}) {
     if (unavailable() || !characterScene || view.rig) return false;
-    try { const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }); commitRig(view, candidate); currentAnimationReleased = false; installError = ""; return true; }
-    catch (error) { installError = error?.message ?? String(error); return false; }
+    try {
+      const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations, prepareModel });
+      commitRig(view, candidate);
+      currentAnimationReleased = false;
+      installError = "";
+      return true;
+    } catch (error) {
+      installError = error?.message ?? String(error);
+      return false;
+    }
   }
   function installAnimations(nextAnimations = []) {
     if (unavailable() || !view.rig || !Array.isArray(nextAnimations)) return false;
@@ -368,7 +391,10 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     if (view.rig && !currentAnimationReleased) { try { releaseAnimationSet(view.rig); currentAnimationReleased = true; } catch (error) { errors.push(error); } }
     retryRetiredAnimationSets(errors);
     const animationOwnershipReleased = (!view.rig || currentAnimationReleased) && retiredAnimationSets.length === 0;
-    if (!attached && animationOwnershipReleased && !rootDisposed) { try { disposeOwned(view.root); rootDisposed = true; } catch (error) { errors.push(error); } }
+    if (!attached && animationOwnershipReleased && !rootDisposed) {
+      try { disposeOwned(view.root, view.rig?.ownedMaterials); rootDisposed = true; }
+      catch (error) { errors.push(error); }
+    }
     if (!attached && animationOwnershipReleased && rootDisposed) { view.rig = null; disposed = true; terminating = false; installError = ""; }
     if (errors.length === 1) throw errors[0]; if (errors.length > 1) throw new AggregateError(errors, `player model view ${player.id} teardown reported errors`); return disposed;
   }

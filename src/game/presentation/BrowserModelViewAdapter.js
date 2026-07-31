@@ -127,22 +127,28 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     return status;
   }
   function installRigAsset(view, playerFacts) {
-    const installed = view.installAsset?.({ characterScene, animations });
-    if (!view.rigged) return Boolean(installed);
     const normalizedFacts = normalizedPlayerFacts(playerFacts, view.id);
-    ensureRigFootballKitOverlay({ root: view.root, player: normalizedFacts, lowPowerDevice });
-    repairPlayerV3Hair({ root: view.root, lowPowerDevice });
-    const evidence = rigFootballKitEvidence(view.root);
-    if (
-      evidence.appearanceMode !== "player-v3-integrated-body-material"
-      || evidence.integratedBodySurfaceCount !== 1
-      || evidence.skinnedSurfaceCount !== 1
-      || evidence.bootRegionCount !== 2
-      || evidence.bootGeometryCount !== 2
-      || !evidence.kitCoverageComplete
-      || !evidence.hairCoverageComplete
-      || evidence.rigidPrimitiveCount !== 0
-    ) throw new Error(`player model view ${normalizedFacts.id ?? view.id} rejected non-conforming Player V3 appearance`);
+    const prepareModel = ({ root }) => {
+      ensureRigFootballKitOverlay({ root, player: normalizedFacts, lowPowerDevice });
+      repairPlayerV3Hair({ root, lowPowerDevice });
+      const evidence = rigFootballKitEvidence(root);
+      if (
+        evidence.appearanceMode !== "player-v3-integrated-body-material"
+        || evidence.integratedBodySurfaceCount !== 1
+        || evidence.skinnedSurfaceCount !== 1
+        || evidence.bootRegionCount !== 2
+        || evidence.bootGeometryCount !== 2
+        || !evidence.kitCoverageComplete
+        || !evidence.hairCoverageComplete
+        || evidence.rigidPrimitiveCount !== 0
+      ) throw new Error(`player model view ${normalizedFacts.id ?? view.id} rejected non-conforming Player V3 appearance`);
+      return evidence;
+    };
+    const installed = view.installAsset?.({ characterScene, animations, prepareModel });
+    if (installed === false || view.rigged === false) {
+      const detail = view.diagnostics?.().installError || "rig candidate rejected";
+      throw new Error(`player model view ${normalizedFacts.id ?? view.id} kept procedural fallback: ${detail}`);
+    }
     return true;
   }
   function createView(player) {

@@ -165,6 +165,57 @@ test("fallback-to-rig preparation failure disposes candidate materials and prese
   assert.equal(view.teardown(), true);
 });
 
+test("appearance preparation failure disposes candidate-owned accessories and preserves procedural fallback", () => {
+  let materialDisposals = 0;
+  let geometryDisposals = 0;
+  let accessoryMaterialDisposals = 0;
+  let accessoryGeometryDisposals = 0;
+  const candidate = candidateModel({
+    onMaterialDispose: () => { materialDisposals += 1; },
+    onGeometryDispose: () => { geometryDisposals += 1; },
+  });
+  const view = createPlayerModelView({
+    player: descriptor,
+    scenePort: scenePort(),
+    document: documentStub(),
+    worldX: (value) => value,
+    worldZ: (value) => value,
+    cloneModel: () => candidate,
+  });
+  const proceduralBody = view.root.children[0];
+
+  const installed = view.installAsset({
+    characterScene: new THREE.Group(),
+    animations: [],
+    prepareModel: ({ root, player }) => {
+      assert.equal(root, candidate);
+      assert.equal(root.parent, null);
+      assert.equal(player, descriptor);
+      const geometry = new THREE.BoxGeometry(.2, .2, .2);
+      const disposeGeometry = geometry.dispose.bind(geometry);
+      geometry.dispose = () => { accessoryGeometryDisposals += 1; disposeGeometry(); };
+      const material = new THREE.MeshStandardMaterial();
+      const disposeMaterial = material.dispose.bind(material);
+      material.dispose = () => { accessoryMaterialDisposals += 1; disposeMaterial(); };
+      const accessory = new THREE.Mesh(geometry, material);
+      accessory.userData.tonyRigAppearanceSurface = true;
+      root.add(accessory);
+      throw new Error("appearance preparation failed");
+    },
+  });
+
+  assert.equal(installed, false);
+  assert.equal(view.rigged, false);
+  assert.equal(proceduralBody.visible, true);
+  assert.equal(candidate.parent, null);
+  assert.equal(materialDisposals, 1);
+  assert.equal(geometryDisposals, 0);
+  assert.equal(accessoryMaterialDisposals, 1);
+  assert.equal(accessoryGeometryDisposals, 1);
+  assert.match(view.diagnostics().installError, /appearance preparation failed/);
+  assert.equal(view.teardown(), true);
+});
+
 test("fallback-to-rig root commit failure removes a partially attached candidate", () => {
   let materialDisposals = 0; let geometryDisposals = 0;
   const candidate = candidateModel({ onMaterialDispose: () => { materialDisposals += 1; }, onGeometryDispose: () => { geometryDisposals += 1; } });

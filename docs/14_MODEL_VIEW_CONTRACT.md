@@ -24,8 +24,9 @@ The model adapter is ordered before the scene adapter for frame rendering. Its i
 
 - Character and animation assets load independently.
 - Character failure leaves procedural players active.
-- Fallback-to-rig upgrade is transactional per player: clone, kit material projection, mixer/action construction and initial animation setup complete on a detached candidate before its model root is added and the procedural body is hidden.
-- Any candidate preparation or root-commit failure removes the candidate, disposes candidate-owned materials and preserves the procedural fallback unchanged.
+- Fallback-to-rig upgrade is transactional per player: clone, semantic material projection, Player V3 kit/hair/footwear preparation, mixer/action construction and initial animation setup all complete on a detached candidate before its model root is added and the procedural body is hidden.
+- Appearance preparation runs through the player-view `prepareModel` candidate hook. A kit, hair, footwear or validation failure rejects the candidate before commit; the adapter must not report a ready rig while the procedural fallback remains active.
+- Any candidate preparation or root-commit failure removes the candidate, disposes candidate-owned accessory geometry plus all player-owned materials, and preserves the procedural fallback unchanged.
 - Animation refresh has an explicit commit boundary. A fresh mixer/action candidate is fully prepared without mutating the live rig. Candidate preparation failure releases the candidate and leaves the prior live set unchanged.
 - After the candidate references are installed, the refresh is committed and returns success. Superseded-set retirement is best-effort cleanup, not rollback: action-stop, `stopAllAction` or `uncacheRoot` failures cannot change the result to a failed refresh while the candidate remains live.
 - A superseded set that reports any retirement error remains owned in a deferred-retirement collection, is retried on later lifecycle work and remains teardown-reachable. No mixer may become orphaned merely because cleanup partially failed.
