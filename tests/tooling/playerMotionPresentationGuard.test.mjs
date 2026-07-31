@@ -27,6 +27,7 @@ test("Player V3 derives acceleration-aware pose without taking engine ownership"
 
   for (const contract of [
     "cadenceFor",
+    "safeYaw",
     "targetForwardLean",
     "targetLateralLean",
     "targetCompression",
