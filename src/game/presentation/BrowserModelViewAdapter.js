@@ -38,10 +38,14 @@ function emptyRigAppearance(bootCount = 0) {
     bootSurfaceCount: Number(bootCount || 0),
     bootRegionCount: Number(bootCount || 0),
     hairGeometryCount: 0,
+    hairCoverageComplete: false,
+    measuredHeadBounds: false,
     rigidPrimitiveCount: 0,
     surfaceMapPreservedCount: 0,
     visibleKitNodeCount: 0,
     bootGeometryCount: Number(bootCount || 0),
+    kitCoverageComplete: false,
+    kitCoverage: null,
     nodes: Object.freeze([]),
   });
 }
@@ -67,11 +71,15 @@ function appearanceDiagnostics(playerViews) {
       bootSurfaceCount: rigAppearance.bootSurfaceCount,
       bootRegionCount: rigAppearance.bootRegionCount,
       hairGeometryCount: rigAppearance.hairGeometryCount,
+      hairCoverageComplete: rigAppearance.hairCoverageComplete,
+      measuredHeadBounds: rigAppearance.measuredHeadBounds,
       rigidPrimitiveCount: rigAppearance.rigidPrimitiveCount,
       surfaceMapPreservedCount: rigAppearance.surfaceMapPreservedCount,
       visibleKitNodeCount: rigAppearance.visibleKitNodeCount,
       bootGeometryCount: rigAppearance.bootGeometryCount,
-      bootCount: diagnostics.rigged ? rigAppearance.bootRegionCount : Number(appearance.bootCount || 0),
+      kitCoverageComplete: rigAppearance.kitCoverageComplete,
+      kitCoverage: rigAppearance.kitCoverage,
+      bootCount: diagnostics.rigged ? rigAppearance.bootGeometryCount : Number(appearance.bootCount || 0),
       rigKitNodes: rigAppearance.nodes,
       motion: diagnostics.motion ?? null,
     });
@@ -80,8 +88,8 @@ function appearanceDiagnostics(playerViews) {
     players,
     riggedPlayers: players.filter((player) => player.rigged).length,
     fallbackPlayers: players.filter((player) => !player.rigged).length,
-    bootlessPlayers: players.filter((player) => Number(player.bootSurfaceCount || player.bootGeometryCount || player.bootCount || 0) < 2).length,
-    hairlessPlayers: players.filter((player) => player.rigged && Number(player.hairGeometryCount || 0) < 1).length,
+    bootlessPlayers: players.filter((player) => Number(player.bootGeometryCount || player.bootCount || 0) < 2).length,
+    hairlessPlayers: players.filter((player) => player.rigged && !player.hairCoverageComplete).length,
     preservedMapPlayers: players.filter((player) => Number(player.preservedMapCount || 0) > 0).length,
     tintedKitPlayers: players.filter((player) => Number(player.tintedKitMaterialCount || 0) > 0).length,
     visibleKitPlayers: players.filter((player) => !player.rigged || (
@@ -90,7 +98,9 @@ function appearanceDiagnostics(playerViews) {
       && Number(player.integratedBodySurfaceCount || 0) === 1
       && Number(player.skinnedSurfaceCount || 0) === 1
       && Number(player.bootRegionCount || 0) === 2
-      && Number(player.hairGeometryCount || 0) >= 1
+      && Number(player.bootGeometryCount || 0) === 2
+      && player.kitCoverageComplete
+      && player.hairCoverageComplete
       && Number(player.rigidPrimitiveCount || 0) === 0
     )).length,
     distinctVariants: new Set(players.filter((player) => player.rigged).map((player) => player.variantIndex).filter(Number.isInteger)).size,
@@ -125,7 +135,9 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       || evidence.integratedBodySurfaceCount !== 1
       || evidence.skinnedSurfaceCount !== 1
       || evidence.bootRegionCount !== 2
-      || evidence.hairGeometryCount < 1
+      || evidence.bootGeometryCount !== 2
+      || !evidence.kitCoverageComplete
+      || !evidence.hairCoverageComplete
       || evidence.rigidPrimitiveCount !== 0
     ) throw new Error(`player model view ${normalizedFacts.id ?? view.id} rejected non-conforming Player V3 appearance`);
     return true;
@@ -157,7 +169,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
         }
         characterScene = nextCharacterScene;
         for (const view of playerViews.values()) installRigAsset(view, view.diagnostics?.() ?? Object.freeze({ id: view.id, team: 0, role: "FW" }));
-        setAssetStatus("ready", "PLAYER V3 · READY", "Six body, hair, kit and footwear variants installed on the original animated rig");
+        setAssetStatus("ready", "PLAYER V3 · READY", "Six body, hair, kit and skinned-footwear variants installed on the original animated rig");
       } catch (error) {
         if (unavailable() || generation !== loadGeneration) return false;
         setAssetStatus("error", "MODEL · FALLBACK", error?.message ?? String(error)); return false;
@@ -169,7 +181,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       animations = Object.freeze([...(motion?.animations ?? [])]);
       for (const view of playerViews.values()) view.installAnimations?.(animations);
       disposePlayerAssetTemplate(motion?.scene);
-      setAssetStatus("ready", "PLAYER V3 + MOTION · READY", `${animations.length} clips; six deterministic body, hair and kit variants ready`); return true;
+      setAssetStatus("ready", "PLAYER V3 + MOTION · READY", `${animations.length} clips; six deterministic body, hair, kit and footwear variants ready`); return true;
     } catch (error) {
       if (unavailable() || generation !== loadGeneration) return false;
       setAssetStatus("warning", "PLAYER V3 READY · BASIC MOTION", error?.message ?? String(error)); return false;
