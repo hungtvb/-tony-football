@@ -49,18 +49,25 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
     expect(player.skinnedSurfaceCount).toBe(1);
     expect(player.integratedBodySurfaceCount).toBe(1);
     expect(player.bootRegionCount).toBe(2);
-    expect(player.hairGeometryCount).toBeGreaterThanOrEqual(1);
+    expect(player.bootGeometryCount).toBe(2);
+    expect(player.bootSurfaceCount).toBe(2);
+    expect(player.hairGeometryCount).toBeGreaterThanOrEqual(2);
+    expect(player.hairCoverageComplete).toBe(true);
+    expect(player.measuredHeadBounds).toBe(true);
+    expect(player.kitCoverageComplete).toBe(true);
     expect(player.rigidPrimitiveCount).toBe(0);
     expect(player.visibleKitNodeCount).toBe(7);
-    expect(player.bootGeometryCount).toBe(2);
     expect(player.preservedMapCount).toBeGreaterThan(0);
     expect(player.variantIndex).toBeGreaterThanOrEqual(0);
     expect(player.variantIndex).toBeLessThan(6);
     expect(player.variantName).toBeTruthy();
     expect(player.kitPattern).toBeTruthy();
     expect(player.hairStyle).toBeTruthy();
+
     const body = player.rigKitNodes.find((node) => node.integratedBody);
-    const hair = player.rigKitNodes.find((node) => node.hair);
+    const hairCap = player.rigKitNodes.find((node) => node.hairCoverageLayer === "scalp-cap");
+    const hairCrown = player.rigKitNodes.find((node) => node.hairCoverageLayer === "crown");
+    const boots = player.rigKitNodes.filter((node) => node.boot);
     expect(body?.name).toBe("SuperHero_Male");
     expect(body?.skinned).toBe(true);
     expect(body?.bodyConforming).toBe(true);
@@ -72,9 +79,15 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
     expect(body?.coverage?.sockVertices).toBeGreaterThan(0);
     expect(body?.coverage?.leftBootVertices).toBeGreaterThan(0);
     expect(body?.coverage?.rightBootVertices).toBeGreaterThan(0);
-    expect(hair?.name).toBe("TonyPlayerV3Hair");
-    expect(hair?.hairStyle).toBe(player.hairStyle);
-    expect(player.rigKitNodes.filter((node) => !node.integratedBody && !node.hair)).toHaveLength(0);
+    expect(hairCap?.name).toBe("TonyPlayerV3Hair");
+    expect(hairCrown?.name).toBe("TonyPlayerV3HairCrown");
+    expect(hairCap?.hairStyle).toBe(player.hairStyle);
+    expect(hairCrown?.hairStyle).toBe(player.hairStyle);
+    expect(boots).toHaveLength(2);
+    expect(boots.every((node) => node.skinned)).toBe(true);
+    expect(boots.every((node) => node.bodyConforming)).toBe(true);
+    expect(boots.every((node) => node.surfaceKind === "player-v3-skinned-footwear")).toBe(true);
+    expect(player.rigKitNodes.filter((node) => !node.integratedBody && !node.hair && !node.boot)).toHaveLength(0);
   }
   expect(result.scene.foreignObjects).toBeGreaterThanOrEqual(14);
 
@@ -83,7 +96,8 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
   await page.evaluate(() => document.getElementById("playButton")?.click());
   await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().state === "playing", null, { timeout: 45_000 });
   await page.waitForFunction(() => window.__TONY_DEBUG__?.diagnostics?.().engineSnapshot?.kickoffTimer === 0, null, { timeout: 45_000 });
-  await expect(page.locator("#gameCanvas")).toBeVisible();
+  const canvas = page.locator("#gameCanvas");
+  await expect(canvas).toBeVisible();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
   const liveEvidence = await page.evaluate(() => ({
@@ -96,6 +110,31 @@ test("normal asset mode renders six deterministic Player V3 variants on the exis
 
   const screenshot = await page.screenshot({ type: "png", animations: "disabled" });
   await testInfo.attach("ton-193-player-v3-live-pitch.png", { body: screenshot, contentType: "image/png" });
+  const canvasBox = await canvas.boundingBox();
+  if (canvasBox) {
+    const centerClose = await page.screenshot({
+      type: "png",
+      animations: "disabled",
+      clip: {
+        x: canvasBox.x + (canvasBox.width * .24),
+        y: canvasBox.y + (canvasBox.height * .20),
+        width: canvasBox.width * .52,
+        height: canvasBox.height * .54,
+      },
+    });
+    const selectedClose = await page.screenshot({
+      type: "png",
+      animations: "disabled",
+      clip: {
+        x: canvasBox.x + (canvasBox.width * .20),
+        y: canvasBox.y + (canvasBox.height * .48),
+        width: canvasBox.width * .52,
+        height: canvasBox.height * .42,
+      },
+    });
+    await testInfo.attach("ton-193-player-v3-center-close.png", { body: centerClose, contentType: "image/png" });
+    await testInfo.attach("ton-193-player-v3-selected-close.png", { body: selectedClose, contentType: "image/png" });
+  }
 
   const motionBefore = await page.evaluate(() => {
     const diagnostics = window.__TONY_DEBUG__.diagnostics();
