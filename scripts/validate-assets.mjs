@@ -6,6 +6,7 @@ const characterPath = "assets/models/football-character-v2.glb"; const animation
 const character = await readGLB(characterPath); const animation = await readGLB(animationPath);
 const playerSource = await readFile("src/game/presentation/PlayerModelView.js", "utf8");
 const adapterSource = await readFile("src/game/presentation/BrowserModelViewAdapter.js", "utf8");
+const rigAppearanceSource = await readFile("src/game/presentation/RigFootballKitOverlay.js", "utf8");
 const loaderSource = await readFile("src/game/presentation/PlayerAssetLoader.js", "utf8");
 const ballSource = await readFile("src/game/presentation/BallModelView.js", "utf8");
 const canvasSource = await readFile("src/game/presentation/CanvasMatchRenderer.js", "utf8");
@@ -24,7 +25,8 @@ const animationTargets = new Set(); for (const clip of animation.json.animations
 const expectedClips = ["Idle_Loop", "Jog_Fwd_Loop", "Sprint_Loop", "Hit_Chest", "Roll", "Dance_Loop"]; const clipNames = new Set((animation.json.animations || []).map((clip) => clip.name)); const missingClips = expectedClips.filter((clip) => !clipNames.has(clip)); if (missingClips.length) throw new Error(`${animationPath}: missing clips: ${missingClips.join(", ")}`); if (!animation.json.extensionsRequired?.includes("EXT_meshopt_compression")) throw new Error(`${animationPath}: expected Meshopt-compressed animation data`);
 for (const [sourceName, source, contracts] of [
   ["PlayerAssetLoader.js", loaderSource, ["loader.setMeshoptDecoder(MeshoptDecoder)", "football-character-v2.glb?v=16.0.0", "football-animations-v2.glb?v=16.0.0"]],
-  ["BrowserModelViewAdapter.js", adapterSource, ["createSnapshotRenderState", "createDefaultPlayerAssetLoader", "disposePlayerAssetTemplate", "appearanceDiagnostics(playerViews)", "bootlessPlayers", "preservedMapPlayers"]],
+  ["BrowserModelViewAdapter.js", adapterSource, ["createSnapshotRenderState", "createDefaultPlayerAssetLoader", "disposePlayerAssetTemplate", "appearanceDiagnostics(playerViews)", "integratedBodySurfaceCount", "bootRegionCount", "hairlessPlayers", "distinctVariants", "visibleKitPlayers", "player-v3-integrated-body-material"]],
+  ["RigFootballKitOverlay.js", rigAppearanceSource, ["TonyPlayerV3IntegratedAppearanceMaterial", "TonyRigFootballAppearanceV3", "BODY_VARIANTS", "vTonyBodyPosition", "tonyUpperMask", "tonyPatternAccent", "tonyPlayerV3IntegratedAppearance", "tonyPlayerV3VariantIndex", "tonyPlayerV3VariantName", "tonyPlayerV3KitPattern", "player-v3-integrated-body-material", "TonyPlayerV3Hair", "tonyRigHairGeometry", "tonySourceMapPreserved", "bootRegionCount", "rigidPrimitiveCount"]],
   ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState"]],
   ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(0.56, 48, 32)", "createBallSurfaceTextures", "chargeRoot"]],
   ["CanvasMatchRenderer.js", canvasSource, ["createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
@@ -33,7 +35,9 @@ for (const [sourceName, source, contracts] of [
   ["BrowserEffectsAdapter.js", effectsSource, ["browser effects owner already attached", "emitContextParticles", "projectTrail", "projectCharge", "projectionSequence"]],
 ]) for (const contract of contracts) if (!source.includes(contract)) throw new Error(`${sourceName}: missing presentation contract: ${contract}`);
 if (playerSource.includes("material.map = null")) throw new Error("PlayerModelView.js: semantic source texture maps must not be cleared");
+for (const forbidden of ["TonyRigJersey", "TonyRigJerseyBand", "TonyRigShorts", "TonyRigSockLeft", "TonyRigSockRight", "TonyRigBootLeft", "TonyRigBootRight", "tonyRigBootGeometry", "bone.add(mesh)"]) if (rigAppearanceSource.includes(forbidden)) throw new Error(`RigFootballKitOverlay.js: rigid V2 appearance primitive remains: ${forbidden}`);
+if ((rigAppearanceSource.match(/Object\.freeze\(\{ name:/g) || []).length !== 6) throw new Error("RigFootballKitOverlay.js: Player V3 must define exactly six deterministic variants");
 for (const pageContract of ["src/styles/app.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing match experience contract: ${pageContract}`);
 if (!entrySource.includes('await import("./generated/game.js?v=24.0.0")')) throw new Error("browser-entry.js: missing corrected TON-83 generated game entry import");
 for (const contract of ["createBrowserModelViewAdapter", "createCanvasMatchRenderer", "createSnapshotCameraReplayAdapter", "__TONY_CAMERA_REPLAY_BRIDGE__", "cameraReplay: projection", "cameraReplayConsumer: owner", "createBrowserSettingsAdapter", "createBrowserEffectsAdapter", "__TONY_SETTINGS_EFFECTS_BRIDGE__"]) if (!entrySource.includes(contract)) throw new Error(`browser-entry.js: missing presentation contract ${contract}`);
-console.log(`Player assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, ${clipNames.size} clips.`);
+console.log(`Player V3 assets and presentation contracts valid: character ${(character.bytes.length / 1024).toFixed(0)} KB, animations ${(animation.bytes.length / 1024).toFixed(0)} KB, six variants, ${clipNames.size} clips.`);
