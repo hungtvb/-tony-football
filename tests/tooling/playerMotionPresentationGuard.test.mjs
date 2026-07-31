@@ -28,6 +28,11 @@ test("Player V3 derives acceleration-aware pose without taking engine ownership"
   for (const contract of [
     "cadenceFor",
     "safeYaw",
+    "actionProfile",
+    "contactWeight",
+    "followThrough",
+    "plantStrength",
+    "cadenceScale",
     "targetForwardLean",
     "targetLateralLean",
     "targetCompression",
@@ -41,22 +46,38 @@ test("Player V3 derives acceleration-aware pose without taking engine ownership"
     "pose.vy =",
     "pose.x =",
     "pose.y =",
+    "pose.animTime =",
+    "pose.animDuration =",
     "MatchEngine",
     "enqueue(",
     "dispatchEvent",
   ]) assert.equal(motionSource.includes(forbidden), false, `presentation must not own engine state: ${forbidden}`);
 });
 
-test("motion presentation bounds visual offsets and frame delta", async () => {
+test("motion presentation bounds visual offsets, contact windows and frame delta", async () => {
   const source = await read("src/game/presentation/PlayerMotionPresentation.js");
   for (const bound of [
     "clamp(finite(dt), 0, .05)",
-    "-.085",
-    ".17",
+    'action === "shoot" ? .16',
+    'action === "pass" ? .2',
+    "-.095",
+    ".19",
     "-.22",
     ".22",
-    ".085",
+    ".11",
     ".82",
     "1.42",
   ]) assert.equal(source.includes(bound), true, `motion presentation must retain bound ${bound}`);
+});
+
+test("ball release actions begin at visual contact and recover without persistent lock", async () => {
+  const source = await read("src/game/presentation/PlayerMotionPresentation.js");
+  for (const contract of [
+    "1 - remaining / duration",
+    "1 - smoothstep(0, contactWindow, progress)",
+    'action === "receive"',
+    'action === "shoot" ? .28 : .42',
+    "remaining <= 0",
+    'action: "none"',
+  ]) assert.equal(source.includes(contract), true, `contact timing must retain ${contract}`);
 });
