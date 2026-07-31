@@ -12,7 +12,7 @@ function finite(value, fallback = 0) {
 
 function normalize(x, y, fallbackX = 0, fallbackY = 1) {
   const length = Math.hypot(x, y);
-  if (length <= 1e-6) return Object.freeze({ x: fallbackX, y: fallbackY });
+  if (!Number.isFinite(length) || length <= 1e-6) return Object.freeze({ x: fallbackX, y: fallbackY });
   return Object.freeze({ x: x / length, y: y / length });
 }
 
@@ -51,10 +51,11 @@ export function stepPlayerMotionPresentation({ state, pose, dt, yaw = 0, animati
   if (!pose || typeof pose !== "object") throw new TypeError("player pose is required");
 
   const safeDt = clamp(finite(dt), 0, .05);
+  const safeYaw = finite(yaw);
   const vx = finite(pose.vx);
   const vy = finite(pose.vy);
   const speed = Math.hypot(vx, vy);
-  const forward = normalize(Math.sin(yaw), Math.cos(yaw));
+  const forward = normalize(Math.sin(safeYaw), Math.cos(safeYaw));
   const inverseDt = safeDt > 1e-4 && state.initialized ? 1 / safeDt : 0;
   const accelerationX = (vx - state.previousVx) * inverseDt;
   const accelerationY = (vy - state.previousVy) * inverseDt;
