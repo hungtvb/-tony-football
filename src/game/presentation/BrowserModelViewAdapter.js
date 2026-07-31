@@ -3,6 +3,7 @@ import { createPlayerModelView } from "./PlayerModelView.js";
 import { createBallModelView } from "./BallModelView.js";
 import { createDefaultPlayerAssetLoader, disposePlayerAssetTemplate } from "./PlayerAssetLoader.js";
 import { ensureRigFootballKitOverlay, rigFootballKitEvidence } from "./RigFootballKitOverlay.js";
+import { repairPlayerV3Hair } from "./PlayerV3HairCorrection.js";
 
 function assertFunction(value, name) {
   if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
@@ -129,7 +130,9 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     const installed = view.installAsset?.({ characterScene, animations });
     if (!view.rigged) return Boolean(installed);
     const normalizedFacts = normalizedPlayerFacts(playerFacts, view.id);
-    const evidence = ensureRigFootballKitOverlay({ root: view.root, player: normalizedFacts, lowPowerDevice });
+    ensureRigFootballKitOverlay({ root: view.root, player: normalizedFacts, lowPowerDevice });
+    repairPlayerV3Hair({ root: view.root, lowPowerDevice });
+    const evidence = rigFootballKitEvidence(view.root);
     if (
       evidence.appearanceMode !== "player-v3-integrated-body-material"
       || evidence.integratedBodySurfaceCount !== 1
