@@ -75,8 +75,12 @@ test("repairs Head-attached hair into body-rest skinned scalp and crown surfaces
     node.geometry.computeBoundingBox();
     assert.equal(node.geometry.boundingBox.max.y > .9, true);
   }
-  assert.equal(cap.geometry.boundingBox.min.y < .75, true, "scalp cap must cover the upper sides of the head");
-  assert.equal(crown.geometry.boundingBox.min.y > cap.geometry.boundingBox.min.y, true, "crown must remain above the scalp cap lower edge");
+  const headMinY = .55;
+  const headHeight = .43;
+  const capMinY = cap.geometry.boundingBox.min.y;
+  assert.equal(capMinY < headMinY + (headHeight * .60), true, "scalp cap must cover the upper sides of the head");
+  assert.equal(capMinY > headMinY + (headHeight * .30), true, "scalp cap must not fall into a helmet-like low edge");
+  assert.equal(crown.geometry.boundingBox.min.y > capMinY, true, "crown must remain above the scalp cap lower edge");
   assert.equal(crown.geometry.boundingBox.max.y >= .97, true, "crown must cover the top of the measured head bounds");
 });
 
