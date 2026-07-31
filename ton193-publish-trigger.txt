@@ -1,2 +1,2 @@
 Trigger the audited TON-193 transactional appearance publish workflow.
-Attempt 3: extract the embedded gzip payload with an unambiguous capture expression.
+Attempt 4: apply the verified ZIP-root diff with the correct strip depth.
