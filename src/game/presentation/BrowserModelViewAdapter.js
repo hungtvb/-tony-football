@@ -16,22 +16,54 @@ function defaultLowPowerDevice(target) {
 function createWorldProjection({ width = 1200, height = 700, scale = 0.1 } = {}) {
   return Object.freeze({ worldX: (value) => (value - width / 2) * scale, worldZ: (value) => (value - height / 2) * scale });
 }
+function emptyRigAppearance(bootCount = 0) {
+  return Object.freeze({
+    installed: false,
+    appearanceMode: "none",
+    variantIndex: null,
+    variantName: null,
+    kitPattern: null,
+    hairStyle: null,
+    skinnedSurfaceCount: 0,
+    integratedBodySurfaceCount: 0,
+    bootSurfaceCount: Number(bootCount || 0),
+    bootRegionCount: Number(bootCount || 0),
+    hairGeometryCount: 0,
+    rigidPrimitiveCount: 0,
+    surfaceMapPreservedCount: 0,
+    visibleKitNodeCount: 0,
+    bootGeometryCount: Number(bootCount || 0),
+    nodes: Object.freeze([]),
+  });
+}
 function appearanceDiagnostics(playerViews) {
   const players = Object.freeze([...playerViews.values()].map((view) => {
     const diagnostics = view.diagnostics?.() ?? Object.freeze({});
     const appearance = diagnostics.appearance ?? Object.freeze({ mode: diagnostics.rigged ? "asset" : "fallback", bootCount: 0, preservedMapCount: 0, tintedKitMaterialCount: 0, materialCount: 0, semanticCounts: Object.freeze({}) });
-    const overlay = diagnostics.rigged ? rigFootballKitEvidence(view.root) : Object.freeze({ installed: false, visibleKitNodeCount: 0, bootGeometryCount: Number(appearance.bootCount || 0), nodes: Object.freeze([]) });
+    const rigAppearance = diagnostics.rigged ? rigFootballKitEvidence(view.root) : emptyRigAppearance(appearance.bootCount);
     return Object.freeze({
       id: diagnostics.id ?? view.id ?? null,
       team: diagnostics.team ?? null,
       role: diagnostics.role ?? null,
       rigged: Boolean(diagnostics.rigged),
       ...appearance,
-      rigKitInstalled: overlay.installed,
-      visibleKitNodeCount: overlay.visibleKitNodeCount,
-      bootGeometryCount: overlay.bootGeometryCount,
-      bootCount: diagnostics.rigged ? overlay.bootGeometryCount : Number(appearance.bootCount || 0),
-      rigKitNodes: overlay.nodes,
+      rigKitInstalled: rigAppearance.installed,
+      appearanceMode: rigAppearance.appearanceMode,
+      variantIndex: rigAppearance.variantIndex,
+      variantName: rigAppearance.variantName,
+      kitPattern: rigAppearance.kitPattern,
+      hairStyle: rigAppearance.hairStyle,
+      skinnedSurfaceCount: rigAppearance.skinnedSurfaceCount,
+      integratedBodySurfaceCount: rigAppearance.integratedBodySurfaceCount,
+      bootSurfaceCount: rigAppearance.bootSurfaceCount,
+      bootRegionCount: rigAppearance.bootRegionCount,
+      hairGeometryCount: rigAppearance.hairGeometryCount,
+      rigidPrimitiveCount: rigAppearance.rigidPrimitiveCount,
+      surfaceMapPreservedCount: rigAppearance.surfaceMapPreservedCount,
+      visibleKitNodeCount: rigAppearance.visibleKitNodeCount,
+      bootGeometryCount: rigAppearance.bootGeometryCount,
+      bootCount: diagnostics.rigged ? rigAppearance.bootRegionCount : Number(appearance.bootCount || 0),
+      rigKitNodes: rigAppearance.nodes,
       motion: diagnostics.motion ?? null,
     });
   }));
@@ -39,10 +71,20 @@ function appearanceDiagnostics(playerViews) {
     players,
     riggedPlayers: players.filter((player) => player.rigged).length,
     fallbackPlayers: players.filter((player) => !player.rigged).length,
-    bootlessPlayers: players.filter((player) => Number(player.bootGeometryCount || player.bootCount || 0) < 1).length,
+    bootlessPlayers: players.filter((player) => Number(player.bootSurfaceCount || player.bootGeometryCount || player.bootCount || 0) < 2).length,
+    hairlessPlayers: players.filter((player) => player.rigged && Number(player.hairGeometryCount || 0) < 1).length,
     preservedMapPlayers: players.filter((player) => Number(player.preservedMapCount || 0) > 0).length,
     tintedKitPlayers: players.filter((player) => Number(player.tintedKitMaterialCount || 0) > 0).length,
-    visibleKitPlayers: players.filter((player) => !player.rigged || (player.rigKitInstalled && Number(player.visibleKitNodeCount || 0) >= 7 && Number(player.bootGeometryCount || 0) === 2)).length,
+    visibleKitPlayers: players.filter((player) => !player.rigged || (
+      player.rigKitInstalled
+      && player.appearanceMode === "player-v3-integrated-body-material"
+      && Number(player.integratedBodySurfaceCount || 0) === 1
+      && Number(player.skinnedSurfaceCount || 0) === 1
+      && Number(player.bootRegionCount || 0) === 2
+      && Number(player.hairGeometryCount || 0) >= 1
+      && Number(player.rigidPrimitiveCount || 0) === 0
+    )).length,
+    distinctVariants: new Set(players.filter((player) => player.rigged).map((player) => player.variantIndex).filter(Number.isInteger)).size,
   });
 }
 
@@ -68,7 +110,14 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     const installed = view.installAsset?.({ characterScene, animations });
     if (!view.rigged) return Boolean(installed);
     const evidence = ensureRigFootballKitOverlay({ root: view.root, player: playerFacts, lowPowerDevice });
-    if (evidence.visibleKitNodeCount < 7 || evidence.bootGeometryCount !== 2) throw new Error(`player model view ${playerFacts?.id ?? view.id} rejected incomplete rig kit geometry`);
+    if (
+      evidence.appearanceMode !== "player-v3-integrated-body-material"
+      || evidence.integratedBodySurfaceCount !== 1
+      || evidence.skinnedSurfaceCount !== 1
+      || evidence.bootRegionCount !== 2
+      || evidence.hairGeometryCount < 1
+      || evidence.rigidPrimitiveCount !== 0
+    ) throw new Error(`player model view ${playerFacts?.id ?? view.id} rejected non-conforming Player V3 appearance`);
     return true;
   }
   function createView(player) {
@@ -86,7 +135,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     if (reuseCharacterScene) {
       setAssetStatus("loading", "MODEL RETAINED · ANIMATION LOADING", "Keeping the live shared character template while refreshing animation clips");
     } else {
-      setAssetStatus("loading", "MODEL · LOADING", "Loading football-character-v2.glb");
+      setAssetStatus("loading", "MODEL · LOADING", "Loading football-character-v2.glb as the Player V3 base rig");
       try {
         const character = await assetLoader.loadCharacter();
         if (unavailable() || generation !== loadGeneration) { disposePlayerAssetTemplate(character?.scene); return false; }
@@ -98,7 +147,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
         }
         characterScene = nextCharacterScene;
         for (const view of playerViews.values()) installRigAsset(view, view.diagnostics?.() ?? Object.freeze({ id: view.id, team: 0, role: "FW" }));
-        setAssetStatus("ready", "FOOTBALL KIT · READY", "Character, explicit jersey/shorts/socks and boot geometry loaded");
+        setAssetStatus("ready", "PLAYER V3 · READY", "Six body, hair, kit and footwear variants installed on the original animated rig");
       } catch (error) {
         if (unavailable() || generation !== loadGeneration) return false;
         setAssetStatus("error", "MODEL · FALLBACK", error?.message ?? String(error)); return false;
@@ -110,10 +159,10 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       animations = Object.freeze([...(motion?.animations ?? [])]);
       for (const view of playerViews.values()) view.installAnimations?.(animations);
       disposePlayerAssetTemplate(motion?.scene);
-      setAssetStatus("ready", "PLAYER RIG + KIT · READY", `${animations.length} animation clips; explicit football clothing and boots attached`); return true;
+      setAssetStatus("ready", "PLAYER V3 + MOTION · READY", `${animations.length} clips; six deterministic body, hair and kit variants ready`); return true;
     } catch (error) {
       if (unavailable() || generation !== loadGeneration) return false;
-      setAssetStatus("warning", "KIT READY · BASIC MOTION", error?.message ?? String(error)); return false;
+      setAssetStatus("warning", "PLAYER V3 READY · BASIC MOTION", error?.message ?? String(error)); return false;
     }
   }
   function startAssetLoad({ reuseCharacterScene = false } = {}) {
