@@ -16,6 +16,15 @@ function defaultLowPowerDevice(target) {
 function createWorldProjection({ width = 1200, height = 700, scale = 0.1 } = {}) {
   return Object.freeze({ worldX: (value) => (value - width / 2) * scale, worldZ: (value) => (value - height / 2) * scale });
 }
+function normalizedPlayerFacts(playerFacts, fallbackId) {
+  const id = playerFacts?.id ?? fallbackId ?? null;
+  const explicitIndex = Number(playerFacts?.index);
+  const idIndex = Number(/-(\d+)$/.exec(String(id ?? ""))?.[1]);
+  const index = Number.isInteger(explicitIndex) && explicitIndex >= 0
+    ? explicitIndex
+    : Number.isInteger(idIndex) && idIndex >= 0 ? idIndex : undefined;
+  return Object.freeze({ ...(playerFacts ?? {}), id, ...(index === undefined ? {} : { index }) });
+}
 function emptyRigAppearance(bootCount = 0) {
   return Object.freeze({
     installed: false,
@@ -109,7 +118,8 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
   function installRigAsset(view, playerFacts) {
     const installed = view.installAsset?.({ characterScene, animations });
     if (!view.rigged) return Boolean(installed);
-    const evidence = ensureRigFootballKitOverlay({ root: view.root, player: playerFacts, lowPowerDevice });
+    const normalizedFacts = normalizedPlayerFacts(playerFacts, view.id);
+    const evidence = ensureRigFootballKitOverlay({ root: view.root, player: normalizedFacts, lowPowerDevice });
     if (
       evidence.appearanceMode !== "player-v3-integrated-body-material"
       || evidence.integratedBodySurfaceCount !== 1
@@ -117,7 +127,7 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
       || evidence.bootRegionCount !== 2
       || evidence.hairGeometryCount < 1
       || evidence.rigidPrimitiveCount !== 0
-    ) throw new Error(`player model view ${playerFacts?.id ?? view.id} rejected non-conforming Player V3 appearance`);
+    ) throw new Error(`player model view ${normalizedFacts.id ?? view.id} rejected non-conforming Player V3 appearance`);
     return true;
   }
   function createView(player) {
