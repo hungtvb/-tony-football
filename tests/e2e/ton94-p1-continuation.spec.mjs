@@ -73,11 +73,16 @@ async function installWallClockGoalObserver(page) {
 }
 
 async function shootTowardRightGoal(page) {
-  await page.keyboard.down("ArrowRight");
-  await page.keyboard.down("KeyD");
-  await page.waitForTimeout(520);
-  await page.keyboard.up("KeyD");
-  await page.keyboard.up("ArrowRight");
+  // Set the persistent public-input aim without holding movement during the
+  // wall-clock charge. Software-rendered Chromium can stretch Playwright waits,
+  // so keeping ArrowRight pressed here made the player overrun the shooting lane.
+  await page.keyboard.press("ArrowRight");
+  try {
+    await page.keyboard.down("KeyD");
+    await page.waitForTimeout(520);
+  } finally {
+    await page.keyboard.up("KeyD");
+  }
 }
 
 async function awaitNaturalGoalPresentation(page, expectedScore, fromIndex) {
