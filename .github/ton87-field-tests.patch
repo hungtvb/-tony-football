@@ -1,0 +1,274 @@
+diff --git a/tests/engine/EngineSimulation.test.mjs b/tests/engine/EngineSimulation.test.mjs
+index a553219..68e5dde 100644
+--- a/tests/engine/EngineSimulation.test.mjs
++++ b/tests/engine/EngineSimulation.test.mjs
+@@ -116,7 +116,8 @@ test("player collisions and field bounds resolve in headless state", () => {
+   advancePlayerMovement(state, FIXED_DELTA);
+ 
+   const distance = Math.hypot(first.x - second.x, first.y - second.y);
+-  assert.ok(bounded.x >= 48 + bounded.radius + 5);
+-  assert.ok(bounded.y >= 42 + bounded.radius + 5);
++  const field = createFieldBounds();
++  assert.ok(bounded.x >= field.left + bounded.radius + 5);
++  assert.ok(bounded.y >= field.top + bounded.radius + 5);
+   assert.ok(distance >= first.radius + second.radius + 3 - 1e-9);
+ });
+diff --git a/tests/engine/SimulationScaleProfile.test.mjs b/tests/engine/SimulationScaleProfile.test.mjs
+index 6b42376..14c7cd0 100644
+--- a/tests/engine/SimulationScaleProfile.test.mjs
++++ b/tests/engine/SimulationScaleProfile.test.mjs
+@@ -15,8 +15,11 @@ test("default simulation scale profile is a deeply frozen metric mini-football c
+   assert.equal(profile.id, "mini-6v6-metric-v1");
+   assert.equal(profile.simulation.unitsPerMetre, 20);
+   assert.equal(profile.simulation.worldUnitsPerSimulationUnit, 0.05);
+-  assert.equal(profile.field.lengthMetres, 55.2);
+-  assert.equal(profile.field.widthMetres, 30.8);
++  assert.equal(profile.field.lengthMetres, 50);
++  assert.equal(profile.field.widthMetres, 32);
++  assert.equal(profile.field.aspectRatio, 1.5625);
++  assert.equal(profile.field.areaSquareMetres, 1600);
++  assert.deepEqual(profile.field.runoffMetres, { behindGoal: 5, touchline: 1.5 });
+   assert.equal(profile.goal.mouthWidthSimulation, 100);
+   assert.equal(profile.goal.mouthTop, 300);
+   assert.equal(profile.goal.mouthBottom, 400);
+@@ -33,11 +36,23 @@ test("default simulation scale profile is a deeply frozen metric mini-football c
+ });
+ 
+ test("simulation scale conversions share one units-per-metre contract", () => {
+-  assert.equal(simulationUnitsToMetres(1104), 55.2);
++  assert.equal(simulationUnitsToMetres(1000), 50);
+   assert.equal(metresToSimulationUnits(5), 100);
+   assert.equal(simulationUnitsToWorldUnits(100), 5);
+ });
+ 
++test("default 6v6 field ratios stay inside the calibrated compact envelope", () => {
++  const profile = DEFAULT_SIMULATION_SCALE_PROFILE;
++  assert.ok(profile.field.aspectRatio >= 1.45 && profile.field.aspectRatio <= 1.65);
++  assert.equal(profile.field.areaSquareMetres / 12, 1600 / 12);
++  assert.equal(profile.field.markings.centreCircleRadiusMetres, 3);
++  assert.equal(profile.field.markings.penaltyAreaDepthMetres, 6);
++  assert.equal(profile.field.markings.penaltyAreaWidthMetres, 12);
++  assert.equal(profile.field.markings.penaltyMarkDistanceMetres, 6);
++  assert.equal(profile.field.markings.lineWidthMetres, 0.08);
++  assert.ok(profile.goal.mouthWidthMetres / profile.field.widthMetres <= 0.16);
++});
++
+ test("simulation scale profile derives ratios from a custom units-per-metre setting", () => {
+   const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
+   delete input.simulation.worldUnitsPerSimulationUnit;
+@@ -81,9 +96,62 @@ test("simulation scale profile rejects off-centre field bounds", () => {
+   const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
+   delete input.simulation.worldUnitsPerSimulationUnit;
+   input.id = "off-centre-field";
+-  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
++  input.field.bounds = { left: 100, right: 1100, top: 40, bottom: 640 };
+   assert.throws(
+     () => createSimulationScaleProfile(input),
+     /field bounds must remain centred/,
+   );
+ });
++
++const invalidFieldGeometryCases = [
++  [
++    "a field without behind-goal runoff",
++    (input) => { input.field.bounds = { left: 0, right: 1200, top: 30, bottom: 670 }; },
++    /positive runoff/,
++  ],
++  [
++    "a field whose length is not greater than its width",
++    (input) => { input.field.bounds = { left: 280, right: 920, top: 30, bottom: 670 }; },
++    /touchline length must be greater/,
++  ],
++  [
++    "a centre circle that cannot fit",
++    (input) => { input.field.markings.centreCircleRadiusMetres = 16; },
++    /centre circle must fit/,
++  ],
++  [
++    "penalty areas that overlap",
++    (input) => { input.field.markings.penaltyAreaDepthMetres = 25; },
++    /penalty areas must fit/,
++  ],
++  [
++    "a penalty area wider than the pitch",
++    (input) => { input.field.markings.penaltyAreaWidthMetres = 32; },
++    /penalty areas must fit/,
++  ],
++  [
++    "a goal area deeper than the penalty area",
++    (input) => { input.field.markings.goalAreaDepthMetres = 7; },
++    /goal area must fit/,
++  ],
++  [
++    "a goal area wider than the penalty area",
++    (input) => { input.field.markings.goalAreaWidthMetres = 13; },
++    /goal area must fit/,
++  ],
++  [
++    "a penalty mark outside the penalty area",
++    (input) => { input.field.markings.penaltyMarkDistanceMetres = 7; },
++    /penalty mark must remain inside/,
++  ],
++];
++
++for (const [name, mutate, expected] of invalidFieldGeometryCases) {
++  test(`simulation scale profile rejects ${name}`, () => {
++    const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
++    delete input.simulation.worldUnitsPerSimulationUnit;
++    input.id = `invalid-${name.replaceAll(" ", "-")}`;
++    mutate(input);
++    assert.throws(() => createSimulationScaleProfile(input), expected);
++  });
++}
+diff --git a/tests/engine/WorldScaleContract.test.mjs b/tests/engine/WorldScaleContract.test.mjs
+index 92b0735..2b37392 100644
+--- a/tests/engine/WorldScaleContract.test.mjs
++++ b/tests/engine/WorldScaleContract.test.mjs
+@@ -29,6 +29,10 @@ test("engine and WebGL geometry derive field and goal dimensions from the same p
+   assert.equal(webgl.goal.mouthWidth, scale.goal.mouthWidthMetres);
+   assert.equal(webgl.goal.height, field.goalCrossbarHeight);
+   assert.equal(webgl.goal.depth, scale.goal.depthMetres);
++  assert.equal(scale.field.lengthMetres, 50);
++  assert.equal(scale.field.widthMetres, 32);
++  assert.equal(scale.field.aspectRatio, 1.5625);
++  assert.deepEqual(scale.field.runoffMetres, { behindGoal: 5, touchline: 1.5 });
+ });
+ 
+ test("goal scoring requires the whole ball to cross inside the posts and below the crossbar", () => {
+@@ -109,7 +113,7 @@ test("runtime defaults derive world dimensions from the selected profile", () =>
+   input.id = "larger-centred-world";
+   input.simulation.worldWidth = 1400;
+   input.simulation.worldHeight = 800;
+-  input.field.bounds = { left: 148, right: 1252, top: 92, bottom: 708 };
++  input.field.bounds = { left: 200, right: 1200, top: 80, bottom: 720 };
+   const profile = createSimulationScaleProfile(input);
+ 
+   const field = createFieldBounds(undefined, undefined, profile);
+@@ -134,3 +138,14 @@ test("runtime dimensions cannot diverge from the selected scale profile", () => {
+   assert.throws(() => createMatchState({ width: 600, height: 350 }), mismatch);
+   assert.throws(() => new MatchEngine({ width: 600, height: 350 }), mismatch);
+ });
++
++test("default 6v6 formations start inside the calibrated field", () => {
++  const field = createFieldBounds();
++  const state = createMatchState();
++  for (const player of state.players) {
++    assert.ok(player.x >= field.left + player.radius, `${player.id} starts left of the playable field`);
++    assert.ok(player.x <= field.right - player.radius, `${player.id} starts right of the playable field`);
++    assert.ok(player.y >= field.top + player.radius, `${player.id} starts above the playable field`);
++    assert.ok(player.y <= field.bottom - player.radius, `${player.id} starts below the playable field`);
++  }
++});
+diff --git a/tests/presentation/radarSnapshotAdapter.test.mjs b/tests/presentation/radarSnapshotAdapter.test.mjs
+index 54de9f5..aa64909 100644
+--- a/tests/presentation/radarSnapshotAdapter.test.mjs
++++ b/tests/presentation/radarSnapshotAdapter.test.mjs
+@@ -1,8 +1,9 @@
+ import assert from "node:assert/strict";
+ import test from "node:test";
+ 
++import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
+ import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
+-import { createRadarSnapshotAdapter } from "../../src/game/presentation/RadarSnapshotAdapter.js";
++import { createRadarSnapshotAdapter, DEFAULT_RADAR_FIELD } from "../../src/game/presentation/RadarSnapshotAdapter.js";
+ import { renderRadarSnapshot } from "../../src/game/presentation/RadarSnapshotRenderer.js";
+ 
+ function createFakeContext() {
+@@ -21,13 +22,15 @@ function createFakeContext() {
+   };
+ }
+ 
++const FIELD = DEFAULT_SIMULATION_SCALE_PROFILE.field.bounds;
++
+ function createSnapshot() {
+   return createMatchSnapshot({
+     tick: 2,
+     match: { selectedPlayerId: "home-4" },
+     players: [
+-      { id: "home-4", team: 0, x: 48, y: 42 },
+-      { id: "away-4", team: 1, x: 1152, y: 658 },
++      { id: "home-4", team: 0, x: FIELD.left, y: FIELD.top },
++      { id: "away-4", team: 1, x: FIELD.right, y: FIELD.bottom },
+     ],
+     ball: { id: "match-ball", ownerId: "home-4", x: 600, y: 350 },
+   });
+@@ -36,10 +39,15 @@ function createSnapshot() {
+ const rendererOptions = {
+   width: 260,
+   height: 140,
+-  field: { left: 48, right: 1152, top: 42, bottom: 658 },
++  field: FIELD,
+   config: { plotPadding: 10, playerRadius: 2.7, selectedRadius: 4.8, ballRadius: 3.8 },
+ };
+ 
++test("radar default field derives from the simulation scale profile", () => {
++  assert.deepEqual(DEFAULT_RADAR_FIELD, FIELD);
++  assert.equal(Object.isFrozen(DEFAULT_RADAR_FIELD), true);
++});
++
+ test("radar adapter claims the canvas so the legacy draw path becomes a no-op", () => {
+   const context = createFakeContext();
+   const canvas = { width: 260, height: 140, getContext: () => context };
+diff --git a/tests/presentation/radarSnapshotRenderer.test.mjs b/tests/presentation/radarSnapshotRenderer.test.mjs
+index 321441d..915a6b7 100644
+--- a/tests/presentation/radarSnapshotRenderer.test.mjs
++++ b/tests/presentation/radarSnapshotRenderer.test.mjs
+@@ -1,6 +1,7 @@
+ import assert from "node:assert/strict";
+ import test from "node:test";
+ 
++import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
+ import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
+ import { renderRadarSnapshot } from "../../src/game/presentation/RadarSnapshotRenderer.js";
+ 
+@@ -20,13 +21,15 @@ function createFakeContext() {
+   };
+ }
+ 
++const FIELD = DEFAULT_SIMULATION_SCALE_PROFILE.field.bounds;
++
+ test("radar renderer maps immutable snapshot markers and selected identity to pitch bounds", () => {
+   const snapshot = createMatchSnapshot({
+     tick: 1,
+     match: { selectedPlayerId: "home-4" },
+     players: [
+-      { id: "home-4", team: 0, x: 48, y: 42 },
+-      { id: "away-4", team: 1, x: 1152, y: 658 }
++      { id: "home-4", team: 0, x: FIELD.left, y: FIELD.top },
++      { id: "away-4", team: 1, x: FIELD.right, y: FIELD.bottom }
+     ],
+     ball: { id: "match-ball", ownerId: "home-4", x: 600, y: 350 }
+   });
+@@ -36,7 +39,7 @@ test("radar renderer maps immutable snapshot markers and selected identity to pi
+   renderRadarSnapshot(context, snapshot, {
+     width: 200,
+     height: 100,
+-    field: { left: 48, right: 1152, top: 42, bottom: 658 },
++    field: FIELD,
+     config
+   });
+ 
+diff --git a/tests/presentation/threeSceneEnvironmentProfile.test.mjs b/tests/presentation/threeSceneEnvironmentProfile.test.mjs
+index b0e4669..d7e5725 100644
+--- a/tests/presentation/threeSceneEnvironmentProfile.test.mjs
++++ b/tests/presentation/threeSceneEnvironmentProfile.test.mjs
+@@ -16,11 +16,17 @@ test("default Three scene environment profile is deeply frozen and preserves app
+   const profile = DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE;
+   assert.equal(profile.id, "tony-football-mini-6v6-v2");
+   assert.equal(profile.geometry.worldScale, 0.05);
+-  assert.deepEqual(profile.geometry.field, { left: 48, right: 1152, top: 42, bottom: 658 });
++  assert.deepEqual(profile.geometry.field, { left: 100, right: 1100, top: 30, bottom: 670 });
+   assert.equal(profile.geometry.goal.mouthWidth, 5);
+   assert.equal(profile.geometry.goal.width, 5.1);
+   assert.equal(profile.geometry.goal.height, 2);
+-  assert.equal(profile.geometry.markings.penaltyAreaDepthSimulation, 200);
++  assert.equal(profile.geometry.markings.centreCircleRadiusSimulation, 60);
++  assert.equal(profile.geometry.markings.penaltyAreaDepthSimulation, 120);
++  assert.equal(profile.geometry.markings.penaltyAreaWidthSimulation, 240);
++  assert.equal(profile.geometry.markings.goalAreaDepthSimulation, 80);
++  assert.equal(profile.geometry.markings.goalAreaWidthSimulation, 200);
++  assert.equal(profile.geometry.markings.penaltyMarkDistanceSimulation, 120);
++  assert.equal(profile.geometry.markings.lineWidthSimulation, 1.6);
+   assert.equal(profile.renderer.exposure, 1.12);
+   assert.equal(profile.pitchStyles.midnight.environment.exposure, 1.22);
+   assert.equal(Object.isFrozen(profile), true);
