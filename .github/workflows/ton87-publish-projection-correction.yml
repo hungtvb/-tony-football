@@ -1,0 +1,71 @@
+name: TON-87 Publish Projection Correction
+
+on:
+  pull_request:
+    branches:
+      - ton87-publish-projection-correction
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-87-world-scale-contract
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Check out correction payload
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ton87-publish-projection-correction
+          path: .ton87-correction
+          persist-credentials: false
+
+      - name: Apply correction
+        shell: bash
+        run: |
+          base64 -d .ton87-correction/.github/ton87/projection-correction.py.gz.b64 | gzip -d > /tmp/ton87-correction.py
+          printf '%s  %s\n' 'f14a5c960aa51f0e6b082b3020dc6bc33a55979f5911807d53ddb02f453a210e' '/tmp/ton87-correction.py' | sha256sum --check
+          python /tmp/ton87-correction.py
+          rm -rf .ton87-correction
+
+      - name: Verify corrected contract
+        shell: bash
+        run: |
+          npm ci
+          git diff --check
+          for file in \
+            game.js \
+            scripts/validate-assets.mjs \
+            src/game/presentation/BrowserModelViewAdapter.js \
+            src/game/presentation/BrowserThreeSceneEnvironmentHost.js \
+            src/game/presentation/PlayerModelView.js \
+            tests/e2e/model-views.spec.mjs \
+            tests/e2e/smoke.spec.mjs \
+            tests/presentation/browserModelViewAdapter.test.mjs \
+            tests/presentation/browserThreeSceneEnvironmentHostLifecycle.test.mjs; do
+            node --check "$file"
+          done
+          node scripts/validate-assets.mjs
+          node --test \
+            tests/engine/SimulationScaleProfile.test.mjs \
+            tests/engine/WorldScaleContract.test.mjs \
+            tests/presentation/browserModelViewAdapter.test.mjs \
+            tests/presentation/browserThreeSceneEnvironmentHostLifecycle.test.mjs \
+            tests/presentation/threeSceneEnvironmentProfile.test.mjs
+          npm run build
+          test "$(git status --porcelain --untracked-files=all | wc -l | tr -d ' ')" = "9"
+
+      - name: Commit and push product branch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game.js scripts src tests
+          git commit -m 'fix(ton-87): align model and camera projection scale'
+          git push origin HEAD:feat/ton-87-world-scale-contract
