@@ -55,7 +55,7 @@ jobs:
           node scripts/validate-assets.mjs
           node --test tests/engine/SimulationScaleProfile.test.mjs tests/engine/WorldScaleContract.test.mjs tests/presentation/threeSceneEnvironmentProfile.test.mjs
           node --test tests/simulation/*.test.mjs tests/engine/*.test.mjs tests/gameplay/*.test.mjs tests/input/*.test.mjs tests/scenarios/*.test.mjs
-          test "$(git diff --name-only | wc -l | tr -d ' ')" = "16"
+          test "$(git status --porcelain --untracked-files=all | wc -l | tr -d ' ')" = "16"
 
       - name: Commit and push target
         shell: bash
