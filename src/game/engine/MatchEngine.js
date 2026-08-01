@@ -73,9 +73,9 @@ export class MatchEngine {
     ballStyle = "classic",
     weather = "clear",
     randomSeed = "tony-football-r1",
-    width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
-    height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
-    scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE
+    scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+    width = scaleProfile.simulation.worldWidth,
+    height = scaleProfile.simulation.worldHeight
   } = {}) {
     if (!Number.isFinite(goalDuration) || goalDuration <= 0) {
       throw new RangeError("goalDuration must be a positive finite number");

@@ -103,23 +103,28 @@ test("changing metric density preserves fixed-step timing and command response",
   assert.equal(normal.snapshot.match.controls.moveY, dense.snapshot.match.controls.moveY);
 });
 
-test("engine goal mouth follows the scale profile field centre", () => {
+test("runtime defaults derive world dimensions from the selected profile", () => {
   const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
   delete input.simulation.worldUnitsPerSimulationUnit;
-  input.id = "shifted-field-centre";
-  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
+  input.id = "larger-centred-world";
+  input.simulation.worldWidth = 1400;
+  input.simulation.worldHeight = 800;
+  input.field.bounds = { left: 148, right: 1252, top: 92, bottom: 708 };
   const profile = createSimulationScaleProfile(input);
-  const field = createFieldBounds(
-    profile.simulation.worldWidth,
-    profile.simulation.worldHeight,
-    profile,
-  );
 
-  assert.equal(profile.field.centre.y, 300);
+  const field = createFieldBounds(undefined, undefined, profile);
+  const ball = createMatchBall({ scaleProfile: profile });
+  const state = createMatchState({ scaleProfile: profile });
+  const engine = new MatchEngine({ scaleProfile: profile });
+
+  assert.equal(field.left, profile.field.bounds.left);
   assert.equal(field.goalTop, profile.goal.mouthTop);
-  assert.equal(field.goalBottom, profile.goal.mouthBottom);
-  assert.equal(field.scoringGoalTop, profile.goal.scoringMouthTop);
-  assert.equal(field.scoringGoalBottom, profile.goal.scoringMouthBottom);
+  assert.equal(ball.x, profile.field.centre.x);
+  assert.equal(ball.y, profile.field.centre.y);
+  assert.equal(state.ball.x, profile.field.centre.x);
+  assert.equal(state.ball.y, profile.field.centre.y);
+  assert.equal(engine.snapshot.ball.x, profile.field.centre.x);
+  assert.equal(engine.snapshot.ball.y, profile.field.centre.y);
 });
 
 test("runtime dimensions cannot diverge from the selected scale profile", () => {

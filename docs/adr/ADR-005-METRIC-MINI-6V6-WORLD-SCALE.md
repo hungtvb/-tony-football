@@ -40,7 +40,8 @@ This yields a maximum scoring `ball.height` of `2.0 - 0.22 = 1.78 m`.
 ## Consequences
 
 - Goal, ball and player ratios become measurable and testable.
-- Runtime world dimensions must come from the selected profile; callers cannot independently resize `width` or `height`.
+- The playable field is centred in the simulation world.
+- Runtime world dimensions default from the selected profile; callers cannot independently resize `width` or `height`.
 - Changing simulation density can preserve fixed-step timing, command ordering and AI/input authority.
 - Player GLB scale no longer depends on an asset-specific magic number.
 - Camera, lighting and ball-physics feel remain separate follow-up concerns.

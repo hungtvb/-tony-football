@@ -17,11 +17,13 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, amount) => a + (b - a) * amount;
 
 export function createFieldBounds(
-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+  width,
+  height,
   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
 ) {
-  assertSimulationWorldDimensions(width, height, scaleProfile);
+  const resolvedWidth = width ?? scaleProfile.simulation.worldWidth;
+  const resolvedHeight = height ?? scaleProfile.simulation.worldHeight;
+  assertSimulationWorldDimensions(resolvedWidth, resolvedHeight, scaleProfile);
   const bounds = scaleProfile.field.bounds;
   const centreY = scaleProfile.field.centre.y;
   const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation / 2;

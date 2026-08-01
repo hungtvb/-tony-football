@@ -100,10 +100,10 @@ function preferredHomePlayer(players) {
 }
 
 export function createMatchBall({
-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
-  lock = 0,
   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+  width = scaleProfile.simulation.worldWidth,
+  height = scaleProfile.simulation.worldHeight,
+  lock = 0,
 } = {}) {
   assertSimulationWorldDimensions(width, height, scaleProfile);
   return {
@@ -135,10 +135,10 @@ export function createMatchState({
   pitchStyle = "classic",
   ballStyle = "classic",
   weather = "clear",
-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
-  runtimeState = "menu",
-  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+  width = scaleProfile.simulation.worldWidth,
+  height = scaleProfile.simulation.worldHeight,
+  runtimeState = "menu"
 } = {}) {
   if (!Object.hasOwn(DIFFICULTY_SCALE, difficulty)) {
     throw new TypeError(`Unknown difficulty: ${difficulty}`);
@@ -197,9 +197,9 @@ export function findPlayer(state, id) {
 
 export function resetForKickoff(state, team, {
   kickoffDelay = DEFAULT_KICKOFF_DELAY,
-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+  width = scaleProfile.simulation.worldWidth,
+  height = scaleProfile.simulation.worldHeight,
 } = {}) {
   assertSimulationWorldDimensions(width, height, scaleProfile);
   const freshPlayers = createMatchPlayers({

@@ -76,3 +76,14 @@ test("simulation scale profile requires a non-empty string id", () => {
     );
   }
 });
+
+test("simulation scale profile rejects off-centre field bounds", () => {
+  const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
+  delete input.simulation.worldUnitsPerSimulationUnit;
+  input.id = "off-centre-field";
+  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
+  assert.throws(
+    () => createSimulationScaleProfile(input),
+    /field bounds must remain centred/,
+  );
+});

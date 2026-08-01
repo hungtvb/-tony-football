@@ -115,6 +115,11 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
   const fieldHeightSimulation = field.bounds.bottom - field.bounds.top;
   const fieldCentreX = (field.bounds.left + field.bounds.right) / 2;
   const fieldCentreY = (field.bounds.top + field.bounds.bottom) / 2;
+  const worldCentreX = simulation.worldWidth / 2;
+  const worldCentreY = simulation.worldHeight / 2;
+  if (fieldCentreX !== worldCentreX || fieldCentreY !== worldCentreY) {
+    throw new RangeError("field bounds must remain centred in the simulation world");
+  }
   const goalMouthWidthSimulation = scaleMetres(goal.mouthWidthMetres, unitsPerMetre);
   const goalPostThicknessSimulation = scaleMetres(goal.postThicknessMetres, unitsPerMetre);
   const ballRadiusSimulation = scaleMetres(ball.radiusMetres, unitsPerMetre);
