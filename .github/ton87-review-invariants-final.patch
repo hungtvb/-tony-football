@@ -1,0 +1,191 @@
+diff --git a/docs/20_WORLD_SCALE_CONTRACT.md b/docs/20_WORLD_SCALE_CONTRACT.md
+index 095bf67..c783a27 100644
+--- a/docs/20_WORLD_SCALE_CONTRACT.md
++++ b/docs/20_WORLD_SCALE_CONTRACT.md
+@@ -47,7 +47,8 @@ Diagnostics record the profile id, measured height, target height and applied sc
+ - Engine modules do not import Three.js or Canvas.
+ - Presentation geometry does not write engine dimensions.
+ - Goal line, post faces and crossbar underside derive from the same profile.
+-- Runtime `width` and `height` must match the selected profile; dimensions cannot be overridden independently from collision and presentation geometry.
++- The playable field remains centred in the simulation world; engine AI, kickoff and camera projections rely on that invariant.
++- Runtime `width` and `height` default from and must match the selected profile; dimensions cannot be overridden independently from collision and presentation geometry.
+ - A scale-profile change cannot alter fixed-step duration, command mapping or AI decision ownership.
+ - Lighting, camera framing and ball-flight tuning are not part of this contract.
+ 
+diff --git a/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md b/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md
+index e6a8574..bba8331 100644
+--- a/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md
++++ b/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md
+@@ -40,7 +40,8 @@ This yields a maximum scoring `ball.height` of `2.0 - 0.22 = 1.78 m`.
+ ## Consequences
+ 
+ - Goal, ball and player ratios become measurable and testable.
+-- Runtime world dimensions must come from the selected profile; callers cannot independently resize `width` or `height`.
++- The playable field is centred in the simulation world.
++- Runtime world dimensions default from the selected profile; callers cannot independently resize `width` or `height`.
+ - Changing simulation density can preserve fixed-step timing, command ordering and AI/input authority.
+ - Player GLB scale no longer depends on an asset-specific magic number.
+ - Camera, lighting and ball-physics feel remain separate follow-up concerns.
+diff --git a/src/game/config/simulationScaleProfile.js b/src/game/config/simulationScaleProfile.js
+index e479527..4e3ef16 100644
+--- a/src/game/config/simulationScaleProfile.js
++++ b/src/game/config/simulationScaleProfile.js
+@@ -115,6 +115,11 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
+   const fieldHeightSimulation = field.bounds.bottom - field.bounds.top;
+   const fieldCentreX = (field.bounds.left + field.bounds.right) / 2;
+   const fieldCentreY = (field.bounds.top + field.bounds.bottom) / 2;
++  const worldCentreX = simulation.worldWidth / 2;
++  const worldCentreY = simulation.worldHeight / 2;
++  if (fieldCentreX !== worldCentreX || fieldCentreY !== worldCentreY) {
++    throw new RangeError("field bounds must remain centred in the simulation world");
++  }
+   const goalMouthWidthSimulation = scaleMetres(goal.mouthWidthMetres, unitsPerMetre);
+   const goalPostThicknessSimulation = scaleMetres(goal.postThicknessMetres, unitsPerMetre);
+   const ballRadiusSimulation = scaleMetres(ball.radiusMetres, unitsPerMetre);
+diff --git a/src/game/engine/MatchEngine.js b/src/game/engine/MatchEngine.js
+index 783cc43..87c35c5 100644
+--- a/src/game/engine/MatchEngine.js
++++ b/src/game/engine/MatchEngine.js
+@@ -73,9 +73,9 @@ export class MatchEngine {
+     ballStyle = "classic",
+     weather = "clear",
+     randomSeed = "tony-football-r1",
+-    width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+-    height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+-    scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE
++    scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
++    width = scaleProfile.simulation.worldWidth,
++    height = scaleProfile.simulation.worldHeight
+   } = {}) {
+     if (!Number.isFinite(goalDuration) || goalDuration <= 0) {
+       throw new RangeError("goalDuration must be a positive finite number");
+diff --git a/src/game/engine/MatchState.js b/src/game/engine/MatchState.js
+index 1b431a6..fafeaac 100644
+--- a/src/game/engine/MatchState.js
++++ b/src/game/engine/MatchState.js
+@@ -100,10 +100,10 @@ function preferredHomePlayer(players) {
+ }
+ 
+ export function createMatchBall({
+-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+-  lock = 0,
+   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
++  width = scaleProfile.simulation.worldWidth,
++  height = scaleProfile.simulation.worldHeight,
++  lock = 0,
+ } = {}) {
+   assertSimulationWorldDimensions(width, height, scaleProfile);
+   return {
+@@ -135,10 +135,10 @@ export function createMatchState({
+   pitchStyle = "classic",
+   ballStyle = "classic",
+   weather = "clear",
+-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+-  runtimeState = "menu",
+-  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE
++  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
++  width = scaleProfile.simulation.worldWidth,
++  height = scaleProfile.simulation.worldHeight,
++  runtimeState = "menu"
+ } = {}) {
+   if (!Object.hasOwn(DIFFICULTY_SCALE, difficulty)) {
+     throw new TypeError(`Unknown difficulty: ${difficulty}`);
+@@ -197,9 +197,9 @@ export function findPlayer(state, id) {
+ 
+ export function resetForKickoff(state, team, {
+   kickoffDelay = DEFAULT_KICKOFF_DELAY,
+-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
++  width = scaleProfile.simulation.worldWidth,
++  height = scaleProfile.simulation.worldHeight,
+ } = {}) {
+   assertSimulationWorldDimensions(width, height, scaleProfile);
+   const freshPlayers = createMatchPlayers({
+diff --git a/src/game/engine/PlayerMovementSystem.js b/src/game/engine/PlayerMovementSystem.js
+index 00d4543..b8e9cb6 100644
+--- a/src/game/engine/PlayerMovementSystem.js
++++ b/src/game/engine/PlayerMovementSystem.js
+@@ -17,11 +17,13 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+ const lerp = (a, b, amount) => a + (b - a) * amount;
+ 
+ export function createFieldBounds(
+-  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+-  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
++  width,
++  height,
+   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+ ) {
+-  assertSimulationWorldDimensions(width, height, scaleProfile);
++  const resolvedWidth = width ?? scaleProfile.simulation.worldWidth;
++  const resolvedHeight = height ?? scaleProfile.simulation.worldHeight;
++  assertSimulationWorldDimensions(resolvedWidth, resolvedHeight, scaleProfile);
+   const bounds = scaleProfile.field.bounds;
+   const centreY = scaleProfile.field.centre.y;
+   const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation / 2;
+diff --git a/tests/engine/SimulationScaleProfile.test.mjs b/tests/engine/SimulationScaleProfile.test.mjs
+index e5b3ebf..6b42376 100644
+--- a/tests/engine/SimulationScaleProfile.test.mjs
++++ b/tests/engine/SimulationScaleProfile.test.mjs
+@@ -76,3 +76,14 @@ test("simulation scale profile requires a non-empty string id", () => {
+     );
+   }
+ });
++
++test("simulation scale profile rejects off-centre field bounds", () => {
++  const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
++  delete input.simulation.worldUnitsPerSimulationUnit;
++  input.id = "off-centre-field";
++  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
++  assert.throws(
++    () => createSimulationScaleProfile(input),
++    /field bounds must remain centred/,
++  );
++});
+diff --git a/tests/engine/WorldScaleContract.test.mjs b/tests/engine/WorldScaleContract.test.mjs
+index 07a68c7..92b0735 100644
+--- a/tests/engine/WorldScaleContract.test.mjs
++++ b/tests/engine/WorldScaleContract.test.mjs
+@@ -103,23 +103,28 @@ test("changing metric density preserves fixed-step timing and command response",
+   assert.equal(normal.snapshot.match.controls.moveY, dense.snapshot.match.controls.moveY);
+ });
+ 
+-test("engine goal mouth follows the scale profile field centre", () => {
++test("runtime defaults derive world dimensions from the selected profile", () => {
+   const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
+   delete input.simulation.worldUnitsPerSimulationUnit;
+-  input.id = "shifted-field-centre";
+-  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
++  input.id = "larger-centred-world";
++  input.simulation.worldWidth = 1400;
++  input.simulation.worldHeight = 800;
++  input.field.bounds = { left: 148, right: 1252, top: 92, bottom: 708 };
+   const profile = createSimulationScaleProfile(input);
+-  const field = createFieldBounds(
+-    profile.simulation.worldWidth,
+-    profile.simulation.worldHeight,
+-    profile,
+-  );
+ 
+-  assert.equal(profile.field.centre.y, 300);
++  const field = createFieldBounds(undefined, undefined, profile);
++  const ball = createMatchBall({ scaleProfile: profile });
++  const state = createMatchState({ scaleProfile: profile });
++  const engine = new MatchEngine({ scaleProfile: profile });
++
++  assert.equal(field.left, profile.field.bounds.left);
+   assert.equal(field.goalTop, profile.goal.mouthTop);
+-  assert.equal(field.goalBottom, profile.goal.mouthBottom);
+-  assert.equal(field.scoringGoalTop, profile.goal.scoringMouthTop);
+-  assert.equal(field.scoringGoalBottom, profile.goal.scoringMouthBottom);
++  assert.equal(ball.x, profile.field.centre.x);
++  assert.equal(ball.y, profile.field.centre.y);
++  assert.equal(state.ball.x, profile.field.centre.x);
++  assert.equal(state.ball.y, profile.field.centre.y);
++  assert.equal(engine.snapshot.ball.x, profile.field.centre.x);
++  assert.equal(engine.snapshot.ball.y, profile.field.centre.y);
+ });
+ 
+ test("runtime dimensions cannot diverge from the selected scale profile", () => {
