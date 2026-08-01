@@ -1,4 +1,5 @@
 import { locomotionConfig } from "../config/locomotionConfig.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
 import {
   chooseSprintTransitionResponse,
   chooseTurnResponse,
@@ -12,15 +13,32 @@ import {
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, amount) => a + (b - a) * amount;
 
-export function createFieldBounds(width = 1200, height = 700) {
+export function createFieldBounds(
+  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+) {
+  const widthScale = width / scaleProfile.simulation.worldWidth;
+  const heightScale = height / scaleProfile.simulation.worldHeight;
+  const bounds = scaleProfile.field.bounds;
+  const centreY = height / 2;
+  const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation * heightScale / 2;
+  const ballRadiusY = scaleProfile.ball.radiusSimulation * heightScale;
   return Object.freeze({
-    left: width * 0.04,
-    right: width * 0.96,
-    top: height * 0.06,
-    bottom: height * 0.94,
-    goalTop: height / 2 - height * (85 / 700),
-    goalBottom: height / 2 + height * (85 / 700),
-    goalkeeperDepth: width * (142 / 1200)
+    left: bounds.left * widthScale,
+    right: bounds.right * widthScale,
+    top: bounds.top * heightScale,
+    bottom: bounds.bottom * heightScale,
+    goalTop: centreY - mouthHalfHeight,
+    goalBottom: centreY + mouthHalfHeight,
+    scoringGoalTop: centreY - mouthHalfHeight + ballRadiusY,
+    scoringGoalBottom: centreY + mouthHalfHeight - ballRadiusY,
+    goalCrossbarHeight: scaleProfile.goal.crossbarHeightMetres,
+    goalScoringMaxBallHeight: scaleProfile.goal.scoringMaxBallHeightMetres,
+    goalDepth: scaleProfile.goal.depthSimulation * widthScale,
+    goalPostThickness: scaleProfile.goal.postThicknessSimulation * heightScale,
+    goalkeeperDepth: scaleProfile.field.markings.penaltyAreaDepthSimulation * widthScale,
+    scaleProfileId: scaleProfile.id,
   });
 }
 

@@ -1,7 +1,14 @@
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
 import { createSnapshotRenderState } from "./SnapshotRenderState.js";
 
-const DEFAULT_WORLD = Object.freeze({ width: 1200, height: 700 });
-const DEFAULT_FIELD = Object.freeze({ left: 48, right: 1152, top: 42, bottom: 658, goalTop: 265, goalBottom: 435 });
+const SCALE_PROFILE = DEFAULT_SIMULATION_SCALE_PROFILE;
+const DEFAULT_WORLD = Object.freeze({ width: SCALE_PROFILE.simulation.worldWidth, height: SCALE_PROFILE.simulation.worldHeight });
+const DEFAULT_FIELD = Object.freeze({ ...SCALE_PROFILE.field.bounds, goalTop: SCALE_PROFILE.goal.mouthTop, goalBottom: SCALE_PROFILE.goal.mouthBottom });
+const DEFAULT_MARKINGS = SCALE_PROFILE.field.markings;
+const DEFAULT_GOAL = Object.freeze({
+  depth: SCALE_PROFILE.goal.depthSimulation,
+  postThickness: SCALE_PROFILE.goal.postThicknessSimulation,
+});
 const PITCH_STYLES = Object.freeze({
   classic: Object.freeze({ mid: "#087044", outside: "#07100d" }),
   elite: Object.freeze({ mid: "#0b8351", outside: "#07140f" }),
@@ -67,7 +74,7 @@ function cameraTransform(canvas, world, camera) {
   });
 }
 
-function drawPitch(context, world, field, pitchStyle) {
+function drawPitch(context, world, field, markings, goal, pitchStyle) {
   const theme = PITCH_STYLES[pitchStyle] ?? PITCH_STYLES.classic;
   context.clearRect(0, 0, world.width, world.height);
   context.fillStyle = theme.outside;
@@ -79,16 +86,22 @@ function drawPitch(context, world, field, pitchStyle) {
     context.fillRect(field.left + index * (field.right - field.left) / 14, field.top, (field.right - field.left) / 14, field.bottom - field.top);
   }
   context.strokeStyle = "rgba(245,250,247,.88)";
-  context.lineWidth = 3;
+  context.lineWidth = markings.lineWidthSimulation;
   context.strokeRect(field.left, field.top, field.right - field.left, field.bottom - field.top);
   context.beginPath(); context.moveTo(world.width / 2, field.top); context.lineTo(world.width / 2, field.bottom); context.stroke();
-  context.beginPath(); context.arc(world.width / 2, world.height / 2, 83, 0, Math.PI * 2); context.stroke();
+  context.beginPath(); context.arc(world.width / 2, world.height / 2, markings.centreCircleRadiusSimulation, 0, Math.PI * 2); context.stroke();
+  const centreY = world.height / 2;
+  const penaltyTop = centreY - markings.penaltyAreaWidthSimulation / 2;
+  const goalAreaTop = centreY - markings.goalAreaWidthSimulation / 2;
   for (const [x, side] of [[field.left, 1], [field.right, -1]]) {
-    context.strokeRect(side === 1 ? x : x - 180, 175, 180, 350);
-    context.strokeRect(side === 1 ? x : x - 82.8, 267, 82.8, 166);
+    context.strokeRect(side === 1 ? x : x - markings.penaltyAreaDepthSimulation, penaltyTop, markings.penaltyAreaDepthSimulation, markings.penaltyAreaWidthSimulation);
+    context.strokeRect(side === 1 ? x : x - markings.goalAreaDepthSimulation, goalAreaTop, markings.goalAreaDepthSimulation, markings.goalAreaWidthSimulation);
     context.fillStyle = "rgba(255,255,255,.75)";
-    context.beginPath(); context.arc(x + side * 125, world.height / 2, 4, 0, Math.PI * 2); context.fill();
+    context.beginPath(); context.arc(x + side * markings.penaltyMarkDistanceSimulation, centreY, markings.centreSpotRadiusSimulation, 0, Math.PI * 2); context.fill();
   }
+  context.lineWidth = goal.postThickness;
+  context.strokeRect(field.left - goal.depth, field.goalTop, goal.depth, field.goalBottom - field.goalTop);
+  context.strokeRect(field.right, field.goalTop, goal.depth, field.goalBottom - field.goalTop);
 }
 
 function drawPlayer(context, player, { selected, defenseSelection, nowMilliseconds }) {
@@ -165,7 +178,7 @@ function drawGoalFlash(context, world, goalSequence) {
   context.fillStyle = `rgba(255,255,255,${alpha})`; context.font = "800 96px Barlow Condensed"; context.textAlign = "center"; context.fillText("GOAL!", world.width / 2, 145);
 }
 
-export function createCanvasMatchRenderer({ target, document, canvasId = "gameCanvas", world = DEFAULT_WORLD, field = DEFAULT_FIELD, lowPowerDevice = false, getRendererPreference = () => rendererPreference(target) } = {}) {
+export function createCanvasMatchRenderer({ target, document, canvasId = "gameCanvas", world = DEFAULT_WORLD, field = DEFAULT_FIELD, markings = DEFAULT_MARKINGS, goal = DEFAULT_GOAL, lowPowerDevice = false, getRendererPreference = () => rendererPreference(target) } = {}) {
   if (!target || typeof target.addEventListener !== "function" || typeof target.removeEventListener !== "function") throw new TypeError("CanvasMatchRenderer requires an event target");
   if (!document || typeof document.getElementById !== "function") throw new TypeError("CanvasMatchRenderer requires a document");
   if (typeof getRendererPreference !== "function") throw new TypeError("getRendererPreference must be a function");
@@ -198,7 +211,7 @@ export function createCanvasMatchRenderer({ target, document, canvasId = "gameCa
       const transform = cameraTransform(canvas, world, cameraReplay.camera);
       context.save(); context.setTransform?.(1, 0, 0, 1, 0, 0); context.clearRect(0, 0, canvas.width || world.width, canvas.height || world.height); context.restore();
       context.save(); context.setTransform?.(transform.a, 0, 0, transform.d, transform.e, transform.f);
-      drawPitch(context, world, field, settings.pitchStyle);
+      drawPitch(context, world, field, markings, goal, settings.pitchStyle);
       for (const player of [...renderState.players].sort((left, right) => left.y - right.y)) drawPlayer(context, player, { selected: !cameraReplay.replay.active && player.id === snapshot.match.selectedPlayerId, defenseSelection, nowMilliseconds: frame.nowMilliseconds });
       drawBall(context, renderState.ball, settings.ballStyle);
       if (settings.weather === "rain") drawRain(context, world, frame.nowMilliseconds, lowPowerDevice);

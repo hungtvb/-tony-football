@@ -1,5 +1,6 @@
 import { createPossessionLifecycle } from "../gameplay/PossessionLifecycle.js";
 import { ballControlConfig } from "../config/ballControlConfig.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
 
 export const HOME_TEAM = 0;
 export const AWAY_TEAM = 1;
@@ -40,7 +41,7 @@ function playerId(team, index) {
   return `${team === HOME_TEAM ? "home" : "away"}-${index}`;
 }
 
-function createPlayer(team, spec, index) {
+function createPlayer(team, spec, index, scaleProfile) {
   const attackDirection = team === HOME_TEAM ? 1 : -1;
   return {
     id: playerId(team, index),
@@ -58,7 +59,9 @@ function createPlayer(team, spec, index) {
     vy: 0,
     dirX: attackDirection,
     dirY: 0,
-    radius: spec.role === "GK" ? 20 : 17,
+    radius: spec.role === "GK"
+      ? scaleProfile.player.goalkeeperCollisionRadiusSimulation
+      : scaleProfile.player.collisionRadiusSimulation,
     stamina: 100,
     cooldown: 0,
     anim: "idle",
@@ -76,10 +79,13 @@ function createPlayer(team, spec, index) {
   };
 }
 
-export function createMatchPlayers(formations = DEFAULT_FORMATIONS) {
+export function createMatchPlayers(
+  formations = DEFAULT_FORMATIONS,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+) {
   return [
-    ...formations.home.map((spec, index) => createPlayer(HOME_TEAM, spec, index)),
-    ...formations.away.map((spec, index) => createPlayer(AWAY_TEAM, spec, index))
+    ...formations.home.map((spec, index) => createPlayer(HOME_TEAM, spec, index, scaleProfile)),
+    ...formations.away.map((spec, index) => createPlayer(AWAY_TEAM, spec, index, scaleProfile))
   ];
 }
 
@@ -90,7 +96,12 @@ function preferredHomePlayer(players) {
     ?? null;
 }
 
-export function createMatchBall({ width = 1200, height = 700, lock = 0 } = {}) {
+export function createMatchBall({
+  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+  lock = 0,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+} = {}) {
   return {
     id: MATCH_BALL_ID,
     x: width / 2,
@@ -100,7 +111,7 @@ export function createMatchBall({ width = 1200, height = 700, lock = 0 } = {}) {
     height: 0,
     vz: 0,
     curve: 0,
-    radius: 9,
+    radius: scaleProfile.ball.radiusSimulation,
     ownerId: null,
     lastTouchId: null,
     lock,
@@ -120,9 +131,10 @@ export function createMatchState({
   pitchStyle = "classic",
   ballStyle = "classic",
   weather = "clear",
-  width = 1200,
-  height = 700,
-  runtimeState = "menu"
+  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+  runtimeState = "menu",
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE
 } = {}) {
   if (!Object.hasOwn(DIFFICULTY_SCALE, difficulty)) {
     throw new TypeError(`Unknown difficulty: ${difficulty}`);
@@ -137,7 +149,7 @@ export function createMatchState({
     throw new RangeError("match dimensions must be positive finite numbers");
   }
 
-  const players = createMatchPlayers(formations);
+  const players = createMatchPlayers(formations, scaleProfile);
   return {
     match: {
       state: runtimeState,
@@ -156,7 +168,8 @@ export function createMatchState({
     ball: createMatchBall({
       width,
       height,
-      lock: runtimeState === "playing" ? ballControlConfig.release.kickoffLock : 0
+      lock: runtimeState === "playing" ? ballControlConfig.release.kickoffLock : 0,
+      scaleProfile,
     }),
     selectedPlayerId: preferredHomePlayer(players)?.id ?? null,
     controls: {
@@ -182,8 +195,9 @@ export function findPlayer(state, id) {
 
 export function resetForKickoff(state, team, {
   kickoffDelay = DEFAULT_KICKOFF_DELAY,
-  width = 1200,
-  height = 700
+  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
 } = {}) {
   const freshPlayers = createMatchPlayers({
     home: state.players.filter((player) => player.team === HOME_TEAM).map((player) => ({
@@ -202,7 +216,7 @@ export function resetForKickoff(state, team, {
       number: player.number,
       rating: player.rating
     }))
-  });
+  }, scaleProfile);
 
   state.players = freshPlayers.map((freshPlayer) => {
     const previous = findPlayer(state, freshPlayer.id);
@@ -211,7 +225,8 @@ export function resetForKickoff(state, team, {
   state.ball = createMatchBall({
     width,
     height,
-    lock: ballControlConfig.release.kickoffLock
+    lock: ballControlConfig.release.kickoffLock,
+    scaleProfile,
   });
   state.match.goalSequence = null;
   state.match.kickoffTimer = kickoffDelay;

@@ -46,7 +46,7 @@ function disposeObject(root) {
 
 function createPitchTexture({ document, renderer, style, profile }) {
   const theme = profile.pitchStyles[style] ?? profile.pitchStyles.classic;
-  const { worldWidth, worldHeight, field } = profile.geometry;
+  const { worldWidth, worldHeight, field, markings, goal } = profile.geometry;
   const textureCanvas = document.createElement("canvas");
   textureCanvas.width = worldWidth;
   textureCanvas.height = worldHeight;
@@ -75,7 +75,7 @@ function createPitchTexture({ document, renderer, style, profile }) {
   }
 
   paint.strokeStyle = "rgba(245,250,247,.94)";
-  paint.lineWidth = 3;
+  paint.lineWidth = markings.lineWidthSimulation;
   paint.lineCap = "round";
   paint.strokeRect(field.left, field.top, field.right - field.left, field.bottom - field.top);
   paint.beginPath();
@@ -83,16 +83,35 @@ function createPitchTexture({ document, renderer, style, profile }) {
   paint.lineTo(worldWidth / 2, field.bottom);
   paint.stroke();
   paint.beginPath();
-  paint.arc(worldWidth / 2, worldHeight / 2, 83, 0, Math.PI * 2);
+  paint.arc(worldWidth / 2, worldHeight / 2, markings.centreCircleRadiusSimulation, 0, Math.PI * 2);
   paint.stroke();
   paint.fillStyle = "white";
   paint.beginPath();
-  paint.arc(worldWidth / 2, worldHeight / 2, 5, 0, Math.PI * 2);
+  paint.arc(worldWidth / 2, worldHeight / 2, markings.centreSpotRadiusSimulation, 0, Math.PI * 2);
   paint.fill();
-  paint.strokeRect(field.left, 175, 180, 350);
-  paint.strokeRect(field.left, 267, 83, 166);
-  paint.strokeRect(field.right - 180, 175, 180, 350);
-  paint.strokeRect(field.right - 83, 267, 83, 166);
+
+  const centreY = worldHeight / 2;
+  const penaltyTop = centreY - markings.penaltyAreaWidthSimulation / 2;
+  const goalAreaTop = centreY - markings.goalAreaWidthSimulation / 2;
+  paint.strokeRect(field.left, penaltyTop, markings.penaltyAreaDepthSimulation, markings.penaltyAreaWidthSimulation);
+  paint.strokeRect(field.left, goalAreaTop, markings.goalAreaDepthSimulation, markings.goalAreaWidthSimulation);
+  paint.strokeRect(field.right - markings.penaltyAreaDepthSimulation, penaltyTop, markings.penaltyAreaDepthSimulation, markings.penaltyAreaWidthSimulation);
+  paint.strokeRect(field.right - markings.goalAreaDepthSimulation, goalAreaTop, markings.goalAreaDepthSimulation, markings.goalAreaWidthSimulation);
+  for (const side of [-1, 1]) {
+    paint.beginPath();
+    paint.arc(
+      side < 0 ? field.left + markings.penaltyMarkDistanceSimulation : field.right - markings.penaltyMarkDistanceSimulation,
+      centreY,
+      markings.centreSpotRadiusSimulation,
+      0,
+      Math.PI * 2,
+    );
+    paint.fill();
+  }
+
+  paint.lineWidth = goal.postThickness * profile.geometry.worldScale ** -1;
+  paint.strokeRect(field.left - goal.depth / profile.geometry.worldScale, goal.top, goal.depth / profile.geometry.worldScale, goal.bottom - goal.top);
+  paint.strokeRect(field.right, goal.top, goal.depth / profile.geometry.worldScale, goal.bottom - goal.top);
 
   const texture = new THREE.CanvasTexture(textureCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -357,18 +376,19 @@ function createGoal({ scene, x, side, nets, profile }) {
   const goalObject = new THREE.Group();
   goalObject.position.x = x;
   const postMaterial = new THREE.MeshStandardMaterial({ color: 0xf4f7f5, roughness: 0.28, metalness: 0.28 });
-  const postGeometry = new THREE.CylinderGeometry(0.12, 0.12, goal.height, 10);
-  const crossGeometry = new THREE.CylinderGeometry(0.12, 0.12, goal.width, 10);
+  const postHeight = goal.height + goal.postThickness;
+  const postGeometry = new THREE.CylinderGeometry(goal.postRadius, goal.postRadius, postHeight, 10);
+  const crossGeometry = new THREE.CylinderGeometry(goal.postRadius, goal.postRadius, goal.width, 10);
   crossGeometry.rotateX(Math.PI / 2);
   const halfWidth = goal.width / 2;
   for (const z of [-halfWidth, halfWidth]) {
     const post = new THREE.Mesh(postGeometry, postMaterial);
-    post.position.set(0, goal.height / 2, z);
+    post.position.set(0, postHeight / 2, z);
     post.castShadow = true;
     goalObject.add(post);
   }
   const cross = new THREE.Mesh(crossGeometry, postMaterial);
-  cross.position.set(0, goal.height, 0);
+  cross.position.set(0, goal.height + goal.postRadius, 0);
   goalObject.add(cross);
   const netMaterial = new THREE.LineBasicMaterial({ color: 0xbfd1c8, transparent: true, opacity: 0.34 });
   const netVertices = [];

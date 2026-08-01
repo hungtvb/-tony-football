@@ -14,10 +14,13 @@ function invalidProfile(mutator) {
 
 test("default Three scene environment profile is deeply frozen and preserves approved values", () => {
   const profile = DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE;
-  assert.equal(profile.id, "tony-football-default-v1");
-  assert.equal(profile.geometry.worldScale, 0.1);
+  assert.equal(profile.id, "tony-football-mini-6v6-v2");
+  assert.equal(profile.geometry.worldScale, 0.05);
   assert.deepEqual(profile.geometry.field, { left: 48, right: 1152, top: 42, bottom: 658 });
-  assert.equal(profile.geometry.goal.width, 17);
+  assert.equal(profile.geometry.goal.mouthWidth, 5);
+  assert.equal(profile.geometry.goal.width, 5.1);
+  assert.equal(profile.geometry.goal.height, 2);
+  assert.equal(profile.geometry.markings.penaltyAreaDepthSimulation, 200);
   assert.equal(profile.renderer.exposure, 1.12);
   assert.equal(profile.pitchStyles.midnight.environment.exposure, 1.22);
   assert.equal(Object.isFrozen(profile), true);

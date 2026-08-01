@@ -1,4 +1,8 @@
 import * as THREE_NAMESPACE from "three";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
+
+const BALL_RADIUS = DEFAULT_SIMULATION_SCALE_PROFILE.ball.radiusWorldUnits;
+const CHARGE_HEIGHT = DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits + .55;
 
 const BALL_STYLES = Object.freeze({
   classic: Object.freeze({ base: 0xf3f4ef, patch: 0x17201d, stroke: "#59635e" }),
@@ -37,9 +41,9 @@ export function createBallModelView({ scenePort, document, worldX, worldZ, three
   if (typeof worldX !== "function" || typeof worldZ !== "function") throw new TypeError("BallModelView requires world projection functions");
   const THREE = three; const anisotropy = Math.max(1, Number(scenePort.diagnostics?.().maxAnisotropy ?? 1));
   const root = new THREE.Group(); const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .58, metalness: 0, clearcoat: .16, clearcoatRoughness: .7, bumpScale: .035 });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.56, 48, 32), material); mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh);
-  const chargeRoot = new THREE.Group(); const background = new THREE.Mesh(new THREE.BoxGeometry(5, .22, .28), new THREE.MeshBasicMaterial({ color: 0x080b0a, transparent: true, opacity: .8 }));
-  const fill = new THREE.Mesh(new THREE.BoxGeometry(4.8, .24, .3), new THREE.MeshBasicMaterial({ color: 0xffcf58, toneMapped: false })); fill.position.y = .02; chargeRoot.add(background, fill); chargeRoot.visible = false;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_RADIUS, 48, 32), material); mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh);
+  const chargeRoot = new THREE.Group(); const background = new THREE.Mesh(new THREE.BoxGeometry(1.2, .06, .08), new THREE.MeshBasicMaterial({ color: 0x080b0a, transparent: true, opacity: .8 }));
+  const fill = new THREE.Mesh(new THREE.BoxGeometry(1.16, .065, .085), new THREE.MeshBasicMaterial({ color: 0xffcf58, toneMapped: false })); fill.position.y = .02; chargeRoot.add(background, fill); chargeRoot.visible = false;
   let attached = false; let disposed = false; let activeStyle = null;
   function applyStyle(styleId = "classic") {
     if (disposed || styleId === activeStyle) return false;
@@ -53,10 +57,10 @@ export function createBallModelView({ scenePort, document, worldX, worldZ, three
   }
   function render({ ball, selectedPlayer = null, selectedPlayerOwnsBall = false, activeCharge = null, ballStyle = "classic" } = {}) {
     assertImmutableRecord(ball, "ball render facts"); if (selectedPlayer !== null) assertImmutableRecord(selectedPlayer, "selected player render facts"); if (activeCharge !== null) assertImmutableRecord(activeCharge, "active charge facts"); if (disposed) return false;
-    applyStyle(ballStyle); root.position.set(worldX(ball.x), .58 + (ball.height || 0), worldZ(ball.y)); root.rotation.set((ball.angle || 0) * .7, ball.angle || 0, (ball.angle || 0) * .35);
+    applyStyle(ballStyle); root.position.set(worldX(ball.x), BALL_RADIUS + (ball.height || 0), worldZ(ball.y)); root.rotation.set((ball.angle || 0) * .7, ball.angle || 0, (ball.angle || 0) * .35);
     if (activeCharge && selectedPlayer && selectedPlayerOwnsBall) {
-      chargeRoot.visible = true; chargeRoot.position.set(worldX(selectedPlayer.x), 7.5, worldZ(selectedPlayer.y)); scenePort.copyCameraQuaternion?.(chargeRoot.quaternion);
-      const power = Math.max(0, Math.min(1, Number(activeCharge.power ?? 0))); fill.scale.x = Math.max(.02, power); fill.position.x = -2.4 + 2.4 * power; fill.material.color.set(activeCharge.color ?? (power > .82 ? 0xff5b45 : 0xffcf58));
+      chargeRoot.visible = true; chargeRoot.position.set(worldX(selectedPlayer.x), CHARGE_HEIGHT, worldZ(selectedPlayer.y)); scenePort.copyCameraQuaternion?.(chargeRoot.quaternion);
+      const power = Math.max(0, Math.min(1, Number(activeCharge.power ?? 0))); fill.scale.x = Math.max(.02, power); fill.position.x = -.58 + .58 * power; fill.material.color.set(activeCharge.color ?? (power > .82 ? 0xff5b45 : 0xffcf58));
     } else chargeRoot.visible = false;
     return true;
   }

@@ -4,6 +4,7 @@ const MAGIC = 0x46546c67;
 async function readGLB(path) { const bytes = await readFile(path); if (bytes.readUInt32LE(0) !== MAGIC) throw new Error(`${path}: invalid GLB magic`); if (bytes.readUInt32LE(4) !== 2) throw new Error(`${path}: expected glTF 2.0`); if (bytes.readUInt32LE(8) !== bytes.length) throw new Error(`${path}: declared length does not match file size`); const jsonLength = bytes.readUInt32LE(12); const json = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString().replace(/\0/g, "")); return { bytes, json }; }
 const characterPath = "assets/models/football-character-v2.glb"; const animationPath = "assets/models/football-animations-v2.glb";
 const character = await readGLB(characterPath); const animation = await readGLB(animationPath);
+const scaleProfileSource = await readFile("src/game/config/simulationScaleProfile.js", "utf8");
 const playerSource = await readFile("src/game/presentation/PlayerModelView.js", "utf8");
 const adapterSource = await readFile("src/game/presentation/BrowserModelViewAdapter.js", "utf8");
 const loaderSource = await readFile("src/game/presentation/PlayerAssetLoader.js", "utf8");
@@ -23,11 +24,12 @@ const bodyNode = character.json.nodes.find((node) => node.name === "SuperHero_Ma
 const animationTargets = new Set(); for (const clip of animation.json.animations || []) for (const channel of clip.channels || []) animationTargets.add(animation.json.nodes[channel.target.node]?.name); const missingTargets = [...animationTargets].filter((name) => !characterNodes.has(name)); if (missingTargets.length) throw new Error(`${animationPath}: missing character targets: ${missingTargets.join(", ")}`);
 const expectedClips = ["Idle_Loop", "Jog_Fwd_Loop", "Sprint_Loop", "Hit_Chest", "Roll", "Dance_Loop"]; const clipNames = new Set((animation.json.animations || []).map((clip) => clip.name)); const missingClips = expectedClips.filter((clip) => !clipNames.has(clip)); if (missingClips.length) throw new Error(`${animationPath}: missing clips: ${missingClips.join(", ")}`); if (!animation.json.extensionsRequired?.includes("EXT_meshopt_compression")) throw new Error(`${animationPath}: expected Meshopt-compressed animation data`);
 for (const [sourceName, source, contracts] of [
+  ["simulationScaleProfile.js", scaleProfileSource, ["mini-6v6-metric-v1", "unitsPerMetre: 20", "representativeHeightMetres: 1.8", "radiusMetres: 0.11", "deepFreeze"]],
   ["PlayerAssetLoader.js", loaderSource, ["loader.setMeshoptDecoder(MeshoptDecoder)", "football-character-v2.glb?v=16.0.0", "football-animations-v2.glb?v=16.0.0"]],
   ["BrowserModelViewAdapter.js", adapterSource, ["createSnapshotRenderState", "createDefaultPlayerAssetLoader", "disposePlayerAssetTemplate", "appearanceDiagnostics(playerViews)", "bootlessPlayers", "preservedMapPlayers"]],
-  ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState"]],
-  ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(0.56, 48, 32)", "createBallSurfaceTextures", "chargeRoot"]],
-  ["CanvasMatchRenderer.js", canvasSource, ["createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
+  ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "measureAndNormalizeRig", "representativeRigScale", "tonyScaleProfileId", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState"]],
+  ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(BALL_RADIUS, 48, 32)", "DEFAULT_SIMULATION_SCALE_PROFILE", "createBallSurfaceTextures", "chargeRoot"]],
+  ["CanvasMatchRenderer.js", canvasSource, ["DEFAULT_SIMULATION_SCALE_PROFILE", "createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
   ["SnapshotCameraReplayAdapter.js", cameraReplaySource, ["snapshot-camera-replay", "snapshot.match.replay", "match: current.match", "goalIncidentKey(snapshot)", "recordIncident(snapshot, key)", "playbackIncidentKey", "update() { return false; }"]],
   ["BrowserSettingsAdapter.js", settingsSource, ["user-preference", "browser settings owner already attached", "controlBindings", "previewCount"]],
   ["BrowserEffectsAdapter.js", effectsSource, ["browser effects owner already attached", "emitContextParticles", "projectTrail", "projectCharge", "projectionSequence"]],
