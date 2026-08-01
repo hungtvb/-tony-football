@@ -1,0 +1,74 @@
+diff --git a/game.js b/game.js
+index d049407..d9fc453 100644
+--- a/game.js
++++ b/game.js
+@@ -102,11 +102,11 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
+ 
+   const formations = {
+     home: [
+-      [90, 350, "GK", "KAI", 1, 86], [270, 205, "DF", "MINH", 4, 87], [270, 495, "DF", "NAM", 5, 86],
++      [140, 350, "GK", "KAI", 1, 86], [270, 205, "DF", "MINH", 4, 87], [270, 495, "DF", "NAM", 5, 86],
+       [500, 350, "MF", "HÙNG", 8, 90], [690, 205, "FW", "TONY", 10, 92], [690, 495, "FW", "PHÚC", 11, 89]
+     ],
+     away: [
+-      [1110, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
++      [1060, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
+       [700, 350, "MF", "ECHO", 8, 91], [520, 205, "FW", "BLAZE", 9, 92], [520, 495, "FW", "RUSH", 11, 90]
+     ]
+   };
+diff --git a/src/game/engine/MatchState.js b/src/game/engine/MatchState.js
+index fafeaac..5ffe68a 100644
+--- a/src/game/engine/MatchState.js
++++ b/src/game/engine/MatchState.js
+@@ -23,7 +23,7 @@ function freezeFormation(formation) {
+ 
+ export const DEFAULT_FORMATIONS = Object.freeze({
+   home: freezeFormation([
+-    { x: 90, y: 350, role: "GK", name: "KAI", number: 1, rating: 86 },
++    { x: 140, y: 350, role: "GK", name: "KAI", number: 1, rating: 86 },
+     { x: 270, y: 205, role: "DF", name: "MINH", number: 4, rating: 87 },
+     { x: 270, y: 495, role: "DF", name: "NAM", number: 5, rating: 86 },
+     { x: 500, y: 350, role: "MF", name: "HÙNG", number: 8, rating: 90 },
+@@ -31,7 +31,7 @@ export const DEFAULT_FORMATIONS = Object.freeze({
+     { x: 690, y: 495, role: "FW", name: "PHÚC", number: 11, rating: 89 }
+   ]),
+   away: freezeFormation([
+-    { x: 1110, y: 350, role: "GK", name: "NOVA", number: 1, rating: 87 },
++    { x: 1060, y: 350, role: "GK", name: "NOVA", number: 1, rating: 87 },
+     { x: 930, y: 205, role: "DF", name: "VEX", number: 3, rating: 88 },
+     { x: 930, y: 495, role: "DF", name: "ZERO", number: 5, rating: 87 },
+     { x: 700, y: 350, role: "MF", name: "ECHO", number: 8, rating: 91 },
+diff --git a/src/game/presentation/RadarSnapshotAdapter.js b/src/game/presentation/RadarSnapshotAdapter.js
+index 01ea766..32b0f98 100644
+--- a/src/game/presentation/RadarSnapshotAdapter.js
++++ b/src/game/presentation/RadarSnapshotAdapter.js
+@@ -1,14 +1,12 @@
+ import { cameraHudConfig } from "../config/cameraHudConfig.js";
++import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
+ import {
+   claimRadarSnapshotContext,
+   renderOwnedRadarSnapshot,
+ } from "./RadarSnapshotRenderer.js";
+ 
+ export const DEFAULT_RADAR_FIELD = Object.freeze({
+-  left: 48,
+-  right: 1152,
+-  top: 42,
+-  bottom: 658,
++  ...DEFAULT_SIMULATION_SCALE_PROFILE.field.bounds,
+ });
+ 
+ function requireDocument(document) {
+diff --git a/tests/e2e/engine-runtime-harness.mjs b/tests/e2e/engine-runtime-harness.mjs
+index e846196..dfa2713 100644
+--- a/tests/e2e/engine-runtime-harness.mjs
++++ b/tests/e2e/engine-runtime-harness.mjs
+@@ -54,7 +54,7 @@ export async function installNaturalGoalRuntimeHarness(page) {
+     const response = await route.fetch();
+     const source = await response.text();
+     const originalAwayFormation = `    away: [
+-      [1110, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
++      [1060, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
+       [700, 350, "MF", "ECHO", 8, 91], [520, 205, "FW", "BLAZE", 9, 92], [520, 495, "FW", "RUSH", 11, 90]
+     ]`;
+     const deterministicAwayFormation = `    away: [
