@@ -72,6 +72,56 @@ async function installWallClockGoalObserver(page) {
   });
 }
 
+async function advanceSimulation(page, steps) {
+  return page.evaluate((count) => {
+    const runtime = globalThis.__TONY_E2E_BROWSER_RUNTIME__;
+    if (!runtime?.advanceForE2E) throw new Error("E2E simulation advance is unavailable");
+    return runtime.advanceForE2E(count);
+  }, steps);
+}
+
+async function advanceWithPublicDirections(page, codes, steps) {
+  return page.evaluate(({ directionCodes, simulationSteps }) => {
+    const runtime = globalThis.__TONY_E2E_BROWSER_RUNTIME__;
+    if (!runtime?.advanceForE2E) throw new Error("E2E simulation advance is unavailable");
+    const emit = (type, code) => globalThis.dispatchEvent(new KeyboardEvent(type, {
+      code,
+      key: code,
+      bubbles: true,
+      cancelable: true,
+    }));
+    for (const code of directionCodes) emit("keydown", code);
+    try {
+      runtime.advanceForE2E(simulationSteps);
+    } finally {
+      for (const code of [...directionCodes].reverse()) emit("keyup", code);
+      // Apply the public MOVE {0, 0} emitted by keyup before returning control.
+      runtime.advanceForE2E(1);
+    }
+    return runtime.snapshot;
+  }, { directionCodes: codes, simulationSteps: steps });
+}
+
+async function tapPublicKey(page, code, settleSteps = 1) {
+  return page.evaluate(({ keyCode, steps }) => {
+    const runtime = globalThis.__TONY_E2E_BROWSER_RUNTIME__;
+    if (!runtime?.advanceForE2E) throw new Error("E2E simulation advance is unavailable");
+    const options = { code: keyCode, key: keyCode, bubbles: true, cancelable: true };
+    globalThis.dispatchEvent(new KeyboardEvent("keydown", options));
+    globalThis.dispatchEvent(new KeyboardEvent("keyup", options));
+    return runtime.advanceForE2E(steps);
+  }, { keyCode: code, steps: settleSteps });
+}
+
+function directionCodesToward(deltaX, deltaY, deadZone = 8) {
+  const codes = [];
+  if (deltaX > deadZone) codes.push("ArrowRight");
+  else if (deltaX < -deadZone) codes.push("ArrowLeft");
+  if (deltaY > deadZone) codes.push("ArrowDown");
+  else if (deltaY < -deadZone) codes.push("ArrowUp");
+  return codes;
+}
+
 async function shootTowardRightGoal(page) {
   // Set the persistent public-input aim without holding movement during the
   // wall-clock charge. Software-rendered Chromium can stretch Playwright waits,
@@ -128,6 +178,49 @@ async function awaitNaturalGoalPresentation(page, expectedScore, fromIndex) {
   return evidence;
 }
 
+async function recoveryFacts(page) {
+  return page.evaluate(() => {
+    const snapshot = globalThis.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
+    const selected = snapshot?.players?.find((player) => player.id === snapshot.match.selectedPlayerId) ?? null;
+    const owner = snapshot?.players?.find((player) => player.id === snapshot.ball.ownerId) ?? null;
+    const target = owner ?? snapshot?.ball ?? null;
+    return {
+      selectedId: selected?.id ?? null,
+      selectedX: selected?.x ?? null,
+      selectedY: selected?.y ?? null,
+      selectedCooldown: selected?.cooldown ?? Infinity,
+      ownerId: snapshot?.ball?.ownerId ?? null,
+      targetX: target?.x ?? null,
+      targetY: target?.y ?? null,
+      distance: selected && target ? Math.hypot(target.x - selected.x, target.y - selected.y) : Infinity,
+    };
+  });
+}
+
+async function driveSelectedToShootingLane(page) {
+  const target = Object.freeze({ x: 574, y: 350 });
+  for (let iteration = 0; iteration < 80; iteration += 1) {
+    const facts = await page.evaluate(({ x, y }) => {
+      const snapshot = globalThis.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
+      const selected = snapshot?.players?.find((player) => player.id === snapshot.match.selectedPlayerId) ?? null;
+      return selected ? {
+        ownerIsSelected: snapshot.ball.ownerId === selected.id,
+        deltaX: x - selected.x,
+        deltaY: y - selected.y,
+        distance: Math.hypot(x - selected.x, y - selected.y),
+        speed: Math.hypot(selected.vx, selected.vy),
+      } : null;
+    }, target);
+    if (!facts?.ownerIsSelected) throw new Error("home possession was lost before the second shot");
+    if (facts.distance <= 18 && facts.speed <= 55) return facts;
+    const codes = directionCodesToward(facts.deltaX, facts.deltaY, facts.distance <= 30 ? 3 : 8);
+    const steps = facts.distance > 120 ? 6 : facts.distance > 50 ? 3 : 1;
+    if (codes.length > 0) await advanceWithPublicDirections(page, codes, steps);
+    else await advanceSimulation(page, 2);
+  }
+  throw new Error("selected home owner did not reach the deterministic shooting lane");
+}
+
 async function recoverHomePossessionAfterAwayKickoff(page) {
   await page.waitForFunction(() => {
     const snapshot = globalThis.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
@@ -136,35 +229,41 @@ async function recoverHomePossessionAfterAwayKickoff(page) {
       && snapshot?.ball?.ownerId?.startsWith("away-");
   }, null, { timeout: 15_000 });
 
-  // Emit the public tackle while the authoritative snapshot still reports
-  // away possession, before any switch can change the selected defender.
-  await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(120);
-  await page.keyboard.press("Space");
-  await page.keyboard.up("ArrowRight");
+  // Keep switch/tackle acceptance on the public input path. Simulation time is
+  // advanced explicitly so hosted-runner CPU pressure cannot lengthen a key hold.
+  for (let index = 0; index < 5; index += 1) await tapPublicKey(page, "KeyS");
+  await tapPublicKey(page, "Space", 2);
 
-  // While defending, KeyS is the public switch command. Five switches return
-  // to the original home outfield selection before the remaining fixed recovery steps.
-  for (let index = 0; index < 5; index += 1) await page.keyboard.press("KeyS");
-  await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2));
+  for (let iteration = 0; iteration < 120; iteration += 1) {
+    const facts = await recoveryFacts(page);
+    if (facts.ownerId?.startsWith("home-")) break;
+    if (!Number.isFinite(facts.distance)) throw new Error("recovery target is unavailable");
 
-  for (const movementMilliseconds of [120, 180, 240]) {
-    await page.keyboard.down("ArrowRight");
-    await page.waitForTimeout(movementMilliseconds);
-    await page.keyboard.press("Space");
-    await page.waitForTimeout(760);
-    await page.keyboard.up("ArrowRight");
-    await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(45));
-    const recovered = await page.evaluate(() => (
-      globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
-    ));
-    if (recovered) break;
+    const codes = directionCodesToward(
+      facts.targetX - facts.selectedX,
+      facts.targetY - facts.selectedY,
+      facts.distance <= 36 ? 2 : 8,
+    );
+    if (codes.length > 0) await advanceWithPublicDirections(page, codes, facts.distance > 120 ? 6 : 3);
+    else await advanceSimulation(page, 2);
+
+    const afterMove = await recoveryFacts(page);
+    if (
+      !afterMove.ownerId?.startsWith("home-")
+      && afterMove.distance <= 48
+      && afterMove.selectedCooldown <= 0
+    ) {
+      await tapPublicKey(page, "Space", 8);
+    }
   }
 
-  await expect.poll(() => page.evaluate(() => (
-    globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
-  )), { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true);
+  await expect.poll(() => page.evaluate(() => {
+    const snapshot = globalThis.__TONY_E2E_BROWSER_RUNTIME__?.snapshot;
+    return Boolean(snapshot?.ball?.ownerId?.startsWith("home-")
+      && snapshot.ball.ownerId === snapshot.match.selectedPlayerId);
+  }), { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true);
 
+  await driveSelectedToShootingLane(page);
 }
 
 async function finishGoalSequence(page) {
