@@ -1,0 +1,67 @@
+name: TON-87 Publish World Scale
+
+on:
+  pull_request:
+    branches:
+      - ton87-publish-world-scale
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-87-world-scale-contract
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Check out publisher payload
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ton87-publish-world-scale
+          path: .ton87-publisher
+          persist-credentials: false
+
+      - name: Apply audited patch
+        shell: bash
+        run: |
+          base64 -d .ton87-publisher/.github/ton87/common.patch.b64 | gzip -d > /tmp/ton87.patch
+          patch -p1 --forward < /tmp/ton87.patch
+          python .ton87-publisher/.github/ton87/apply.py
+          rm -rf .ton87-publisher
+
+      - name: Verify source and focused contracts
+        shell: bash
+        run: |
+          git diff --check
+          for file in \
+            src/game/config/simulationScaleProfile.js \
+            src/game/engine/BallSimulationSystem.js \
+            src/game/engine/MatchEngine.js \
+            src/game/engine/MatchState.js \
+            src/game/engine/PlayerMovementSystem.js \
+            src/game/presentation/BallModelView.js \
+            src/game/presentation/BrowserThreeSceneEnvironmentHost.js \
+            src/game/presentation/CanvasMatchRenderer.js \
+            src/game/presentation/PlayerModelView.js \
+            src/game/presentation/ThreeSceneEnvironmentProfile.js \
+            scripts/validate-assets.mjs; do
+            node --check "$file"
+          done
+          node scripts/validate-assets.mjs
+          node --test tests/engine/SimulationScaleProfile.test.mjs tests/engine/WorldScaleContract.test.mjs tests/presentation/threeSceneEnvironmentProfile.test.mjs
+          node --test tests/simulation/*.test.mjs tests/engine/*.test.mjs tests/gameplay/*.test.mjs tests/input/*.test.mjs tests/scenarios/*.test.mjs
+          test "$(git diff --name-only | wc -l | tr -d ' ')" = "16"
+
+      - name: Commit and push target
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs scripts src tests
+          git commit -m 'feat(ton-87): establish metric mini-6v6 world scale'
+          git push origin HEAD:feat/ton-87-world-scale-contract
