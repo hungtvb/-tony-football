@@ -1,6 +1,9 @@
 import { createPossessionLifecycle } from "../gameplay/PossessionLifecycle.js";
 import { ballControlConfig } from "../config/ballControlConfig.js";
-import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
+import {
+  assertSimulationWorldDimensions,
+  DEFAULT_SIMULATION_SCALE_PROFILE,
+} from "../config/simulationScaleProfile.js";
 
 export const HOME_TEAM = 0;
 export const AWAY_TEAM = 1;
@@ -102,6 +105,7 @@ export function createMatchBall({
   lock = 0,
   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
 } = {}) {
+  assertSimulationWorldDimensions(width, height, scaleProfile);
   return {
     id: MATCH_BALL_ID,
     x: width / 2,
@@ -145,9 +149,7 @@ export function createMatchState({
   if (!Number.isFinite(kickoffDelay) || kickoffDelay < 0) {
     throw new RangeError("kickoffDelay must be a non-negative finite number");
   }
-  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-    throw new RangeError("match dimensions must be positive finite numbers");
-  }
+  assertSimulationWorldDimensions(width, height, scaleProfile);
 
   const players = createMatchPlayers(formations, scaleProfile);
   return {
@@ -199,6 +201,7 @@ export function resetForKickoff(state, team, {
   height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
 } = {}) {
+  assertSimulationWorldDimensions(width, height, scaleProfile);
   const freshPlayers = createMatchPlayers({
     home: state.players.filter((player) => player.team === HOME_TEAM).map((player) => ({
       x: player.baseX,

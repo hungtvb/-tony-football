@@ -47,6 +47,7 @@ Diagnostics record the profile id, measured height, target height and applied sc
 - Engine modules do not import Three.js or Canvas.
 - Presentation geometry does not write engine dimensions.
 - Goal line, post faces and crossbar underside derive from the same profile.
+- Runtime `width` and `height` must match the selected profile; dimensions cannot be overridden independently from collision and presentation geometry.
 - A scale-profile change cannot alter fixed-step duration, command mapping or AI decision ownership.
 - Lighting, camera framing and ball-flight tuning are not part of this contract.
 

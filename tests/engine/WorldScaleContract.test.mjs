@@ -8,7 +8,7 @@ import {
 import { advanceBallSimulation } from "../../src/game/engine/BallSimulationSystem.js";
 import { GameCommandType } from "../../src/game/engine/GameCommands.js";
 import { MatchEngine } from "../../src/game/engine/MatchEngine.js";
-import { createMatchState } from "../../src/game/engine/MatchState.js";
+import { createMatchBall, createMatchState } from "../../src/game/engine/MatchState.js";
 import { createFieldBounds } from "../../src/game/engine/PlayerMovementSystem.js";
 import { DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE } from "../../src/game/presentation/ThreeSceneEnvironmentProfile.js";
 
@@ -101,4 +101,31 @@ test("changing metric density preserves fixed-step timing and command response",
   assert.equal(normalPlayer.vx, densePlayer.vx);
   assert.equal(normal.snapshot.match.controls.moveX, dense.snapshot.match.controls.moveX);
   assert.equal(normal.snapshot.match.controls.moveY, dense.snapshot.match.controls.moveY);
+});
+
+test("engine goal mouth follows the scale profile field centre", () => {
+  const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
+  delete input.simulation.worldUnitsPerSimulationUnit;
+  input.id = "shifted-field-centre";
+  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
+  const profile = createSimulationScaleProfile(input);
+  const field = createFieldBounds(
+    profile.simulation.worldWidth,
+    profile.simulation.worldHeight,
+    profile,
+  );
+
+  assert.equal(profile.field.centre.y, 300);
+  assert.equal(field.goalTop, profile.goal.mouthTop);
+  assert.equal(field.goalBottom, profile.goal.mouthBottom);
+  assert.equal(field.scoringGoalTop, profile.goal.scoringMouthTop);
+  assert.equal(field.scoringGoalBottom, profile.goal.scoringMouthBottom);
+});
+
+test("runtime dimensions cannot diverge from the selected scale profile", () => {
+  const mismatch = /simulation world dimensions must match scale profile/;
+  assert.throws(() => createFieldBounds(600, 350), mismatch);
+  assert.throws(() => createMatchBall({ width: 600, height: 350 }), mismatch);
+  assert.throws(() => createMatchState({ width: 600, height: 350 }), mismatch);
+  assert.throws(() => new MatchEngine({ width: 600, height: 350 }), mismatch);
 });

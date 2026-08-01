@@ -15,10 +15,16 @@ function positive(value, name) {
   return value;
 }
 
+function profileId(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new TypeError("Simulation scale profile requires a non-empty string id");
+  }
+  return value.trim();
+}
 
 function cloneInput(input) {
   return {
-    id: String(input.id),
+    id: profileId(input.id),
     simulation: { ...input.simulation },
     field: {
       ...input.field,
@@ -75,7 +81,6 @@ function scaleMetres(value, unitsPerMetre) {
 export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
   if (!input || typeof input !== "object") throw new TypeError("Simulation scale profile must be an object");
   const source = cloneInput(input);
-  if (!source.id) throw new TypeError("Simulation scale profile requires an id");
 
   const { simulation, field, goal, player, ball } = source;
   positive(simulation.worldWidth, "simulation.worldWidth");
@@ -174,6 +179,25 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
   };
 
   return deepFreeze(profile);
+}
+
+export function assertSimulationWorldDimensions(
+  width,
+  height,
+  profile = DEFAULT_SIMULATION_SCALE_PROFILE,
+) {
+  positive(width, "simulation world width");
+  positive(height, "simulation world height");
+  const expectedWidth = profile?.simulation?.worldWidth;
+  const expectedHeight = profile?.simulation?.worldHeight;
+  positive(expectedWidth, "scale profile simulation.worldWidth");
+  positive(expectedHeight, "scale profile simulation.worldHeight");
+  if (width !== expectedWidth || height !== expectedHeight) {
+    throw new RangeError(
+      `simulation world dimensions must match scale profile ${profile.id}: ${expectedWidth} × ${expectedHeight}`,
+    );
+  }
+  return profile;
 }
 
 export function representativeRigScale(measuredHeightWorldUnits, profile = DEFAULT_SIMULATION_SCALE_PROFILE) {

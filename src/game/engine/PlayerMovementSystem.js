@@ -1,5 +1,8 @@
 import { locomotionConfig } from "../config/locomotionConfig.js";
-import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
+import {
+  assertSimulationWorldDimensions,
+  DEFAULT_SIMULATION_SCALE_PROFILE,
+} from "../config/simulationScaleProfile.js";
 import {
   chooseSprintTransitionResponse,
   chooseTurnResponse,
@@ -18,26 +21,25 @@ export function createFieldBounds(
   height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
 ) {
-  const widthScale = width / scaleProfile.simulation.worldWidth;
-  const heightScale = height / scaleProfile.simulation.worldHeight;
+  assertSimulationWorldDimensions(width, height, scaleProfile);
   const bounds = scaleProfile.field.bounds;
-  const centreY = height / 2;
-  const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation * heightScale / 2;
-  const ballRadiusY = scaleProfile.ball.radiusSimulation * heightScale;
+  const centreY = scaleProfile.field.centre.y;
+  const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation / 2;
+  const ballRadiusY = scaleProfile.ball.radiusSimulation;
   return Object.freeze({
-    left: bounds.left * widthScale,
-    right: bounds.right * widthScale,
-    top: bounds.top * heightScale,
-    bottom: bounds.bottom * heightScale,
+    left: bounds.left,
+    right: bounds.right,
+    top: bounds.top,
+    bottom: bounds.bottom,
     goalTop: centreY - mouthHalfHeight,
     goalBottom: centreY + mouthHalfHeight,
     scoringGoalTop: centreY - mouthHalfHeight + ballRadiusY,
     scoringGoalBottom: centreY + mouthHalfHeight - ballRadiusY,
     goalCrossbarHeight: scaleProfile.goal.crossbarHeightMetres,
     goalScoringMaxBallHeight: scaleProfile.goal.scoringMaxBallHeightMetres,
-    goalDepth: scaleProfile.goal.depthSimulation * widthScale,
-    goalPostThickness: scaleProfile.goal.postThicknessSimulation * heightScale,
-    goalkeeperDepth: scaleProfile.field.markings.penaltyAreaDepthSimulation * widthScale,
+    goalDepth: scaleProfile.goal.depthSimulation,
+    goalPostThickness: scaleProfile.goal.postThicknessSimulation,
+    goalkeeperDepth: scaleProfile.field.markings.penaltyAreaDepthSimulation,
     scaleProfileId: scaleProfile.id,
   });
 }

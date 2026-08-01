@@ -63,3 +63,16 @@ test("simulation scale profile rejects geometry that cannot fit", () => {
   input.goal.mouthWidthMetres = 40;
   assert.throws(() => createSimulationScaleProfile(input), /goal mouth must be narrower/);
 });
+
+test("simulation scale profile requires a non-empty string id", () => {
+  const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
+  delete input.simulation.worldUnitsPerSimulationUnit;
+
+  for (const id of [undefined, null, "", "   ", 87]) {
+    input.id = id;
+    assert.throws(
+      () => createSimulationScaleProfile(input),
+      /non-empty string id/,
+    );
+  }
+});
