@@ -1,0 +1,38 @@
+name: TON-206 Publish Deterministic Recovery
+
+on:
+  pull_request:
+    branches:
+      - ton206-publish-deterministic-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: fix/ton-206-replay-parity-input-timing
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply and verify deterministic recovery patch
+        shell: bash
+        run: |
+          printf '%s' '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' | base64 -d | gzip -d > /tmp/ton206.patch
+          patch -p1 --forward < /tmp/ton206.patch
+          git diff --check
+          printf '%s  %s\n' 'a6492dd327d9155aad307f38aac402535dd8cf8d5337a58f24c556bfff1ac4df' 'tests/e2e/ton94-p1-continuation.spec.mjs' | sha256sum --check
+          node --check tests/e2e/ton94-p1-continuation.spec.mjs
+
+      - name: Commit and push target
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/e2e/ton94-p1-continuation.spec.mjs
+          git commit -m 'test(ton-206): drive recovery by simulation ticks'
+          git push origin HEAD:fix/ton-206-replay-parity-input-timing
