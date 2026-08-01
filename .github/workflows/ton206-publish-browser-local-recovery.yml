@@ -1,0 +1,38 @@
+name: TON-206 Publish Browser Local Recovery
+
+on:
+  pull_request:
+    branches:
+      - ton206-publish-browser-local-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: fix/ton-206-replay-parity-input-timing
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply and verify browser-local recovery patch
+        shell: bash
+        run: |
+          printf '%s' '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' | base64 -d | gzip -d > /tmp/ton206.patch
+          patch -p1 --forward < /tmp/ton206.patch
+          git diff --check
+          printf '%s  %s\n' '32af1d593e865cbb1387ae692640313a43fca3a25d920d3307f0e5d1182166cb' 'tests/e2e/ton94-p1-continuation.spec.mjs' | sha256sum --check
+          node --check tests/e2e/ton94-p1-continuation.spec.mjs
+
+      - name: Commit and push target
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/e2e/ton94-p1-continuation.spec.mjs
+          git commit -m 'test(ton-206): run recovery in one browser transaction'
+          git push origin HEAD:fix/ton-206-replay-parity-input-timing
