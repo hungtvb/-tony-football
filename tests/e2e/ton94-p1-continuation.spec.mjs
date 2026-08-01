@@ -73,11 +73,16 @@ async function installWallClockGoalObserver(page) {
 }
 
 async function shootTowardRightGoal(page) {
-  await page.keyboard.down("ArrowRight");
-  await page.keyboard.down("KeyD");
-  await page.waitForTimeout(520);
-  await page.keyboard.up("KeyD");
-  await page.keyboard.up("ArrowRight");
+  // Set the persistent public-input aim without holding movement during the
+  // wall-clock charge. Software-rendered Chromium can stretch Playwright waits,
+  // so keeping ArrowRight pressed here made the player overrun the shooting lane.
+  await page.keyboard.press("ArrowRight");
+  try {
+    await page.keyboard.down("KeyD");
+    await page.waitForTimeout(520);
+  } finally {
+    await page.keyboard.up("KeyD");
+  }
 }
 
 async function awaitNaturalGoalPresentation(page, expectedScore, fromIndex) {
@@ -131,35 +136,164 @@ async function recoverHomePossessionAfterAwayKickoff(page) {
       && snapshot?.ball?.ownerId?.startsWith("away-");
   }, null, { timeout: 15_000 });
 
-  // Emit the public tackle while the authoritative snapshot still reports
-  // away possession, before any switch can change the selected defender.
-  await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(120);
-  await page.keyboard.press("Space");
-  await page.keyboard.up("ArrowRight");
+  const result = await page.evaluate(() => {
+    const runtime = globalThis.__TONY_E2E_BROWSER_RUNTIME__;
+    if (!runtime?.advanceForE2E) throw new Error("E2E simulation advance is unavailable");
 
-  // While defending, KeyS is the public switch command. Five switches return
-  // to the original home outfield selection before the remaining fixed recovery steps.
-  for (let index = 0; index < 5; index += 1) await page.keyboard.press("KeyS");
-  await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(2));
+    const emit = (type, code) => globalThis.dispatchEvent(new KeyboardEvent(type, {
+      code,
+      key: code,
+      bubbles: true,
+      cancelable: true,
+    }));
+    const tap = (code, settleSteps = 1) => {
+      emit("keydown", code);
+      emit("keyup", code);
+      runtime.advanceForE2E(settleSteps);
+    };
+    const move = (codes, steps) => {
+      for (const code of codes) emit("keydown", code);
+      try {
+        runtime.advanceForE2E(steps);
+      } finally {
+        for (const code of [...codes].reverse()) emit("keyup", code);
+        // Apply the public MOVE {0, 0} emitted by keyup before the next decision.
+        runtime.advanceForE2E(1);
+      }
+    };
+    const directionsToward = (deltaX, deltaY, deadZone = 8) => {
+      const codes = [];
+      if (deltaX > deadZone) codes.push("ArrowRight");
+      else if (deltaX < -deadZone) codes.push("ArrowLeft");
+      if (deltaY > deadZone) codes.push("ArrowDown");
+      else if (deltaY < -deadZone) codes.push("ArrowUp");
+      return codes;
+    };
+    const facts = () => {
+      const snapshot = runtime.snapshot;
+      const selected = snapshot.players.find((player) => player.id === snapshot.match.selectedPlayerId) ?? null;
+      const owner = snapshot.players.find((player) => player.id === snapshot.ball.ownerId) ?? null;
+      const target = owner ?? snapshot.ball;
+      return {
+        snapshot,
+        selected,
+        owner,
+        target,
+        ownerId: snapshot.ball.ownerId ?? null,
+        selectedId: selected?.id ?? null,
+        distanceToTarget: selected && target
+          ? Math.hypot(target.x - selected.x, target.y - selected.y)
+          : Infinity,
+      };
+    };
 
-  for (const movementMilliseconds of [120, 180, 240]) {
-    await page.keyboard.down("ArrowRight");
-    await page.waitForTimeout(movementMilliseconds);
-    await page.keyboard.press("Space");
-    await page.waitForTimeout(760);
-    await page.keyboard.up("ArrowRight");
-    await page.evaluate(() => globalThis.__TONY_E2E_BROWSER_RUNTIME__.advanceForE2E(45));
-    const recovered = await page.evaluate(() => (
-      globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
-    ));
-    if (recovered) break;
-  }
+    // Preserve the existing public switch/tackle command evidence.
+    for (let index = 0; index < 5; index += 1) tap("KeyS");
+    tap("Space", 2);
 
-  await expect.poll(() => page.evaluate(() => (
-    globalThis.__TONY_E2E_BROWSER_RUNTIME__.snapshot.ball.ownerId?.startsWith("home-") ?? false
-  )), { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true);
+    let recoveryIterations = 0;
+    for (; recoveryIterations < 260; recoveryIterations += 1) {
+      const current = facts();
+      if (current.ownerId?.startsWith("home-") && current.ownerId === current.selectedId) break;
+      if (!current.selected || !current.target || !Number.isFinite(current.distanceToTarget)) {
+        return { recovered: false, aligned: false, reason: "recovery-target-unavailable" };
+      }
 
+      const codes = directionsToward(
+        current.target.x - current.selected.x,
+        current.target.y - current.selected.y,
+        current.distanceToTarget <= 36 ? 2 : 8,
+      );
+      if (codes.length > 0) move(codes, current.distanceToTarget > 120 ? 6 : 3);
+      else runtime.advanceForE2E(2);
+
+      const afterMove = facts();
+      if (
+        !afterMove.ownerId?.startsWith("home-")
+        && afterMove.distanceToTarget <= 50
+        && (afterMove.selected?.cooldown ?? Infinity) <= 0
+      ) tap("Space", 8);
+    }
+
+    const recovered = facts();
+    if (!(recovered.ownerId?.startsWith("home-") && recovered.ownerId === recovered.selectedId)) {
+      return {
+        recovered: false,
+        aligned: false,
+        reason: "home-possession-not-recovered",
+        recoveryIterations,
+        ownerId: recovered.ownerId,
+        selectedId: recovered.selectedId,
+        distanceToTarget: recovered.distanceToTarget,
+      };
+    }
+
+    // Move the selected owner back to the natural-goal shooting lane entirely
+    // inside this browser transaction. Avoiding Playwright round-trips keeps the
+    // test deterministic even on software-rendered hosted Chromium.
+    const lane = { minX: 550, maxX: 598, minY: 324, maxY: 376, centerX: 574, centerY: 350 };
+    let alignmentIterations = 0;
+    for (; alignmentIterations < 220; alignmentIterations += 1) {
+      const current = facts();
+      if (!(current.ownerId?.startsWith("home-") && current.ownerId === current.selectedId) || !current.selected) {
+        return {
+          recovered: true,
+          aligned: false,
+          reason: "home-possession-lost-during-alignment",
+          recoveryIterations,
+          alignmentIterations,
+          ownerId: current.ownerId,
+          selectedId: current.selectedId,
+        };
+      }
+
+      const speed = Math.hypot(current.selected.vx, current.selected.vy);
+      const insideLane = current.selected.x >= lane.minX && current.selected.x <= lane.maxX
+        && current.selected.y >= lane.minY && current.selected.y <= lane.maxY;
+      if (insideLane && speed <= 70) {
+        return {
+          recovered: true,
+          aligned: true,
+          recoveryIterations,
+          alignmentIterations,
+          ownerId: current.ownerId,
+          selectedId: current.selectedId,
+          selectedX: current.selected.x,
+          selectedY: current.selected.y,
+          speed,
+        };
+      }
+
+      if (insideLane) {
+        runtime.advanceForE2E(3);
+        continue;
+      }
+
+      const deltaX = lane.centerX - current.selected.x;
+      const deltaY = lane.centerY - current.selected.y;
+      const distance = Math.hypot(deltaX, deltaY);
+      const codes = directionsToward(deltaX, deltaY, distance <= 30 ? 3 : 8);
+      if (codes.length > 0) move(codes, distance > 120 ? 6 : distance > 50 ? 3 : 1);
+      else runtime.advanceForE2E(2);
+    }
+
+    const final = facts();
+    return {
+      recovered: true,
+      aligned: false,
+      reason: "shooting-lane-not-reached",
+      recoveryIterations,
+      alignmentIterations,
+      ownerId: final.ownerId,
+      selectedId: final.selectedId,
+      selectedX: final.selected?.x ?? null,
+      selectedY: final.selected?.y ?? null,
+      speed: final.selected ? Math.hypot(final.selected.vx, final.selected.vy) : null,
+    };
+  });
+
+  expect(result.recovered, JSON.stringify(result)).toBe(true);
+  expect(result.aligned, JSON.stringify(result)).toBe(true);
 }
 
 async function finishGoalSequence(page) {
