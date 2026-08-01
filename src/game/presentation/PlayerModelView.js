@@ -245,6 +245,21 @@ function applyFootballActionPose(rig, player, progress, dt) {
   const roll = -(player.turnLean || 0) * .14 + (player.animPower < 0 ? -1 : 1) * tackle * .72; rig.model.rotation.z = lerp(rig.model.rotation.z, roll, 1 - Math.exp(-dt * 18)); rig.model.position.y = lerp(rig.model.position.y, -tackle * .32, 1 - Math.exp(-dt * 20));
 }
 
+function playerScaleEvidence(view) {
+  const model = view.rig?.model ?? null;
+  const measuredRigHeight = model ? Number(model.userData?.tonyMeasuredRigHeight) : null;
+  const uniformScale = model ? Number(model.userData?.tonyRigScale) : PROCEDURAL_SCALE;
+  const targetHeight = Number(model?.userData?.tonyRepresentativeHeight ?? PLAYER_HEIGHT);
+  return Object.freeze({
+    mode: model ? "measured-rig" : "procedural",
+    profileId: model?.userData?.tonyScaleProfileId ?? DEFAULT_SIMULATION_SCALE_PROFILE.id,
+    measuredRigHeight: Number.isFinite(measuredRigHeight) ? measuredRigHeight : null,
+    targetHeight,
+    uniformScale,
+    projectedHeight: Number.isFinite(measuredRigHeight) ? measuredRigHeight * uniformScale : PLAYER_HEIGHT,
+  });
+}
+
 export function createPlayerModelView({ player, scenePort, document, worldX, worldZ, lowPowerDevice = false, three = THREE_NAMESPACE, cloneModel = cloneSkeleton } = {}) {
   assertImmutable(player, "player descriptor");
   if (!scenePort || typeof scenePort.addObject !== "function" || typeof scenePort.removeObject !== "function") throw new TypeError("PlayerModelView requires a scene port");
@@ -329,7 +344,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     attach, installAsset, installAnimations, render, reset, teardown,
     diagnostics: () => Object.freeze({
       id: player.id, team: player.team, role: player.role, attached, rigged: Boolean(view.rig), disposed, terminating, installError,
-      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance, motion: motionDiagnostics,
+      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance, scale: playerScaleEvidence(view), motion: motionDiagnostics,
     }),
   });
 }

@@ -17,7 +17,8 @@ test("production composition boots and routes input, snapshot and lifecycle pres
   const boot = await page.evaluate(() => window.__TONY_DEBUG__.diagnostics());
   expect(boot.renderer).toBe("webgl");
   expect(boot.threeScene.owner).toBe("clean-host");
-  expect(boot.threeScene.profile).toBe("tony-football-default-v1");
+  expect(boot.threeScene.profile).toBe("tony-football-mini-6v6-v2");
+  expect(boot.threeScene.geometry.worldScale).toBe(.05);
   expect(boot.threeScene.foreignObjects).toBeGreaterThan(0);
   expect(boot.canvasMatch.owner).toBe("canvas-match-renderer");
   expect(boot.canvasMatch.active).toBe(false);

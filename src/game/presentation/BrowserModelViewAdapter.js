@@ -2,6 +2,7 @@ import { createSnapshotRenderState } from "./SnapshotRenderState.js";
 import { createPlayerModelView } from "./PlayerModelView.js";
 import { createBallModelView } from "./BallModelView.js";
 import { createDefaultPlayerAssetLoader, disposePlayerAssetTemplate } from "./PlayerAssetLoader.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
 import { ensureRigFootballKitOverlay, rigFootballKitEvidence } from "./RigFootballKitOverlay.js";
 
 function assertFunction(value, name) {
@@ -13,8 +14,19 @@ function defaultVisualTestMode(target) {
 function defaultLowPowerDevice(target) {
   return defaultVisualTestMode(target) || (target?.matchMedia?.("(pointer: coarse)")?.matches ?? false) || Number(target?.navigator?.deviceMemory ?? Infinity) <= 4;
 }
-function createWorldProjection({ width = 1200, height = 700, scale = 0.1 } = {}) {
-  return Object.freeze({ worldX: (value) => (value - width / 2) * scale, worldZ: (value) => (value - height / 2) * scale });
+function createWorldProjection({
+  width = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+  height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+  scale = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit,
+} = {}) {
+  return Object.freeze({
+    profileId: DEFAULT_SIMULATION_SCALE_PROFILE.id,
+    width,
+    height,
+    scale,
+    worldX: (value) => (value - width / 2) * scale,
+    worldZ: (value) => (value - height / 2) * scale,
+  });
 }
 function appearanceDiagnostics(playerViews) {
   const players = Object.freeze([...playerViews.values()].map((view) => {
@@ -32,6 +44,7 @@ function appearanceDiagnostics(playerViews) {
       bootGeometryCount: overlay.bootGeometryCount,
       bootCount: diagnostics.rigged ? overlay.bootGeometryCount : Number(appearance.bootCount || 0),
       rigKitNodes: overlay.nodes,
+      scale: diagnostics.scale ?? null,
       motion: diagnostics.motion ?? null,
     });
   }));
@@ -166,7 +179,14 @@ export function createBrowserModelViewAdapter({ target, document, getScenePort, 
     diagnostics: () => Object.freeze({
       owner: "browser-model-views", attached, disposed, terminating, sceneBound: Boolean(isSceneBound()),
       playerCount: playerViews.size, ballAttached: Boolean(ballView?.diagnostics?.().attached),
-      assetState, assetDetail, animationClips: animations.length, loadGeneration, appearance: appearanceDiagnostics(playerViews),
+      assetState, assetDetail, animationClips: animations.length, loadGeneration,
+      projection: Object.freeze({
+        profileId: world.profileId ?? null,
+        width: Number(world.width ?? DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth),
+        height: Number(world.height ?? DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight),
+        scale: Number(world.scale ?? DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit),
+      }),
+      appearance: appearanceDiagnostics(playerViews),
     }),
   });
 }

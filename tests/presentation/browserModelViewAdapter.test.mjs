@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
 import { createBrowserModelViewAdapter } from "../../src/game/presentation/BrowserModelViewAdapter.js";
 
 function snapshot({ tick = 1, x = 100, ballX = 140 } = {}) {
@@ -29,6 +30,33 @@ function disposableScene(onDispose) {
   return { traverse(visitor) { visitor({ geometry: { dispose: onDispose }, material: null }); } };
 }
 const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+test("default model projection follows the metric scale profile", () => {
+  let projected = null;
+  const adapter = createBrowserModelViewAdapter({
+    target: { location: { search: "?visualTest=1" }, navigator: {}, matchMedia: () => ({ matches: false }) },
+    document: fakeDocument(),
+    getScenePort: () => ({ addObject() { return true; }, removeObject() { return true; } }),
+    isSceneBound: () => true,
+    createPlayerView: ({ worldX, worldZ }) => {
+      projected = Object.freeze({ x: worldX(620), z: worldZ(370) });
+      return { attach() {}, render() {}, teardown() {}, diagnostics: () => Object.freeze({ id: "home-0", rigged: false }) };
+    },
+    createBallView: () => ({ attach() {}, render() {}, teardown() {}, diagnostics: () => Object.freeze({ attached: true }) }),
+    assetLoader: { loadCharacter: async () => ({}), loadAnimations: async () => ({}) },
+  });
+  adapter.attach();
+  const current = snapshot({ x: 620, ballX: 620 });
+  adapter.render(frame(current, current));
+  assert.deepEqual(projected, { x: 1, z: 1 });
+  assert.deepEqual(adapter.diagnostics().projection, {
+    profileId: DEFAULT_SIMULATION_SCALE_PROFILE.id,
+    width: 1200,
+    height: 700,
+    scale: .05,
+  });
+  adapter.teardown();
+});
 
 test("model adapter lazily attaches after the scene binds and renders immutable snapshot facts", async () => {
   const calls = []; const document = fakeDocument(); const target = { location: { search: "" }, navigator: { deviceMemory: 8 }, matchMedia: () => ({ matches: false }) };

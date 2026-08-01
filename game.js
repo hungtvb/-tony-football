@@ -11,6 +11,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
 import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "./src/game/config/simulationScaleProfile.js";
 import { createGameFeelController } from "./src/game/presentation/GameFeelController.js";
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
@@ -43,7 +44,12 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   const rctx = radar.getContext("2d");
   const W = canvas.width;
   const H = canvas.height;
-  const FIELD = { left: 48, right: 1152, top: 42, bottom: 658, goalTop: 265, goalBottom: 435 };
+  const SCALE_PROFILE = DEFAULT_SIMULATION_SCALE_PROFILE;
+  const FIELD = Object.freeze({
+    ...SCALE_PROFILE.field.bounds,
+    goalTop: SCALE_PROFILE.goal.mouthTop,
+    goalBottom: SCALE_PROFILE.goal.mouthBottom,
+  });
   const MATCH_SECONDS = 150;
   const HOME = 0;
   const AWAY = 1;
@@ -53,7 +59,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   const length = (x, y) => Math.hypot(x, y) || 1;
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
-  const WORLD_SCALE = .1;
+  const WORLD_SCALE = SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit;
   const playerViews = new Map();
   let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;

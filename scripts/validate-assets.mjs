@@ -13,6 +13,7 @@ const canvasSource = await readFile("src/game/presentation/CanvasMatchRenderer.j
 const cameraReplaySource = await readFile("src/game/presentation/SnapshotCameraReplayAdapter.js", "utf8");
 const settingsSource = await readFile("src/game/presentation/BrowserSettingsAdapter.js", "utf8");
 const effectsSource = await readFile("src/game/presentation/BrowserEffectsAdapter.js", "utf8");
+const gameSource = await readFile("game.js", "utf8");
 const entrySource = await readFile("browser-entry.js", "utf8"); const indexSource = await readFile("index.html", "utf8");
 if (character.bytes.length > 750_000) throw new Error(`${characterPath}: exceeds 750 KB budget`); if (animation.bytes.length > 750_000) throw new Error(`${animationPath}: exceeds 750 KB budget`);
 const unsupportedCharacterExtensions = (character.json.extensionsRequired || []).filter((extension) => extension !== "KHR_mesh_quantization"); if (unsupportedCharacterExtensions.length) throw new Error(`${characterPath}: unsupported required extensions: ${unsupportedCharacterExtensions.join(", ")}`);
@@ -26,8 +27,8 @@ const expectedClips = ["Idle_Loop", "Jog_Fwd_Loop", "Sprint_Loop", "Hit_Chest", 
 for (const [sourceName, source, contracts] of [
   ["simulationScaleProfile.js", scaleProfileSource, ["mini-6v6-metric-v1", "unitsPerMetre: 20", "representativeHeightMetres: 1.8", "radiusMetres: 0.11", "deepFreeze"]],
   ["PlayerAssetLoader.js", loaderSource, ["loader.setMeshoptDecoder(MeshoptDecoder)", "football-character-v2.glb?v=16.0.0", "football-animations-v2.glb?v=16.0.0"]],
-  ["BrowserModelViewAdapter.js", adapterSource, ["createSnapshotRenderState", "createDefaultPlayerAssetLoader", "disposePlayerAssetTemplate", "appearanceDiagnostics(playerViews)", "bootlessPlayers", "preservedMapPlayers"]],
-  ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "measureAndNormalizeRig", "representativeRigScale", "tonyScaleProfileId", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState"]],
+  ["BrowserModelViewAdapter.js", adapterSource, ["DEFAULT_SIMULATION_SCALE_PROFILE", "worldUnitsPerSimulationUnit", "profileId", "createSnapshotRenderState", "createDefaultPlayerAssetLoader", "disposePlayerAssetTemplate", "appearanceDiagnostics(playerViews)", "bootlessPlayers", "preservedMapPlayers"]],
+  ["PlayerModelView.js", playerSource, ["new THREE.AnimationMixer(model)", "measureAndNormalizeRig", "representativeRigScale", "tonyScaleProfileId", "projectedHeight", "createSemanticPlayerMaterial", "classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "applyFootballActionPose", "selectPlayerAnimationState"]],
   ["BallModelView.js", ballSource, ["new THREE.SphereGeometry(BALL_RADIUS, 48, 32)", "DEFAULT_SIMULATION_SCALE_PROFILE", "createBallSurfaceTextures", "chargeRoot"]],
   ["CanvasMatchRenderer.js", canvasSource, ["DEFAULT_SIMULATION_SCALE_PROFILE", "createSnapshotRenderState", "CanvasMatchRenderer requires an immutable frame", "canvas-match-renderer"]],
   ["SnapshotCameraReplayAdapter.js", cameraReplaySource, ["snapshot-camera-replay", "snapshot.match.replay", "match: current.match", "goalIncidentKey(snapshot)", "recordIncident(snapshot, key)", "playbackIncidentKey", "update() { return false; }"]],
@@ -35,6 +36,9 @@ for (const [sourceName, source, contracts] of [
   ["BrowserEffectsAdapter.js", effectsSource, ["browser effects owner already attached", "emitContextParticles", "projectTrail", "projectCharge", "projectionSequence"]],
 ]) for (const contract of contracts) if (!source.includes(contract)) throw new Error(`${sourceName}: missing presentation contract: ${contract}`);
 if (playerSource.includes("material.map = null")) throw new Error("PlayerModelView.js: semantic source texture maps must not be cleared");
+for (const contract of ["DEFAULT_SIMULATION_SCALE_PROFILE", "SCALE_PROFILE.field.bounds", "SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit"]) if (!gameSource.includes(contract)) throw new Error(`game.js: missing world-scale contract ${contract}`);
+if (gameSource.includes("const WORLD_SCALE = .1")) throw new Error("game.js: legacy WORLD_SCALE remains");
+if (adapterSource.includes("scale = 0.1")) throw new Error("BrowserModelViewAdapter.js: legacy projection scale remains");
 for (const pageContract of ["src/styles/app.css", "browser-entry.js?v=1.0.0", "class=\"match-hud\"", "class=\"overlay-card pre-match-card\"", "class=\"overlay-card pause-card\""]) if (!indexSource.includes(pageContract)) throw new Error(`index.html: missing match experience contract: ${pageContract}`);
 if (!entrySource.includes('await import("./generated/game.js?v=24.0.0")')) throw new Error("browser-entry.js: missing corrected TON-83 generated game entry import");
 for (const contract of ["createBrowserModelViewAdapter", "createCanvasMatchRenderer", "createSnapshotCameraReplayAdapter", "__TONY_CAMERA_REPLAY_BRIDGE__", "cameraReplay: projection", "cameraReplayConsumer: owner", "createBrowserSettingsAdapter", "createBrowserEffectsAdapter", "__TONY_SETTINGS_EFFECTS_BRIDGE__"]) if (!entrySource.includes(contract)) throw new Error(`browser-entry.js: missing presentation contract ${contract}`);

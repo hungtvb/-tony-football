@@ -724,6 +724,7 @@ export function createBrowserThreeSceneEnvironmentHost({
       composer: Boolean(composer),
       lowPowerDevice: Boolean(lowPowerDevice),
       profile: activeProfile.id,
+      geometry: activeProfile.geometry,
       pitchStyle: currentPitchStyle,
       weather: currentWeather,
       sceneObjects: scene?.children?.length ?? 0,

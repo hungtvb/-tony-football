@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures.mjs";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
 
 test("visual-test composition owns snapshot-driven fallback player and ball views", async ({ page }) => {
   await page.goto("/?visualTest=1&skipIntro=1", { waitUntil: "domcontentloaded" });
@@ -14,7 +15,7 @@ test("normal asset mode preserves source maps and renders explicit football clot
   // several seconds even after all asset and motion assertions are satisfied.
   // Keep the job bounded while allowing the unchanged acceptance proof to attach
   // its diagnostics and screenshot under that observed runner slowdown.
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   await page.goto("/?skipIntro=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const diagnostics = window.__TONY_MODEL_VIEW_BRIDGE__?.diagnostics?.();
@@ -34,6 +35,22 @@ test("normal asset mode preserves source maps and renders explicit football clot
     expect(player.rigKitNodes.map((node) => node.name)).toEqual(expect.arrayContaining(["TonyRigJersey", "TonyRigShorts", "TonyRigBootLeft", "TonyRigBootRight"]));
   }
   expect(result.scene.foreignObjects).toBeGreaterThanOrEqual(14);
+  expect(result.scene.geometry.worldScale).toBe(DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit);
+  expect(result.scene.geometry.goal.width).toBeCloseTo(DEFAULT_SIMULATION_SCALE_PROFILE.goal.frameWidthMetres, 5);
+  expect(result.scene.geometry.goal.height).toBeCloseTo(DEFAULT_SIMULATION_SCALE_PROFILE.goal.crossbarHeightMetres, 5);
+  expect(result.model.projection).toEqual({
+    profileId: DEFAULT_SIMULATION_SCALE_PROFILE.id,
+    width: DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldWidth,
+    height: DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+    scale: DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit,
+  });
+  for (const player of result.model.appearance.players) {
+    expect(player.scale?.profileId).toBe(DEFAULT_SIMULATION_SCALE_PROFILE.id);
+    expect(player.scale?.mode).toBe("measured-rig");
+    expect(player.scale?.measuredRigHeight).toBeGreaterThan(0);
+    expect(player.scale?.targetHeight).toBeCloseTo(DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits, 5);
+    expect(player.scale?.projectedHeight).toBeCloseTo(DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits, 4);
+  }
 
   await page.evaluate(() => document.getElementById("quickMatchButton")?.click());
   await page.waitForFunction(() => document.body.dataset.flow === "match-setup");
@@ -47,6 +64,8 @@ test("normal asset mode preserves source maps and renders explicit football clot
     appearance: window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().appearance,
     engineTick: window.__TONY_DEBUG__.diagnostics().engineSnapshot.tick,
     state: window.__TONY_DEBUG__.diagnostics().state,
+    projection: window.__TONY_MODEL_VIEW_BRIDGE__.diagnostics().projection,
+    sceneGeometry: window.__TONY_THREE_SCENE_BRIDGE__.diagnostics().geometry,
   }));
   expect(liveEvidence.state).toBe("playing"); expect(liveEvidence.engineTick).toBeGreaterThan(0);
   expect(liveEvidence.appearance.riggedPlayers).toBe(12); expect(liveEvidence.appearance.visibleKitPlayers).toBe(12); expect(liveEvidence.appearance.bootlessPlayers).toBe(0);
@@ -76,12 +95,24 @@ test("normal asset mode preserves source maps and renders explicit football clot
   expect(motionAfter.animationTimeScale).toBeGreaterThanOrEqual(.78);
   expect(motionAfter.animationTimeScale).toBeLessThanOrEqual(1.42);
   expect(Math.abs(motionAfter.snapshotX - motionBefore.snapshotX)).toBeGreaterThan(1);
-  expect(Math.abs((motionAfter.snapshotX - motionBefore.snapshotX) * .1 - (motionAfter.worldX - motionBefore.worldX))).toBeLessThan(.2);
+  expect(Math.abs((motionAfter.snapshotX - motionBefore.snapshotX) * DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit - (motionAfter.worldX - motionBefore.worldX))).toBeLessThan(.12);
   liveEvidence.motion = { before: motionBefore, after: motionAfter };
 
   const devtools = await page.context().newCDPSession(page);
-  const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+  const capturedModes = [];
+  const captureCamera = async (mode, attachmentName) => {
+    await page.waitForFunction((expected) => window.__TONY_CAMERA_REPLAY_BRIDGE__?.diagnostics?.().camera.mode === expected, mode);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+    await testInfo.attach(attachmentName, { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
+    capturedModes.push(mode);
+  };
+  await captureCamera("broadcast", "ton-87-world-scale-broadcast.png");
+  await page.keyboard.press("KeyB");
+  await captureCamera("close", "ton-87-world-scale-close.png");
+  await page.keyboard.press("KeyB");
+  await captureCamera("tactical", "ton-87-world-scale-tactical.png");
   await devtools.detach();
-  await testInfo.attach("ton-93-asset-appearance.json", { body: Buffer.from(JSON.stringify(liveEvidence, null, 2)), contentType: "application/json" });
-  await testInfo.attach("ton-93-live-asset-pitch.png", { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
+  liveEvidence.cameraModes = capturedModes;
+  await testInfo.attach("ton-87-world-scale-evidence.json", { body: Buffer.from(JSON.stringify(liveEvidence, null, 2)), contentType: "application/json" });
 });
