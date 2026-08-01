@@ -1,0 +1,89 @@
+name: TON-87 Publish Reviewer Contract Fixes
+
+on:
+  pull_request:
+    branches:
+      - ton87-publish-review-contract-fixes
+    paths:
+      - .github/ton87-review-contract-fixes-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out product branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-87-world-scale-contract
+          fetch-depth: 0
+          path: product
+
+      - name: Check out correction payload
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ton87-publish-review-contract-fixes
+          fetch-depth: 1
+          persist-credentials: false
+          path: payload
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: product/package-lock.json
+
+      - name: Apply reviewer correction
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_head='b7d9f2656ff8e901be49ff6d8a7e8a751c5600a6'
+          actual_head="$(git rev-parse HEAD)"
+          test "$actual_head" = "$expected_head"
+          git apply --check ../payload/.github/ton87-review-contract-fixes.patch
+          git apply ../payload/.github/ton87-review-contract-fixes.patch
+          git diff --check
+
+          expected_files="$(printf '%s\n' \
+            docs/20_WORLD_SCALE_CONTRACT.md \
+            docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md \
+            src/game/config/simulationScaleProfile.js \
+            src/game/engine/MatchState.js \
+            src/game/engine/PlayerMovementSystem.js \
+            tests/engine/SimulationScaleProfile.test.mjs \
+            tests/engine/WorldScaleContract.test.mjs | sort)"
+          actual_files="$(git status --porcelain | cut -c4- | sort)"
+          test "$actual_files" = "$expected_files"
+
+      - name: Verify corrected exact branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test:ci:fast
+
+      - name: Commit and push product branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'b7d9f2656ff8e901be49ff6d8a7e8a751c5600a6'
+          git config user.name 'tony-football-reviewer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            docs/20_WORLD_SCALE_CONTRACT.md \
+            docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md \
+            src/game/config/simulationScaleProfile.js \
+            src/game/engine/MatchState.js \
+            src/game/engine/PlayerMovementSystem.js \
+            tests/engine/SimulationScaleProfile.test.mjs \
+            tests/engine/WorldScaleContract.test.mjs
+          git commit -m 'fix(ton-87): enforce scale-profile world geometry'
+          git push origin HEAD:feat/ton-87-world-scale-contract
