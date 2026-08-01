@@ -1,0 +1,239 @@
+diff --git a/docs/20_WORLD_SCALE_CONTRACT.md b/docs/20_WORLD_SCALE_CONTRACT.md
+index 2006cac..095bf67 100644
+--- a/docs/20_WORLD_SCALE_CONTRACT.md
++++ b/docs/20_WORLD_SCALE_CONTRACT.md
+@@ -47,6 +47,7 @@ Diagnostics record the profile id, measured height, target height and applied sc
+ - Engine modules do not import Three.js or Canvas.
+ - Presentation geometry does not write engine dimensions.
+ - Goal line, post faces and crossbar underside derive from the same profile.
++- Runtime `width` and `height` must match the selected profile; dimensions cannot be overridden independently from collision and presentation geometry.
+ - A scale-profile change cannot alter fixed-step duration, command mapping or AI decision ownership.
+ - Lighting, camera framing and ball-flight tuning are not part of this contract.
+ 
+diff --git a/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md b/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md
+index f8d64c4..e6a8574 100644
+--- a/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md
++++ b/docs/adr/ADR-005-METRIC-MINI-6V6-WORLD-SCALE.md
+@@ -40,6 +40,7 @@ This yields a maximum scoring `ball.height` of `2.0 - 0.22 = 1.78 m`.
+ ## Consequences
+ 
+ - Goal, ball and player ratios become measurable and testable.
++- Runtime world dimensions must come from the selected profile; callers cannot independently resize `width` or `height`.
+ - Changing simulation density can preserve fixed-step timing, command ordering and AI/input authority.
+ - Player GLB scale no longer depends on an asset-specific magic number.
+ - Camera, lighting and ball-physics feel remain separate follow-up concerns.
+diff --git a/src/game/config/simulationScaleProfile.js b/src/game/config/simulationScaleProfile.js
+index 039860f..e479527 100644
+--- a/src/game/config/simulationScaleProfile.js
++++ b/src/game/config/simulationScaleProfile.js
+@@ -15,10 +15,16 @@ function positive(value, name) {
+   return value;
+ }
+ 
++function profileId(value) {
++  if (typeof value !== "string" || !value.trim()) {
++    throw new TypeError("Simulation scale profile requires a non-empty string id");
++  }
++  return value.trim();
++}
+ 
+ function cloneInput(input) {
+   return {
+-    id: String(input.id),
++    id: profileId(input.id),
+     simulation: { ...input.simulation },
+     field: {
+       ...input.field,
+@@ -75,7 +81,6 @@ function scaleMetres(value, unitsPerMetre) {
+ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
+   if (!input || typeof input !== "object") throw new TypeError("Simulation scale profile must be an object");
+   const source = cloneInput(input);
+-  if (!source.id) throw new TypeError("Simulation scale profile requires an id");
+ 
+   const { simulation, field, goal, player, ball } = source;
+   positive(simulation.worldWidth, "simulation.worldWidth");
+@@ -176,6 +181,25 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
+   return deepFreeze(profile);
+ }
+ 
++export function assertSimulationWorldDimensions(
++  width,
++  height,
++  profile = DEFAULT_SIMULATION_SCALE_PROFILE,
++) {
++  positive(width, "simulation world width");
++  positive(height, "simulation world height");
++  const expectedWidth = profile?.simulation?.worldWidth;
++  const expectedHeight = profile?.simulation?.worldHeight;
++  positive(expectedWidth, "scale profile simulation.worldWidth");
++  positive(expectedHeight, "scale profile simulation.worldHeight");
++  if (width !== expectedWidth || height !== expectedHeight) {
++    throw new RangeError(
++      `simulation world dimensions must match scale profile ${profile.id}: ${expectedWidth} × ${expectedHeight}`,
++    );
++  }
++  return profile;
++}
++
+ export function representativeRigScale(measuredHeightWorldUnits, profile = DEFAULT_SIMULATION_SCALE_PROFILE) {
+   positive(measuredHeightWorldUnits, "measured rig height");
+   return profile.player.representativeHeightWorldUnits / measuredHeightWorldUnits;
+diff --git a/src/game/engine/MatchState.js b/src/game/engine/MatchState.js
+index ca71df0..1b431a6 100644
+--- a/src/game/engine/MatchState.js
++++ b/src/game/engine/MatchState.js
+@@ -1,6 +1,9 @@
+ import { createPossessionLifecycle } from "../gameplay/PossessionLifecycle.js";
+ import { ballControlConfig } from "../config/ballControlConfig.js";
+-import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
++import {
++  assertSimulationWorldDimensions,
++  DEFAULT_SIMULATION_SCALE_PROFILE,
++} from "../config/simulationScaleProfile.js";
+ 
+ export const HOME_TEAM = 0;
+ export const AWAY_TEAM = 1;
+@@ -102,6 +105,7 @@ export function createMatchBall({
+   lock = 0,
+   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+ } = {}) {
++  assertSimulationWorldDimensions(width, height, scaleProfile);
+   return {
+     id: MATCH_BALL_ID,
+     x: width / 2,
+@@ -145,9 +149,7 @@ export function createMatchState({
+   if (!Number.isFinite(kickoffDelay) || kickoffDelay < 0) {
+     throw new RangeError("kickoffDelay must be a non-negative finite number");
+   }
+-  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+-    throw new RangeError("match dimensions must be positive finite numbers");
+-  }
++  assertSimulationWorldDimensions(width, height, scaleProfile);
+ 
+   const players = createMatchPlayers(formations, scaleProfile);
+   return {
+@@ -199,6 +201,7 @@ export function resetForKickoff(state, team, {
+   height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+ } = {}) {
++  assertSimulationWorldDimensions(width, height, scaleProfile);
+   const freshPlayers = createMatchPlayers({
+     home: state.players.filter((player) => player.team === HOME_TEAM).map((player) => ({
+       x: player.baseX,
+diff --git a/src/game/engine/PlayerMovementSystem.js b/src/game/engine/PlayerMovementSystem.js
+index d2f4455..00d4543 100644
+--- a/src/game/engine/PlayerMovementSystem.js
++++ b/src/game/engine/PlayerMovementSystem.js
+@@ -1,5 +1,8 @@
+ import { locomotionConfig } from "../config/locomotionConfig.js";
+-import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
++import {
++  assertSimulationWorldDimensions,
++  DEFAULT_SIMULATION_SCALE_PROFILE,
++} from "../config/simulationScaleProfile.js";
+ import {
+   chooseSprintTransitionResponse,
+   chooseTurnResponse,
+@@ -18,26 +21,25 @@ export function createFieldBounds(
+   height = DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldHeight,
+   scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+ ) {
+-  const widthScale = width / scaleProfile.simulation.worldWidth;
+-  const heightScale = height / scaleProfile.simulation.worldHeight;
++  assertSimulationWorldDimensions(width, height, scaleProfile);
+   const bounds = scaleProfile.field.bounds;
+-  const centreY = height / 2;
+-  const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation * heightScale / 2;
+-  const ballRadiusY = scaleProfile.ball.radiusSimulation * heightScale;
++  const centreY = scaleProfile.field.centre.y;
++  const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation / 2;
++  const ballRadiusY = scaleProfile.ball.radiusSimulation;
+   return Object.freeze({
+-    left: bounds.left * widthScale,
+-    right: bounds.right * widthScale,
+-    top: bounds.top * heightScale,
+-    bottom: bounds.bottom * heightScale,
++    left: bounds.left,
++    right: bounds.right,
++    top: bounds.top,
++    bottom: bounds.bottom,
+     goalTop: centreY - mouthHalfHeight,
+     goalBottom: centreY + mouthHalfHeight,
+     scoringGoalTop: centreY - mouthHalfHeight + ballRadiusY,
+     scoringGoalBottom: centreY + mouthHalfHeight - ballRadiusY,
+     goalCrossbarHeight: scaleProfile.goal.crossbarHeightMetres,
+     goalScoringMaxBallHeight: scaleProfile.goal.scoringMaxBallHeightMetres,
+-    goalDepth: scaleProfile.goal.depthSimulation * widthScale,
+-    goalPostThickness: scaleProfile.goal.postThicknessSimulation * heightScale,
+-    goalkeeperDepth: scaleProfile.field.markings.penaltyAreaDepthSimulation * widthScale,
++    goalDepth: scaleProfile.goal.depthSimulation,
++    goalPostThickness: scaleProfile.goal.postThicknessSimulation,
++    goalkeeperDepth: scaleProfile.field.markings.penaltyAreaDepthSimulation,
+     scaleProfileId: scaleProfile.id,
+   });
+ }
+diff --git a/tests/engine/SimulationScaleProfile.test.mjs b/tests/engine/SimulationScaleProfile.test.mjs
+index 71f6904..e5b3ebf 100644
+--- a/tests/engine/SimulationScaleProfile.test.mjs
++++ b/tests/engine/SimulationScaleProfile.test.mjs
+@@ -63,3 +63,16 @@ test("simulation scale profile rejects geometry that cannot fit", () => {
+   input.goal.mouthWidthMetres = 40;
+   assert.throws(() => createSimulationScaleProfile(input), /goal mouth must be narrower/);
+ });
++
++test("simulation scale profile requires a non-empty string id", () => {
++  const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
++  delete input.simulation.worldUnitsPerSimulationUnit;
++
++  for (const id of [undefined, null, "", "   ", 87]) {
++    input.id = id;
++    assert.throws(
++      () => createSimulationScaleProfile(input),
++      /non-empty string id/,
++    );
++  }
++});
+diff --git a/tests/engine/WorldScaleContract.test.mjs b/tests/engine/WorldScaleContract.test.mjs
+index a661735..07a68c7 100644
+--- a/tests/engine/WorldScaleContract.test.mjs
++++ b/tests/engine/WorldScaleContract.test.mjs
+@@ -8,7 +8,7 @@ import {
+ import { advanceBallSimulation } from "../../src/game/engine/BallSimulationSystem.js";
+ import { GameCommandType } from "../../src/game/engine/GameCommands.js";
+ import { MatchEngine } from "../../src/game/engine/MatchEngine.js";
+-import { createMatchState } from "../../src/game/engine/MatchState.js";
++import { createMatchBall, createMatchState } from "../../src/game/engine/MatchState.js";
+ import { createFieldBounds } from "../../src/game/engine/PlayerMovementSystem.js";
+ import { DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE } from "../../src/game/presentation/ThreeSceneEnvironmentProfile.js";
+ 
+@@ -102,3 +102,30 @@ test("changing metric density preserves fixed-step timing and command response",
+   assert.equal(normal.snapshot.match.controls.moveX, dense.snapshot.match.controls.moveX);
+   assert.equal(normal.snapshot.match.controls.moveY, dense.snapshot.match.controls.moveY);
+ });
++
++test("engine goal mouth follows the scale profile field centre", () => {
++  const input = structuredClone(DEFAULT_SIMULATION_SCALE_PROFILE);
++  delete input.simulation.worldUnitsPerSimulationUnit;
++  input.id = "shifted-field-centre";
++  input.field.bounds = { left: 48, right: 1152, top: 50, bottom: 550 };
++  const profile = createSimulationScaleProfile(input);
++  const field = createFieldBounds(
++    profile.simulation.worldWidth,
++    profile.simulation.worldHeight,
++    profile,
++  );
++
++  assert.equal(profile.field.centre.y, 300);
++  assert.equal(field.goalTop, profile.goal.mouthTop);
++  assert.equal(field.goalBottom, profile.goal.mouthBottom);
++  assert.equal(field.scoringGoalTop, profile.goal.scoringMouthTop);
++  assert.equal(field.scoringGoalBottom, profile.goal.scoringMouthBottom);
++});
++
++test("runtime dimensions cannot diverge from the selected scale profile", () => {
++  const mismatch = /simulation world dimensions must match scale profile/;
++  assert.throws(() => createFieldBounds(600, 350), mismatch);
++  assert.throws(() => createMatchBall({ width: 600, height: 350 }), mismatch);
++  assert.throws(() => createMatchState({ width: 600, height: 350 }), mismatch);
++  assert.throws(() => new MatchEngine({ width: 600, height: 350 }), mismatch);
++});
