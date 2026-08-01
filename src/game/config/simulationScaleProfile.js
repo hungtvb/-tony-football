@@ -46,16 +46,16 @@ const DEFAULT_INPUT = {
     worldUnitsPerMetre: 1,
   },
   field: {
-    bounds: { left: 48, right: 1152, top: 42, bottom: 658 },
+    bounds: { left: 100, right: 1100, top: 30, bottom: 670 },
     markings: {
-      centreCircleRadiusMetres: 5,
+      centreCircleRadiusMetres: 3,
       centreSpotRadiusMetres: 0.15,
-      penaltyAreaDepthMetres: 10,
-      penaltyAreaWidthMetres: 22,
+      penaltyAreaDepthMetres: 6,
+      penaltyAreaWidthMetres: 12,
       goalAreaDepthMetres: 4,
       goalAreaWidthMetres: 10,
-      penaltyMarkDistanceMetres: 8,
-      lineWidthMetres: 0.1,
+      penaltyMarkDistanceMetres: 6,
+      lineWidthMetres: 0.08,
     },
   },
   goal: {
@@ -113,6 +113,16 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
   const worldUnitsPerSimulationUnit = simulation.worldUnitsPerMetre / unitsPerMetre;
   const fieldWidthSimulation = field.bounds.right - field.bounds.left;
   const fieldHeightSimulation = field.bounds.bottom - field.bounds.top;
+  const fieldLengthMetres = fieldWidthSimulation / unitsPerMetre;
+  const fieldWidthMetres = fieldHeightSimulation / unitsPerMetre;
+  const fieldAspectRatio = fieldLengthMetres / fieldWidthMetres;
+  const fieldAreaSquareMetres = fieldLengthMetres * fieldWidthMetres;
+  const worldLengthMetres = simulation.worldWidth / unitsPerMetre;
+  const worldWidthMetres = simulation.worldHeight / unitsPerMetre;
+  const runoffMetres = {
+    behindGoal: (worldLengthMetres - fieldLengthMetres) / 2,
+    touchline: (worldWidthMetres - fieldWidthMetres) / 2,
+  };
   const fieldCentreX = (field.bounds.left + field.bounds.right) / 2;
   const fieldCentreY = (field.bounds.top + field.bounds.bottom) / 2;
   const worldCentreX = simulation.worldWidth / 2;
@@ -130,6 +140,26 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
   if (goalMouthWidthSimulation >= fieldHeightSimulation) {
     throw new RangeError("goal mouth must be narrower than the field");
   }
+  if (fieldLengthMetres <= fieldWidthMetres) {
+    throw new RangeError("field touchline length must be greater than goal-line width");
+  }
+  if (runoffMetres.behindGoal <= 0 || runoffMetres.touchline <= 0) {
+    throw new RangeError("field bounds must leave positive runoff inside the simulation world");
+  }
+  if (field.markings.centreCircleRadiusMetres * 2 >= fieldWidthMetres) {
+    throw new RangeError("centre circle must fit inside the field width");
+  }
+  if (field.markings.penaltyAreaDepthMetres * 2 >= fieldLengthMetres
+    || field.markings.penaltyAreaWidthMetres >= fieldWidthMetres) {
+    throw new RangeError("penalty areas must fit inside the field");
+  }
+  if (field.markings.goalAreaDepthMetres > field.markings.penaltyAreaDepthMetres
+    || field.markings.goalAreaWidthMetres > field.markings.penaltyAreaWidthMetres) {
+    throw new RangeError("goal area must fit inside the penalty area");
+  }
+  if (field.markings.penaltyMarkDistanceMetres > field.markings.penaltyAreaDepthMetres) {
+    throw new RangeError("penalty mark must remain inside the penalty area");
+  }
 
   const profile = {
     id: source.id,
@@ -140,8 +170,11 @@ export function createSimulationScaleProfile(input = DEFAULT_INPUT) {
     field: {
       bounds: field.bounds,
       centre: { x: fieldCentreX, y: fieldCentreY },
-      lengthMetres: fieldWidthSimulation / unitsPerMetre,
-      widthMetres: fieldHeightSimulation / unitsPerMetre,
+      lengthMetres: fieldLengthMetres,
+      widthMetres: fieldWidthMetres,
+      aspectRatio: fieldAspectRatio,
+      areaSquareMetres: fieldAreaSquareMetres,
+      runoffMetres,
       markings: {
         ...field.markings,
         centreCircleRadiusSimulation: scaleMetres(field.markings.centreCircleRadiusMetres, unitsPerMetre),

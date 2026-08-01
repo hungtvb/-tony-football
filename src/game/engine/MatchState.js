@@ -23,7 +23,7 @@ function freezeFormation(formation) {
 
 export const DEFAULT_FORMATIONS = Object.freeze({
   home: freezeFormation([
-    { x: 90, y: 350, role: "GK", name: "KAI", number: 1, rating: 86 },
+    { x: 140, y: 350, role: "GK", name: "KAI", number: 1, rating: 86 },
     { x: 270, y: 205, role: "DF", name: "MINH", number: 4, rating: 87 },
     { x: 270, y: 495, role: "DF", name: "NAM", number: 5, rating: 86 },
     { x: 500, y: 350, role: "MF", name: "HÙNG", number: 8, rating: 90 },
@@ -31,7 +31,7 @@ export const DEFAULT_FORMATIONS = Object.freeze({
     { x: 690, y: 495, role: "FW", name: "PHÚC", number: 11, rating: 89 }
   ]),
   away: freezeFormation([
-    { x: 1110, y: 350, role: "GK", name: "NOVA", number: 1, rating: 87 },
+    { x: 1060, y: 350, role: "GK", name: "NOVA", number: 1, rating: 87 },
     { x: 930, y: 205, role: "DF", name: "VEX", number: 3, rating: 88 },
     { x: 930, y: 495, role: "DF", name: "ZERO", number: 5, rating: 87 },
     { x: 700, y: 350, role: "MF", name: "ECHO", number: 8, rating: 91 },

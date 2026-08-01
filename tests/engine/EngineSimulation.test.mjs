@@ -116,7 +116,8 @@ test("player collisions and field bounds resolve in headless state", () => {
   advancePlayerMovement(state, FIXED_DELTA);
 
   const distance = Math.hypot(first.x - second.x, first.y - second.y);
-  assert.ok(bounded.x >= 48 + bounded.radius + 5);
-  assert.ok(bounded.y >= 42 + bounded.radius + 5);
+  const field = createFieldBounds();
+  assert.ok(bounded.x >= field.left + bounded.radius + 5);
+  assert.ok(bounded.y >= field.top + bounded.radius + 5);
   assert.ok(distance >= first.radius + second.radius + 3 - 1e-9);
 });

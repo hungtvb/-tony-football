@@ -1,14 +1,12 @@
 import { cameraHudConfig } from "../config/cameraHudConfig.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
 import {
   claimRadarSnapshotContext,
   renderOwnedRadarSnapshot,
 } from "./RadarSnapshotRenderer.js";
 
 export const DEFAULT_RADAR_FIELD = Object.freeze({
-  left: 48,
-  right: 1152,
-  top: 42,
-  bottom: 658,
+  ...DEFAULT_SIMULATION_SCALE_PROFILE.field.bounds,
 });
 
 function requireDocument(document) {

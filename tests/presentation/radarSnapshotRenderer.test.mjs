@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
 import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
 import { renderRadarSnapshot } from "../../src/game/presentation/RadarSnapshotRenderer.js";
 
@@ -20,13 +21,15 @@ function createFakeContext() {
   };
 }
 
+const FIELD = DEFAULT_SIMULATION_SCALE_PROFILE.field.bounds;
+
 test("radar renderer maps immutable snapshot markers and selected identity to pitch bounds", () => {
   const snapshot = createMatchSnapshot({
     tick: 1,
     match: { selectedPlayerId: "home-4" },
     players: [
-      { id: "home-4", team: 0, x: 48, y: 42 },
-      { id: "away-4", team: 1, x: 1152, y: 658 }
+      { id: "home-4", team: 0, x: FIELD.left, y: FIELD.top },
+      { id: "away-4", team: 1, x: FIELD.right, y: FIELD.bottom }
     ],
     ball: { id: "match-ball", ownerId: "home-4", x: 600, y: 350 }
   });
@@ -36,7 +39,7 @@ test("radar renderer maps immutable snapshot markers and selected identity to pi
   renderRadarSnapshot(context, snapshot, {
     width: 200,
     height: 100,
-    field: { left: 48, right: 1152, top: 42, bottom: 658 },
+    field: FIELD,
     config
   });
 

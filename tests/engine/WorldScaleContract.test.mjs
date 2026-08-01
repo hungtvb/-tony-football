@@ -29,6 +29,10 @@ test("engine and WebGL geometry derive field and goal dimensions from the same p
   assert.equal(webgl.goal.mouthWidth, scale.goal.mouthWidthMetres);
   assert.equal(webgl.goal.height, field.goalCrossbarHeight);
   assert.equal(webgl.goal.depth, scale.goal.depthMetres);
+  assert.equal(scale.field.lengthMetres, 50);
+  assert.equal(scale.field.widthMetres, 32);
+  assert.equal(scale.field.aspectRatio, 1.5625);
+  assert.deepEqual(scale.field.runoffMetres, { behindGoal: 5, touchline: 1.5 });
 });
 
 test("goal scoring requires the whole ball to cross inside the posts and below the crossbar", () => {
@@ -109,7 +113,7 @@ test("runtime defaults derive world dimensions from the selected profile", () =>
   input.id = "larger-centred-world";
   input.simulation.worldWidth = 1400;
   input.simulation.worldHeight = 800;
-  input.field.bounds = { left: 148, right: 1252, top: 92, bottom: 708 };
+  input.field.bounds = { left: 200, right: 1200, top: 80, bottom: 720 };
   const profile = createSimulationScaleProfile(input);
 
   const field = createFieldBounds(undefined, undefined, profile);
@@ -133,4 +137,15 @@ test("runtime dimensions cannot diverge from the selected scale profile", () => 
   assert.throws(() => createMatchBall({ width: 600, height: 350 }), mismatch);
   assert.throws(() => createMatchState({ width: 600, height: 350 }), mismatch);
   assert.throws(() => new MatchEngine({ width: 600, height: 350 }), mismatch);
+});
+
+test("default 6v6 formations start inside the calibrated field", () => {
+  const field = createFieldBounds();
+  const state = createMatchState();
+  for (const player of state.players) {
+    assert.ok(player.x >= field.left + player.radius, `${player.id} starts left of the playable field`);
+    assert.ok(player.x <= field.right - player.radius, `${player.id} starts right of the playable field`);
+    assert.ok(player.y >= field.top + player.radius, `${player.id} starts above the playable field`);
+    assert.ok(player.y <= field.bottom - player.radius, `${player.id} starts below the playable field`);
+  }
 });

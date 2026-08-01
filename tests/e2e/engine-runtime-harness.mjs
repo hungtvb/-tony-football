@@ -54,7 +54,7 @@ export async function installNaturalGoalRuntimeHarness(page) {
     const response = await route.fetch();
     const source = await response.text();
     const originalAwayFormation = `    away: [
-      [1110, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
+      [1060, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
       [700, 350, "MF", "ECHO", 8, 91], [520, 205, "FW", "BLAZE", 9, 92], [520, 495, "FW", "RUSH", 11, 90]
     ]`;
     const deterministicAwayFormation = `    away: [
