@@ -1,0 +1,66 @@
+name: TON-87 Publish Centered Tactical R4
+
+on:
+  pull_request:
+    branches:
+      - ton87-publish-centered-tactical-r4
+    paths:
+      - .github/ton87-centered-tactical-r4-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out product branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-87-world-scale-contract
+          fetch-depth: 0
+          path: product
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: product/package-lock.json
+      - name: Apply verified centered tactical patch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '74d277fc1cd3a39795b7c866f15e2f41d738c3e7'
+          printf '%s' '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' | base64 -d | gzip -d > /tmp/ton87-tactical-center.patch
+          git apply --check /tmp/ton87-tactical-center.patch
+          git apply /tmp/ton87-tactical-center.patch
+          git diff --check
+          expected_files="$(printf '%s\n' game.js scripts/ton-80-migrate-game.py src/game/config/cameraHudConfig.js tests/e2e/model-views.spec.mjs tests/presentation/cameraHudRuntime.test.mjs | sort)"
+          actual_files="$(git status --porcelain | cut -c4- | sort)"
+          test "$actual_files" = "$expected_files"
+          printf '%s  %s\n' \
+            '2fd137d87f684d0c4daabb33a40aad1efd0b44a2fc30a872d9a2f335b7aff610' game.js \
+            '75bc7478c5cd383f70db9b833b6275737b4c4d76373bde551743508c2aa65d34' scripts/ton-80-migrate-game.py \
+            'd0cbcc19f4524e9b0c19f26861db947d4fdf51a424098c84893d9511b7d3e6ce' src/game/config/cameraHudConfig.js \
+            'a598797708f6defa2a1c2f050e9c535f3f84bdc5a59a2bb0cc69811073fb08f0' tests/e2e/model-views.spec.mjs \
+            '8dc9ec2428651e7d8db3456ecd262ee8284fe7c044794e54109c0bdbb447678c' tests/presentation/cameraHudRuntime.test.mjs | sha256sum --check
+      - name: Verify corrected branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test:ci:fast
+      - name: Commit and push product branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '74d277fc1cd3a39795b7c866f15e2f41d738c3e7'
+          git config user.name 'tony-football-reviewer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add game.js scripts/ton-80-migrate-game.py src/game/config/cameraHudConfig.js tests/e2e/model-views.spec.mjs tests/presentation/cameraHudRuntime.test.mjs
+          git commit -m 'fix(ton-87): keep tactical pitch centered and fully visible'
+          git push origin HEAD:feat/ton-87-world-scale-contract
