@@ -1,0 +1,66 @@
+name: TON-87 Publish Framing Margin R3
+
+on:
+  pull_request:
+    branches:
+      - ton87-publish-framing-margin-r3
+    paths:
+      - .github/ton87-framing-margin-r3-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out product branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-87-world-scale-contract
+          fetch-depth: 0
+          path: product
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: product/package-lock.json
+      - name: Apply verified framing margin patch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '36d47c51a1508a98bfa4c7998ce743c061d82c5d'
+          printf '%s' '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' | base64 -d | gzip -d > /tmp/ton87-framing-r3.patch
+          git apply --check /tmp/ton87-framing-r3.patch
+          git apply /tmp/ton87-framing-r3.patch
+          git diff --check
+          expected_files="$(printf '%s\n' src/game/config/cameraHudConfig.js src/game/presentation/ThreeSceneEnvironmentProfile.js tests/e2e/model-views.spec.mjs tests/presentation/cameraHudRuntime.test.mjs tests/presentation/threeSceneEnvironmentProfile.test.mjs | sort)"
+          actual_files="$(git status --porcelain | cut -c4- | sort)"
+          test "$actual_files" = "$expected_files"
+          printf '%s  %s\n' \
+            'bb9d2e32e3306c39a921158e90538178da6aab3467ddef32b7fb54215b7c785f' src/game/config/cameraHudConfig.js \
+            'b8d1b46b06b89fe3685e0e432c6dc3ae26ef022b461ccad32fc68473d5170ade' src/game/presentation/ThreeSceneEnvironmentProfile.js \
+            'dde0a1528071ea8d378efad7ea4312ed85dc0d9cacd168eda923ff536f1123ea' tests/e2e/model-views.spec.mjs \
+            'eceb3b43fb2c992b43c823cda9ca6e2b73a88228c27c5b5358f3c4f1ccc6ea73' tests/presentation/cameraHudRuntime.test.mjs \
+            '1519a91898e86d56e3bc242e03a489b4e10128193cf30d83d271d419fd83518d' tests/presentation/threeSceneEnvironmentProfile.test.mjs | sha256sum --check
+      - name: Verify corrected branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test:ci:fast
+      - name: Commit and push product branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '36d47c51a1508a98bfa4c7998ce743c061d82c5d'
+          git config user.name 'tony-football-reviewer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/game/config/cameraHudConfig.js src/game/presentation/ThreeSceneEnvironmentProfile.js tests/e2e/model-views.spec.mjs tests/presentation/cameraHudRuntime.test.mjs tests/presentation/threeSceneEnvironmentProfile.test.mjs
+          git commit -m 'fix(ton-87): add framing margin and preserve failed evidence'
+          git push origin HEAD:feat/ton-87-world-scale-contract
