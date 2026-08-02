@@ -1,0 +1,91 @@
+name: TON-87 Publish Pitch Dominant Framing R2
+
+on:
+  pull_request:
+    branches:
+      - ton87-publish-pitch-dominant-framing-r2
+    paths:
+      - .github/ton87-pitch-dominant-framing-r2-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out product branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/ton-87-world-scale-contract
+          fetch-depth: 0
+          path: product
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: product/package-lock.json
+
+      - name: Apply pitch-dominant framing patch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_head='dd05a128cbcd5fde5cd9a8960339f7107989aa65'
+          test "$(git rev-parse HEAD)" = "$expected_head"
+          printf '%s' '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' | base64 -d | gzip -d > /tmp/ton87-framing.patch
+          git apply --check /tmp/ton87-framing.patch
+          git apply /tmp/ton87-framing.patch
+          git diff --check
+          expected_files="$(printf '%s\n' \
+            game.js \
+            scripts/ton-80-migrate-game.py \
+            src/game/config/cameraHudConfig.js \
+            src/game/presentation/BrowserThreeSceneEnvironmentHost.js \
+            src/game/presentation/ThreeSceneEnvironmentProfile.js \
+            tests/e2e/model-views.spec.mjs \
+            tests/presentation/cameraHudRuntime.test.mjs \
+            tests/presentation/threeSceneEnvironmentProfile.test.mjs | sort)"
+          actual_files="$(git status --porcelain | cut -c4- | sort)"
+          test "$actual_files" = "$expected_files"
+          printf '%s  %s\n' \
+            '20918381437ada04f3b4602db018801f4a821230e26f37fe93f5f8d8d1b9ba23' game.js \
+            '486549b3f7f1c0ab6e28016f36decf448361a2c63a28515e33b0954daeb284ac' scripts/ton-80-migrate-game.py \
+            '3045fd70f23bb8814bdaddfb84dab61ad8ae040300ca6c23b755e3ee81d81cca' src/game/config/cameraHudConfig.js \
+            '3f3ba063daa4e774a56f4096a67ce88f1c8f34f833a1f4a870e8b05c911270ee' src/game/presentation/BrowserThreeSceneEnvironmentHost.js \
+            '0f34e8ce408dabdd518189c72e6a0615a21a2d3fb78d639585e3ff8345484d6a' src/game/presentation/ThreeSceneEnvironmentProfile.js \
+            'e83526fbbd9b2fb4347663681eb7dd26a5f3890239f43f378594e65e505bdb59' tests/e2e/model-views.spec.mjs \
+            '7f6599dc542c4552d7c8a198fdd938265c230016ce71e09272f72556c444c4de' tests/presentation/cameraHudRuntime.test.mjs \
+            'a3ef288ce6e1b81c6f3ab794e021b8e43eee26656610285bf795caf7dcd227b0' tests/presentation/threeSceneEnvironmentProfile.test.mjs | sha256sum --check
+
+      - name: Verify corrected branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run test:ci:fast
+
+      - name: Commit and push product branch
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 'dd05a128cbcd5fde5cd9a8960339f7107989aa65'
+          git config user.name 'tony-football-reviewer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            game.js \
+            scripts/ton-80-migrate-game.py \
+            src/game/config/cameraHudConfig.js \
+            src/game/presentation/BrowserThreeSceneEnvironmentHost.js \
+            src/game/presentation/ThreeSceneEnvironmentProfile.js \
+            tests/e2e/model-views.spec.mjs \
+            tests/presentation/cameraHudRuntime.test.mjs \
+            tests/presentation/threeSceneEnvironmentProfile.test.mjs
+          git commit -m 'fix(ton-87): make pitch dominant in match framing'
+          git push origin HEAD:feat/ton-87-world-scale-contract
