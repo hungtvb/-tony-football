@@ -106,14 +106,16 @@ test("normal asset mode preserves source maps and renders explicit football clot
     const scene = await page.evaluate(() => window.__TONY_THREE_SCENE_BRIDGE__.diagnostics());
     expect(scene.cameraPose).toBeTruthy();
     expect(scene.pitchCoverage).toBeTruthy();
+    const evidence = { mode, cameraPose: scene.cameraPose, pitchCoverage: scene.pitchCoverage, stadium: scene.stadium };
+    const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+    await testInfo.attach(attachmentName, { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
+    await testInfo.attach(`${mode}-pitch-coverage.json`, { body: Buffer.from(JSON.stringify(evidence, null, 2)), contentType: "application/json" });
+    capturedModes.push(evidence);
     if (minimumCoverage) {
       expect(scene.pitchCoverage.widthRatio, `${mode} pitch width coverage`).toBeGreaterThanOrEqual(minimumCoverage.width);
       expect(scene.pitchCoverage.heightRatio, `${mode} pitch height coverage`).toBeGreaterThanOrEqual(minimumCoverage.height);
       expect(scene.pitchCoverage.boundingAreaRatio, `${mode} pitch bounding-area coverage`).toBeGreaterThanOrEqual(minimumCoverage.area);
     }
-    const screenshot = await devtools.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
-    await testInfo.attach(attachmentName, { body: Buffer.from(screenshot.data, "base64"), contentType: "image/png" });
-    capturedModes.push({ mode, cameraPose: scene.cameraPose, pitchCoverage: scene.pitchCoverage, stadium: scene.stadium });
   };
   await captureCamera("broadcast", "ton-87-world-scale-broadcast.png", { width: .82, height: .48, area: .4 });
   await page.keyboard.press("KeyB");
