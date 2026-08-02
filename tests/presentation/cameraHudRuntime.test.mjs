@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { cameraHudConfig } from "../../src/game/config/cameraHudConfig.js";
 import test from "node:test";
 
 const game = await readFile(new URL("../../game.js", import.meta.url), "utf8");
@@ -38,12 +39,16 @@ test("snapshot camera controller removes the legacy speed zoom-in formula", () =
   assert.match(cameraController, /cameraFrameTarget/);
 });
 
-test("WebGL broadcast camera consumes the framed camera target", () => {
+test("WebGL camera modes use pitch-dominant shared framing", () => {
   const source = functionSource("render3D", "drawFallbackPlayerDetail");
   assert.match(source, /cameraController\.state/);
-  assert.match(source, /cameraState\.x/);
-  assert.match(source, /cameraState\.y/);
-  assert.match(source, /zoomScale/);
+  assert.match(source, /cameraHudConfig\.three\.broadcast/);
+  assert.match(source, /cameraHudConfig\.three\.tactical/);
+  assert.match(source, /cameraHudConfig\.three\.close/);
+  assert.equal(cameraHudConfig.three.broadcast.height, 43);
+  assert.equal(cameraHudConfig.three.broadcast.distance, 44);
+  assert.equal(cameraHudConfig.three.tactical.height, 48);
+  assert.equal(cameraHudConfig.three.tactical.distance, 23);
 });
 
 test("radar plot contains no text rendering and uses configured markers", () => {

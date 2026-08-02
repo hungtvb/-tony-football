@@ -27,6 +27,8 @@ test("default Three scene environment profile is deeply frozen and preserves app
   assert.equal(profile.geometry.markings.goalAreaWidthSimulation, 200);
   assert.equal(profile.geometry.markings.penaltyMarkDistanceSimulation, 120);
   assert.equal(profile.geometry.markings.lineWidthSimulation, 1.6);
+  assert.deepEqual(profile.camera.position, { x: 0, y: 43, z: 44 });
+  assert.deepEqual(profile.camera.lowPowerPosition, { x: 0, y: 48, z: 50 });
   assert.equal(profile.renderer.exposure, 1.12);
   assert.equal(profile.pitchStyles.midnight.environment.exposure, 1.22);
   assert.equal(Object.isFrozen(profile), true);

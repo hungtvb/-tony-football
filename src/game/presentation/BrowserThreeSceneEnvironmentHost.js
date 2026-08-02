@@ -17,6 +17,69 @@ const lerp = (start, end, amount) => start + (end - start) * amount;
 const worldX = (value, geometry) => (value - geometry.worldWidth / 2) * geometry.worldScale;
 const worldZ = (value, geometry) => (value - geometry.worldHeight / 2) * geometry.worldScale;
 
+
+function stadiumEnvelope(profile) {
+  const { geometry } = profile;
+  const worldHalfX = geometry.worldWidth * geometry.worldScale / 2;
+  const worldHalfZ = geometry.worldHeight * geometry.worldScale / 2;
+  return Object.freeze({
+    sidelineStandZ: worldHalfZ + 6.5,
+    endlineStandX: worldHalfX + 6.5,
+    canopyZ: worldHalfZ + 4.5,
+    ledZ: worldHalfZ + 4,
+    roofZ: worldHalfZ + 12.5,
+    roofX: worldHalfX + 12.5,
+    tunnelZ: worldHalfZ + 6,
+    mastX: worldHalfX + 2,
+    mastZ: worldHalfZ + 5,
+  });
+}
+
+function pitchViewportCoverage(camera, profile) {
+  if (!camera) return null;
+  const { geometry } = profile;
+  const { field } = geometry;
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+  const corners = [
+    [field.left, field.top],
+    [field.right, field.top],
+    [field.right, field.bottom],
+    [field.left, field.bottom],
+  ].map(([x, z]) => {
+    const projected = new THREE.Vector3(worldX(x, geometry), 0, worldZ(z, geometry)).project(camera);
+    return Object.freeze({ x: projected.x, y: projected.y, z: projected.z });
+  });
+  if (!corners.every((corner) => Number.isFinite(corner.x) && Number.isFinite(corner.y) && Number.isFinite(corner.z))) return null;
+
+  const xs = corners.map((corner) => corner.x);
+  const ys = corners.map((corner) => corner.y);
+  const raw = Object.freeze({
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.max(...ys),
+    bottom: Math.min(...ys),
+  });
+  const visible = Object.freeze({
+    left: Math.max(-1, raw.left),
+    right: Math.min(1, raw.right),
+    top: Math.min(1, raw.top),
+    bottom: Math.max(-1, raw.bottom),
+  });
+  const widthRatio = Math.max(0, visible.right - visible.left) / 2;
+  const heightRatio = Math.max(0, visible.top - visible.bottom) / 2;
+  return Object.freeze({
+    widthRatio,
+    heightRatio,
+    boundingAreaRatio: widthRatio * heightRatio,
+    fullyVisible: corners.every((corner) => Math.abs(corner.x) <= 1 && Math.abs(corner.y) <= 1 && corner.z >= -1 && corner.z <= 1),
+    visibleCornerCount: corners.filter((corner) => Math.abs(corner.x) <= 1 && Math.abs(corner.y) <= 1 && corner.z >= -1 && corner.z <= 1).length,
+    raw,
+    visible,
+    corners: Object.freeze(corners),
+  });
+}
+
 function seededNoise(seed) {
   const value = Math.sin(seed * 12.9898) * 43758.5453;
   return value - Math.floor(value);
@@ -120,6 +183,7 @@ function createPitchTexture({ document, renderer, style, profile }) {
 }
 
 function addPitchDetails(scene, profile) {
+  const envelope = stadiumEnvelope(profile);
   const poleMaterial = new THREE.MeshStandardMaterial({ color: 0xe9efec, metalness: 0.62, roughness: 0.32 });
   const flagColors = [0xe1bb58, 0x47c9d4, 0x47c9d4, 0xe1bb58];
   const { geometry } = profile;
@@ -157,7 +221,7 @@ function addPitchDetails(scene, profile) {
       seat.position.set(index * 1.65, 0.45, 0);
       group.add(seat);
     }
-    group.position.set(0, 0, side * 35.1);
+    group.position.set(0, 0, side * envelope.canopyZ);
     scene.add(group);
   }
 }
@@ -268,7 +332,8 @@ function createLedBoard({ scene, document, x, z, text, color, ledViews }) {
   ledViews.push({ board, label });
 }
 
-function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLights }) {
+function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLights, profile }) {
+  const envelope = stadiumEnvelope(profile);
   const standMaterial = new THREE.MeshStandardMaterial({ color: 0x111918, roughness: 0.82, metalness: 0.12 });
   const tierMaterials = [
     standMaterial,
@@ -280,19 +345,19 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
     const longDepth = 4.2 + tier * 1.2;
     for (const zSide of [-1, 1]) {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(128, 2.1, longDepth), tierMaterials[tier]);
-      mesh.position.set(0, y, zSide * (38.2 + tier * 3.1));
+      mesh.position.set(0, y, zSide * (envelope.sidelineStandZ + tier * 2.4));
       mesh.receiveShadow = true;
       scene.add(mesh);
     }
     for (const xSide of [-1, 1]) {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(longDepth, 2.1, 76), tierMaterials[tier]);
-      mesh.position.set(xSide * (64.5 + tier * 3.1), y, 0);
+      mesh.position.set(xSide * (envelope.endlineStandX + tier * 2.4), y, 0);
       mesh.receiveShadow = true;
       scene.add(mesh);
     }
   }
   const roofMaterial = new THREE.MeshPhysicalMaterial({ color: 0x1a2425, roughness: 0.35, metalness: 0.62, clearcoat: 0.35, clearcoatRoughness: 0.5 });
-  for (const [x, y, z, width, height, depth] of [[0, 9.8, -47, 136, 0.5, 11], [0, 9.8, 47, 136, 0.5, 11], [-73, 9.8, 0, 10, 0.5, 84], [73, 9.8, 0, 10, 0.5, 84]]) {
+  for (const [x, y, z, width, height, depth] of [[0, 9.8, -envelope.roofZ, 86, 0.5, 9], [0, 9.8, envelope.roofZ, 86, 0.5, 9], [-envelope.roofX, 9.8, 0, 8, 0.5, 58], [envelope.roofX, 9.8, 0, 8, 0.5, 58]]) {
     const roof = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), roofMaterial);
     roof.position.set(x, y, z);
     roof.castShadow = true;
@@ -301,14 +366,14 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
   if (!lowPowerDevice) {
     const beamMaterial = new THREE.MeshStandardMaterial({ color: 0x53605d, metalness: 0.8, roughness: 0.28 });
     for (let index = -5; index <= 5; index += 1) {
-      for (const z of [-43, 43]) {
+      for (const z of [-envelope.sidelineStandZ - 4, envelope.sidelineStandZ + 4]) {
         const beam = new THREE.Mesh(new THREE.BoxGeometry(0.24, 6.5, 0.24), beamMaterial);
         beam.position.set(index * 11, 7, z);
         scene.add(beam);
       }
     }
     for (let index = -2; index <= 2; index += 1) {
-      for (const x of [-68, 68]) {
+      for (const x of [-envelope.endlineStandX - 4, envelope.endlineStandX + 4]) {
         const beam = new THREE.Mesh(new THREE.BoxGeometry(0.24, 6.5, 0.24), beamMaterial);
         beam.position.set(x, 7, index * 14);
         scene.add(beam);
@@ -316,7 +381,7 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
     }
   }
   const tunnel = new THREE.Mesh(new THREE.BoxGeometry(11, 4.2, 5.5), new THREE.MeshStandardMaterial({ color: 0x030606, roughness: 0.94 }));
-  tunnel.position.set(0, 2.1, 39);
+  tunnel.position.set(0, 2.1, envelope.tunnelZ);
   scene.add(tunnel);
 
   const crowdPositions = [];
@@ -328,11 +393,11 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
     let x;
     let z;
     if (edge < 2) {
-      x = -61 + seededNoise(index * 2.8) * 122;
-      z = edge === 0 ? -36 - row * 1.4 : 36 + row * 0.9;
+      x = -envelope.endlineStandX + 2 + seededNoise(index * 2.8) * (envelope.endlineStandX * 2 - 4);
+      z = edge === 0 ? -envelope.sidelineStandZ - row * 1.05 : envelope.sidelineStandZ + row * 1.05;
     } else {
-      x = edge === 2 ? -61 - row * 1.3 : 61 + row * 1.3;
-      z = -33 + seededNoise(index * 4.7) * 66;
+      x = edge === 2 ? -envelope.endlineStandX - row * 1.05 : envelope.endlineStandX + row * 1.05;
+      z = -envelope.sidelineStandZ + 2 + seededNoise(index * 4.7) * (envelope.sidelineStandZ * 2 - 4);
     }
     crowdPositions.push(x, 1.6 + row * 0.75 + seededNoise(index) * 0.7, z);
     const roll = seededNoise(index * 12.7);
@@ -348,10 +413,10 @@ function createStadium({ scene, document, lowPowerDevice, ledViews, stadiumLight
   );
   scene.add(crowd);
 
-  createLedBoard({ scene, document, x: 0, z: -35.1, text: "TONY FOOTBALL MAX", color: 0xe1bb58, ledViews });
-  createLedBoard({ scene, document, x: 0, z: 35.2, text: "PLAY BEAUTIFUL · PLAY TONY", color: 0x47c9d4, ledViews });
-  for (const x of [-49, 49]) {
-    for (const z of [-36, 36]) {
+  createLedBoard({ scene, document, x: 0, z: -envelope.ledZ, text: "TONY FOOTBALL MAX", color: 0xe1bb58, ledViews });
+  createLedBoard({ scene, document, x: 0, z: envelope.ledZ, text: "PLAY BEAUTIFUL · PLAY TONY", color: 0x47c9d4, ledViews });
+  for (const x of [-envelope.mastX, envelope.mastX]) {
+    for (const z of [-envelope.mastZ, envelope.mastZ]) {
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.38, 21, 8), new THREE.MeshStandardMaterial({ color: 0x59615e, metalness: 0.8, roughness: 0.35 }));
       mast.position.set(x, 10, z);
       scene.add(mast);
@@ -460,6 +525,7 @@ export function createBrowserThreeSceneEnvironmentHost({
   let dryPitchColor = null;
   let wetPitchColor = null;
   let environmentTexture = null;
+  let lastCameraPose = null;
   let lastNow = null;
   let currentPitchStyle = "classic";
   let currentWeather = "clear";
@@ -540,7 +606,7 @@ export function createBrowserThreeSceneEnvironmentHost({
     dryPitchColor = pitchResources.dryColor;
     wetPitchColor = pitchResources.wetColor;
     grass = createGrass({ scene: environmentRoot, style: currentPitchStyle, lowPowerDevice, profile: activeProfile });
-    crowd = createStadium({ scene: environmentRoot, document, lowPowerDevice, ledViews, stadiumLights });
+    crowd = createStadium({ scene: environmentRoot, document, lowPowerDevice, ledViews, stadiumLights, profile: activeProfile });
     createGoal({ scene: environmentRoot, x: worldX(geometry.field.left, geometry), side: -1, nets: goalNetViews, profile: activeProfile });
     createGoal({ scene: environmentRoot, x: worldX(geometry.field.right, geometry), side: 1, nets: goalNetViews, profile: activeProfile });
     rain = createAtmosphere({ scene: environmentRoot, lowPowerDevice });
@@ -702,6 +768,10 @@ export function createBrowserThreeSceneEnvironmentHost({
       if (!camera) return false;
       camera.position.set(pose.position.x, pose.position.y, pose.position.z);
       camera.lookAt(pose.lookAt.x, pose.lookAt.y, pose.lookAt.z);
+      lastCameraPose = Object.freeze({
+        position: Object.freeze({ ...pose.position }),
+        lookAt: Object.freeze({ ...pose.lookAt }),
+      });
       return true;
     },
     copyCameraQuaternion: (destination) => {
@@ -725,6 +795,9 @@ export function createBrowserThreeSceneEnvironmentHost({
       lowPowerDevice: Boolean(lowPowerDevice),
       profile: activeProfile.id,
       geometry: activeProfile.geometry,
+      stadium: stadiumEnvelope(activeProfile),
+      cameraPose: lastCameraPose,
+      pitchCoverage: pitchViewportCoverage(camera, activeProfile),
       pitchStyle: currentPitchStyle,
       weather: currentWeather,
       sceneObjects: scene?.children?.length ?? 0,

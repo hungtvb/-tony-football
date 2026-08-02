@@ -16,6 +16,11 @@ export const cameraHudConfig = Object.freeze({
     followRate: 4.6,
     zoomRate: 2.8,
   }),
+  three: Object.freeze({
+    broadcast: Object.freeze({ height: 43, distance: 44, lowPowerHeight: 48, lowPowerDistance: 50, targetHeight: 0.7, zTracking: 0.06 }),
+    tactical: Object.freeze({ height: 48, distance: 23, lowPowerHeight: 54, lowPowerDistance: 28, targetHeight: 0, zTracking: 0.04 }),
+    close: Object.freeze({ offsetX: -9, height: 17, distance: 25, lowPowerHeight: 22, lowPowerDistance: 31, targetHeight: 1.2, zTracking: 0.12 }),
+  }),
   radar: Object.freeze({
     width: 260,
     height: 140,

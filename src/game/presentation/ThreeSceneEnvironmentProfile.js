@@ -91,8 +91,8 @@ const DEFAULT_PROFILE_INPUT = {
     lowPowerFov: 43,
     near: 0.1,
     far: 260,
-    position: { x: 0, y: 45, z: 52 },
-    lowPowerPosition: { x: 0, y: 54, z: 63 },
+    position: { x: 0, y: 43, z: 44 },
+    lowPowerPosition: { x: 0, y: 48, z: 50 },
   },
   lighting: {
     hemisphere: { skyColor: 0xcfffe7, groundColor: 0x06120d, intensity: 1.45 },

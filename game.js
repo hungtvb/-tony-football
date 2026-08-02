@@ -691,7 +691,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     renderer3D.outputColorSpace = THREE.SRGBColorSpace; renderer3D.toneMapping = THREE.ACESFilmicToneMapping; renderer3D.toneMappingExposure = 1.12;
 
     scene3D = new THREE.Scene(); scene3D.background = new THREE.Color(0x050a09); scene3D.fog = new THREE.FogExp2(0x07110e, .011);
-    camera3D = new THREE.PerspectiveCamera(lowPowerDevice?43:39, W / H, .1, 260); camera3D.position.set(0, lowPowerDevice?54:45, lowPowerDevice?63:52); camera3D.lookAt(0, 0, 0);
+    camera3D = new THREE.PerspectiveCamera(lowPowerDevice?43:39, W / H, .1, 260); const initialCamera=cameraHudConfig.three.broadcast; camera3D.position.set(0, lowPowerDevice?initialCamera.lowPowerHeight:initialCamera.height, lowPowerDevice?initialCamera.lowPowerDistance:initialCamera.distance); camera3D.lookAt(0, 0, 0);
     if(!lowPowerDevice){const pmrem=new THREE.PMREMGenerator(renderer3D);const environment=new RoomEnvironment();scene3D.environment=pmrem.fromScene(environment,.04).texture;scene3D.environmentIntensity=.62;environment.dispose();pmrem.dispose();}
 
     hemisphereLight = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45); scene3D.add(hemisphereLight);
@@ -1050,9 +1050,9 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,cameraState.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
-    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,(lowPowerDevice?66:60)*zoomScale,30*zoomScale+targetZ*.04);cameraLook.set(targetX,0,targetZ);}
-    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,(lowPowerDevice?26:20)*zoomScale,(lowPowerDevice?38:31)*zoomScale+targetZ*.14);cameraLook.set(targetX,1.2,targetZ);}
-    else{cameraTarget.set(targetX,(lowPowerDevice?54:47)*zoomScale,(lowPowerDevice?66:57)*zoomScale+targetZ*.06);cameraLook.set(targetX,.7,targetZ);}
+    else if(game.cameraMode==="tactical"){const view=cameraHudConfig.three.tactical;cameraTarget.set(targetX,(lowPowerDevice?view.lowPowerHeight:view.height)*zoomScale,(lowPowerDevice?view.lowPowerDistance:view.distance)*zoomScale+targetZ*view.zTracking);cameraLook.set(targetX,view.targetHeight,targetZ);}
+    else if(game.cameraMode==="close"){const view=cameraHudConfig.three.close;cameraTarget.set(targetX+view.offsetX,(lowPowerDevice?view.lowPowerHeight:view.height)*zoomScale,(lowPowerDevice?view.lowPowerDistance:view.distance)*zoomScale+targetZ*view.zTracking);cameraLook.set(targetX,view.targetHeight,targetZ);}
+    else{const view=cameraHudConfig.three.broadcast;cameraTarget.set(targetX,(lowPowerDevice?view.lowPowerHeight:view.height)*zoomScale,(lowPowerDevice?view.lowPowerDistance:view.distance)*zoomScale+targetZ*view.zTracking);cameraLook.set(targetX,view.targetHeight,targetZ);}
     const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); renderRadarSnapshot(rctx,snapshot,{width:radar.width,height:radar.height,field:FIELD,config:cameraHudConfig.radar});
