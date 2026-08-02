@@ -155,8 +155,8 @@ replace_between(
       cameraLook.set(worldX(scorer.x), 2.4, worldZ(scorer.y));
     } else if (game.cameraMode === "tactical") {
       const view = cameraHudConfig.three.tactical;
-      cameraTarget.set(targetX, (lowPowerDevice ? view.lowPowerHeight : view.height) * zoomScale, (lowPowerDevice ? view.lowPowerDistance : view.distance) * zoomScale + targetZ * view.zTracking);
-      cameraLook.set(targetX, view.targetHeight, targetZ);
+      cameraTarget.set(0, lowPowerDevice ? view.lowPowerHeight : view.height, lowPowerDevice ? view.lowPowerDistance : view.distance);
+      cameraLook.set(0, view.targetHeight, 0);
     } else if (game.cameraMode === "close") {
       const view = cameraHudConfig.three.close;
       cameraTarget.set(targetX + view.offsetX, (lowPowerDevice ? view.lowPowerHeight : view.height) * zoomScale, (lowPowerDevice ? view.lowPowerDistance : view.distance) * zoomScale + targetZ * view.zTracking);

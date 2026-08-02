@@ -47,8 +47,12 @@ test("WebGL camera modes use pitch-dominant shared framing", () => {
   assert.match(source, /cameraHudConfig\.three\.close/);
   assert.equal(cameraHudConfig.three.broadcast.height, 40);
   assert.equal(cameraHudConfig.three.broadcast.distance, 41);
-  assert.equal(cameraHudConfig.three.tactical.height, 45);
-  assert.equal(cameraHudConfig.three.tactical.distance, 21);
+  assert.equal(cameraHudConfig.three.tactical.height, 48);
+  assert.equal(cameraHudConfig.three.tactical.distance, 23);
+  assert.equal(cameraHudConfig.three.tactical.lowPowerHeight, 44);
+  assert.equal(cameraHudConfig.three.tactical.lowPowerDistance, 20);
+  assert.match(source, /game\.cameraMode\s*===\s*"tactical"[\s\S]*?cameraTarget\.set\(0,/);
+  assert.match(source, /cameraLook\.set\(0,\s*view\.targetHeight,\s*0\)/);
 });
 
 test("radar plot contains no text rendering and uses configured markers", () => {

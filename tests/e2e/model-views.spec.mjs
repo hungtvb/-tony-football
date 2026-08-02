@@ -112,6 +112,8 @@ test("normal asset mode preserves source maps and renders explicit football clot
     await testInfo.attach(`${mode}-pitch-coverage.json`, { body: Buffer.from(JSON.stringify(evidence, null, 2)), contentType: "application/json" });
     capturedModes.push(evidence);
     if (minimumCoverage) {
+      expect(scene.pitchCoverage.fullyVisible, `${mode} must keep the full pitch visible`).toBe(true);
+      expect(scene.pitchCoverage.visibleCornerCount, `${mode} visible pitch corners`).toBe(4);
       expect(scene.pitchCoverage.widthRatio, `${mode} pitch width coverage`).toBeGreaterThanOrEqual(minimumCoverage.width);
       expect(scene.pitchCoverage.heightRatio, `${mode} pitch height coverage`).toBeGreaterThanOrEqual(minimumCoverage.height);
       expect(scene.pitchCoverage.boundingAreaRatio, `${mode} pitch bounding-area coverage`).toBeGreaterThanOrEqual(minimumCoverage.area);
