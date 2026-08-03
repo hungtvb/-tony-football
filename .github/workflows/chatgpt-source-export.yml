@@ -42,7 +42,7 @@ jobs:
 
           (
             cd "$RUNNER_TEMP"
-            sha256sum "$(basename "$archive")" > "$(basename "$checksum")"
+            sha256sum -- "$(basename "$archive")" > "$(basename "$checksum")"
           )
 
       - name: Upload source snapshot
