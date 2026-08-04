@@ -1,0 +1,51 @@
+name: ChatGPT Dependency Export
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chatgpt-dependency-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Package dependency tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/tony-football-node-modules.tar.gz"
+          tar -C "$GITHUB_WORKSPACE" -czf "$archive" node_modules
+          test -s "$archive"
+          (cd "$RUNNER_TEMP" && sha256sum -- "$(basename "$archive")" > "$(basename "$archive").sha256")
+
+      - name: Upload dependency tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: tony-football-node-modules
+          path: |
+            ${{ runner.temp }}/tony-football-node-modules.tar.gz
+            ${{ runner.temp }}/tony-football-node-modules.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
