@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "three";
 
 import { createBrowserThreeSceneEnvironmentHost } from "../../src/game/presentation/BrowserThreeSceneEnvironmentHost.js";
+import { DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE } from "../../src/game/presentation/ThreeSceneEnvironmentProfile.js";
 
 function createPaintContext() {
   const gradient = { addColorStop() {} };
@@ -65,7 +66,8 @@ test("clean host starts, renders, preserves foreign resources on teardown and re
 
   assert.equal(host.start(), true);
   assert.equal(host.port.diagnostics().owner, "clean-host");
-  assert.equal(host.port.diagnostics().profile, "tony-football-default-v1");
+  assert.equal(host.port.diagnostics().profile, DEFAULT_THREE_SCENE_ENVIRONMENT_PROFILE.id);
+  assert.equal(host.port.diagnostics().geometry.worldScale, 0.05);
 
   let geometryDisposed = 0;
   let materialDisposed = 0;

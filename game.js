@@ -11,6 +11,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { createSimulationLoop } from "./src/game/core/SimulationLoop.js";
 import { gameplayConfig } from "./src/game/config/gameplayConfig.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "./src/game/config/simulationScaleProfile.js";
 import { createGameFeelController } from "./src/game/presentation/GameFeelController.js";
 import { createBallTrail3D } from "./src/game/presentation/BallTrail3D.js";
 import { createAudioFeedbackController } from "./src/game/presentation/AudioFeedbackController.js";
@@ -43,7 +44,12 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   const rctx = radar.getContext("2d");
   const W = canvas.width;
   const H = canvas.height;
-  const FIELD = { left: 48, right: 1152, top: 42, bottom: 658, goalTop: 265, goalBottom: 435 };
+  const SCALE_PROFILE = DEFAULT_SIMULATION_SCALE_PROFILE;
+  const FIELD = Object.freeze({
+    ...SCALE_PROFILE.field.bounds,
+    goalTop: SCALE_PROFILE.goal.mouthTop,
+    goalBottom: SCALE_PROFILE.goal.mouthBottom,
+  });
   const MATCH_SECONDS = 150;
   const HOME = 0;
   const AWAY = 1;
@@ -53,7 +59,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
   const length = (x, y) => Math.hypot(x, y) || 1;
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const normalize = (x, y) => { const l = length(x, y); return { x: x / l, y: y / l }; };
-  const WORLD_SCALE = .1;
+  const WORLD_SCALE = SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit;
   const playerViews = new Map();
   let renderer3D; let composer3D; let scene3D; let camera3D; let ballView; let ballTrailView; let particleView; let chargeView; let screenFx; let ctx; let use3D = true; let crowdView; let pitchView; let grassView; let rainView;let hemisphereLight;let floodLight;let rimLight;
   let playerAsset = null;
@@ -96,11 +102,11 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
 
   const formations = {
     home: [
-      [90, 350, "GK", "KAI", 1, 86], [270, 205, "DF", "MINH", 4, 87], [270, 495, "DF", "NAM", 5, 86],
+      [140, 350, "GK", "KAI", 1, 86], [270, 205, "DF", "MINH", 4, 87], [270, 495, "DF", "NAM", 5, 86],
       [500, 350, "MF", "HÙNG", 8, 90], [690, 205, "FW", "TONY", 10, 92], [690, 495, "FW", "PHÚC", 11, 89]
     ],
     away: [
-      [1110, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
+      [1060, 350, "GK", "NOVA", 1, 87], [930, 205, "DF", "VEX", 3, 88], [930, 495, "DF", "ZERO", 5, 87],
       [700, 350, "MF", "ECHO", 8, 91], [520, 205, "FW", "BLAZE", 9, 92], [520, 495, "FW", "RUSH", 11, 90]
     ]
   };
@@ -685,7 +691,7 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     renderer3D.outputColorSpace = THREE.SRGBColorSpace; renderer3D.toneMapping = THREE.ACESFilmicToneMapping; renderer3D.toneMappingExposure = 1.12;
 
     scene3D = new THREE.Scene(); scene3D.background = new THREE.Color(0x050a09); scene3D.fog = new THREE.FogExp2(0x07110e, .011);
-    camera3D = new THREE.PerspectiveCamera(lowPowerDevice?43:39, W / H, .1, 260); camera3D.position.set(0, lowPowerDevice?54:45, lowPowerDevice?63:52); camera3D.lookAt(0, 0, 0);
+    camera3D = new THREE.PerspectiveCamera(lowPowerDevice?43:39, W / H, .1, 260); const initialCamera=cameraHudConfig.three.broadcast; camera3D.position.set(0, lowPowerDevice?initialCamera.lowPowerHeight:initialCamera.height, lowPowerDevice?initialCamera.lowPowerDistance:initialCamera.distance); camera3D.lookAt(0, 0, 0);
     if(!lowPowerDevice){const pmrem=new THREE.PMREMGenerator(renderer3D);const environment=new RoomEnvironment();scene3D.environment=pmrem.fromScene(environment,.04).texture;scene3D.environmentIntensity=.62;environment.dispose();pmrem.dispose();}
 
     hemisphereLight = new THREE.HemisphereLight(0xcfffe7, 0x06120d, 1.45); scene3D.add(hemisphereLight);
@@ -1044,9 +1050,9 @@ import { createSnapshotRenderState } from "./src/game/presentation/SnapshotRende
     const targetX=worldX(framedX);const targetZ=worldZ(framedY);const zoomScale=replayFrame?1:1/Math.max(.01,cameraState.zoom);
     if(replayFrame){const scoringRight=game.goalSequence?.team===HOME;cameraTarget.set(targetX+(scoringRight?-16:16),13,clamp(targetZ+22,-19,19));cameraLook.set(targetX,1.2,targetZ);}
     else if(game.goalSequence){const scorer=game.goalScorer||ball;cameraTarget.set(worldX(scorer.x)-9,8.5,worldZ(scorer.y)+12);cameraLook.set(worldX(scorer.x),2.4,worldZ(scorer.y));}
-    else if(game.cameraMode==="tactical"){cameraTarget.set(targetX,(lowPowerDevice?66:60)*zoomScale,30*zoomScale+targetZ*.04);cameraLook.set(targetX,0,targetZ);}
-    else if(game.cameraMode==="close"){cameraTarget.set(targetX-11,(lowPowerDevice?26:20)*zoomScale,(lowPowerDevice?38:31)*zoomScale+targetZ*.14);cameraLook.set(targetX,1.2,targetZ);}
-    else{cameraTarget.set(targetX,(lowPowerDevice?54:47)*zoomScale,(lowPowerDevice?66:57)*zoomScale+targetZ*.06);cameraLook.set(targetX,.7,targetZ);}
+    else if(game.cameraMode==="tactical"){const view=cameraHudConfig.three.tactical;cameraTarget.set(0,lowPowerDevice?view.lowPowerHeight:view.height,lowPowerDevice?view.lowPowerDistance:view.distance);cameraLook.set(0,view.targetHeight,0);}
+    else if(game.cameraMode==="close"){const view=cameraHudConfig.three.close;cameraTarget.set(targetX+view.offsetX,(lowPowerDevice?view.lowPowerHeight:view.height)*zoomScale,(lowPowerDevice?view.lowPowerDistance:view.distance)*zoomScale+targetZ*view.zTracking);cameraLook.set(targetX,view.targetHeight,targetZ);}
+    else{const view=cameraHudConfig.three.broadcast;cameraTarget.set(targetX,(lowPowerDevice?view.lowPowerHeight:view.height)*zoomScale,(lowPowerDevice?view.lowPowerDistance:view.distance)*zoomScale+targetZ*view.zTracking);cameraLook.set(targetX,view.targetHeight,targetZ);}
     const cameraDt=Math.min(.05,Math.max(0,(render3D.lastNow?now-render3D.lastNow:16.667)/1000));render3D.lastNow=now;camera3D.position.lerp(cameraTarget,gameFeel.cameraEase(cameraDt,Boolean(replayFrame)));const feelOffset=gameFeel.sampleCameraOffset(now);camera3D.position.x+=feelOffset.x*.42+feelOffset.z*.12;camera3D.position.y+=feelOffset.y*.28;camera3D.position.z+=feelOffset.z*.28;camera3D.lookAt(cameraLook);
     const stadiumPulse=game.goalSequence?(reducedMotion?1.08:1+Math.sin(now*.018)*.45):1; if(crowdView){crowdView.material.size=(lowPowerDevice ? .3 : .34)*stadiumPulse;crowdView.material.opacity=game.goalSequence ? .98 : .88;} for(const led of ledViews){led.board.material.emissiveIntensity=game.goalSequence ? .75+.3*Math.sin(now*.022) : .32;led.label.material.opacity=game.goalSequence ? .8+.2*Math.sin(now*.018) : 1;}
     screenFx.style.opacity=String(clamp(game.flash,0,1)); screenFx.classList.toggle("active",game.flash>.02); if(composer3D)composer3D.render();else renderer3D.render(scene3D,camera3D); renderRadarSnapshot(rctx,snapshot,{width:radar.width,height:radar.height,field:FIELD,config:cameraHudConfig.radar});

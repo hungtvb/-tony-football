@@ -1,5 +1,9 @@
 import { createPossessionLifecycle } from "../gameplay/PossessionLifecycle.js";
 import { ballControlConfig } from "../config/ballControlConfig.js";
+import {
+  assertSimulationWorldDimensions,
+  DEFAULT_SIMULATION_SCALE_PROFILE,
+} from "../config/simulationScaleProfile.js";
 
 export const HOME_TEAM = 0;
 export const AWAY_TEAM = 1;
@@ -19,7 +23,7 @@ function freezeFormation(formation) {
 
 export const DEFAULT_FORMATIONS = Object.freeze({
   home: freezeFormation([
-    { x: 90, y: 350, role: "GK", name: "KAI", number: 1, rating: 86 },
+    { x: 140, y: 350, role: "GK", name: "KAI", number: 1, rating: 86 },
     { x: 270, y: 205, role: "DF", name: "MINH", number: 4, rating: 87 },
     { x: 270, y: 495, role: "DF", name: "NAM", number: 5, rating: 86 },
     { x: 500, y: 350, role: "MF", name: "HÙNG", number: 8, rating: 90 },
@@ -27,7 +31,7 @@ export const DEFAULT_FORMATIONS = Object.freeze({
     { x: 690, y: 495, role: "FW", name: "PHÚC", number: 11, rating: 89 }
   ]),
   away: freezeFormation([
-    { x: 1110, y: 350, role: "GK", name: "NOVA", number: 1, rating: 87 },
+    { x: 1060, y: 350, role: "GK", name: "NOVA", number: 1, rating: 87 },
     { x: 930, y: 205, role: "DF", name: "VEX", number: 3, rating: 88 },
     { x: 930, y: 495, role: "DF", name: "ZERO", number: 5, rating: 87 },
     { x: 700, y: 350, role: "MF", name: "ECHO", number: 8, rating: 91 },
@@ -40,7 +44,7 @@ function playerId(team, index) {
   return `${team === HOME_TEAM ? "home" : "away"}-${index}`;
 }
 
-function createPlayer(team, spec, index) {
+function createPlayer(team, spec, index, scaleProfile) {
   const attackDirection = team === HOME_TEAM ? 1 : -1;
   return {
     id: playerId(team, index),
@@ -58,7 +62,9 @@ function createPlayer(team, spec, index) {
     vy: 0,
     dirX: attackDirection,
     dirY: 0,
-    radius: spec.role === "GK" ? 20 : 17,
+    radius: spec.role === "GK"
+      ? scaleProfile.player.goalkeeperCollisionRadiusSimulation
+      : scaleProfile.player.collisionRadiusSimulation,
     stamina: 100,
     cooldown: 0,
     anim: "idle",
@@ -76,10 +82,13 @@ function createPlayer(team, spec, index) {
   };
 }
 
-export function createMatchPlayers(formations = DEFAULT_FORMATIONS) {
+export function createMatchPlayers(
+  formations = DEFAULT_FORMATIONS,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+) {
   return [
-    ...formations.home.map((spec, index) => createPlayer(HOME_TEAM, spec, index)),
-    ...formations.away.map((spec, index) => createPlayer(AWAY_TEAM, spec, index))
+    ...formations.home.map((spec, index) => createPlayer(HOME_TEAM, spec, index, scaleProfile)),
+    ...formations.away.map((spec, index) => createPlayer(AWAY_TEAM, spec, index, scaleProfile))
   ];
 }
 
@@ -90,7 +99,13 @@ function preferredHomePlayer(players) {
     ?? null;
 }
 
-export function createMatchBall({ width = 1200, height = 700, lock = 0 } = {}) {
+export function createMatchBall({
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+  width = scaleProfile.simulation.worldWidth,
+  height = scaleProfile.simulation.worldHeight,
+  lock = 0,
+} = {}) {
+  assertSimulationWorldDimensions(width, height, scaleProfile);
   return {
     id: MATCH_BALL_ID,
     x: width / 2,
@@ -100,7 +115,7 @@ export function createMatchBall({ width = 1200, height = 700, lock = 0 } = {}) {
     height: 0,
     vz: 0,
     curve: 0,
-    radius: 9,
+    radius: scaleProfile.ball.radiusSimulation,
     ownerId: null,
     lastTouchId: null,
     lock,
@@ -120,8 +135,9 @@ export function createMatchState({
   pitchStyle = "classic",
   ballStyle = "classic",
   weather = "clear",
-  width = 1200,
-  height = 700,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+  width = scaleProfile.simulation.worldWidth,
+  height = scaleProfile.simulation.worldHeight,
   runtimeState = "menu"
 } = {}) {
   if (!Object.hasOwn(DIFFICULTY_SCALE, difficulty)) {
@@ -133,11 +149,9 @@ export function createMatchState({
   if (!Number.isFinite(kickoffDelay) || kickoffDelay < 0) {
     throw new RangeError("kickoffDelay must be a non-negative finite number");
   }
-  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-    throw new RangeError("match dimensions must be positive finite numbers");
-  }
+  assertSimulationWorldDimensions(width, height, scaleProfile);
 
-  const players = createMatchPlayers(formations);
+  const players = createMatchPlayers(formations, scaleProfile);
   return {
     match: {
       state: runtimeState,
@@ -156,7 +170,8 @@ export function createMatchState({
     ball: createMatchBall({
       width,
       height,
-      lock: runtimeState === "playing" ? ballControlConfig.release.kickoffLock : 0
+      lock: runtimeState === "playing" ? ballControlConfig.release.kickoffLock : 0,
+      scaleProfile,
     }),
     selectedPlayerId: preferredHomePlayer(players)?.id ?? null,
     controls: {
@@ -182,9 +197,11 @@ export function findPlayer(state, id) {
 
 export function resetForKickoff(state, team, {
   kickoffDelay = DEFAULT_KICKOFF_DELAY,
-  width = 1200,
-  height = 700
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+  width = scaleProfile.simulation.worldWidth,
+  height = scaleProfile.simulation.worldHeight,
 } = {}) {
+  assertSimulationWorldDimensions(width, height, scaleProfile);
   const freshPlayers = createMatchPlayers({
     home: state.players.filter((player) => player.team === HOME_TEAM).map((player) => ({
       x: player.baseX,
@@ -202,7 +219,7 @@ export function resetForKickoff(state, team, {
       number: player.number,
       rating: player.rating
     }))
-  });
+  }, scaleProfile);
 
   state.players = freshPlayers.map((freshPlayer) => {
     const previous = findPlayer(state, freshPlayer.id);
@@ -211,7 +228,8 @@ export function resetForKickoff(state, team, {
   state.ball = createMatchBall({
     width,
     height,
-    lock: ballControlConfig.release.kickoffLock
+    lock: ballControlConfig.release.kickoffLock,
+    scaleProfile,
   });
   state.match.goalSequence = null;
   state.match.kickoffTimer = kickoffDelay;

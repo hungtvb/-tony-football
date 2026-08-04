@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
 import { createMatchSnapshot } from "../../src/game/engine/MatchSnapshot.js";
-import { createRadarSnapshotAdapter } from "../../src/game/presentation/RadarSnapshotAdapter.js";
+import { createRadarSnapshotAdapter, DEFAULT_RADAR_FIELD } from "../../src/game/presentation/RadarSnapshotAdapter.js";
 import { renderRadarSnapshot } from "../../src/game/presentation/RadarSnapshotRenderer.js";
 
 function createFakeContext() {
@@ -21,13 +22,15 @@ function createFakeContext() {
   };
 }
 
+const FIELD = DEFAULT_SIMULATION_SCALE_PROFILE.field.bounds;
+
 function createSnapshot() {
   return createMatchSnapshot({
     tick: 2,
     match: { selectedPlayerId: "home-4" },
     players: [
-      { id: "home-4", team: 0, x: 48, y: 42 },
-      { id: "away-4", team: 1, x: 1152, y: 658 },
+      { id: "home-4", team: 0, x: FIELD.left, y: FIELD.top },
+      { id: "away-4", team: 1, x: FIELD.right, y: FIELD.bottom },
     ],
     ball: { id: "match-ball", ownerId: "home-4", x: 600, y: 350 },
   });
@@ -36,9 +39,14 @@ function createSnapshot() {
 const rendererOptions = {
   width: 260,
   height: 140,
-  field: { left: 48, right: 1152, top: 42, bottom: 658 },
+  field: FIELD,
   config: { plotPadding: 10, playerRadius: 2.7, selectedRadius: 4.8, ballRadius: 3.8 },
 };
+
+test("radar default field derives from the simulation scale profile", () => {
+  assert.deepEqual(DEFAULT_RADAR_FIELD, FIELD);
+  assert.equal(Object.isFrozen(DEFAULT_RADAR_FIELD), true);
+});
 
 test("radar adapter claims the canvas so the legacy draw path becomes a no-op", () => {
   const context = createFakeContext();

@@ -9,6 +9,7 @@ import {
 } from "./GoalSequenceTimeline.js";
 import { createMatchSnapshot, createSnapshotFrame } from "./MatchSnapshot.js";
 import { createSeededRandom } from "../core/Random.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
 import { advanceAIDecisions } from "./AIDecisionSystem.js";
 import { advanceBallSimulation } from "./BallSimulationSystem.js";
 import { executeKickAction } from "./KickActionSystem.js";
@@ -72,8 +73,9 @@ export class MatchEngine {
     ballStyle = "classic",
     weather = "clear",
     randomSeed = "tony-football-r1",
-    width = 1200,
-    height = 700
+    scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+    width = scaleProfile.simulation.worldWidth,
+    height = scaleProfile.simulation.worldHeight
   } = {}) {
     if (!Number.isFinite(goalDuration) || goalDuration <= 0) {
       throw new RangeError("goalDuration must be a positive finite number");
@@ -90,9 +92,10 @@ export class MatchEngine {
       weather,
       randomSeed,
       width,
-      height
+      height,
+      scaleProfile
     };
-    this.#config.field = createFieldBounds(width, height);
+    this.#config.field = createFieldBounds(width, height, scaleProfile);
     this.#random = createSeededRandom(randomSeed);
     this.#state = createMatchState(this.#config);
     this.#state.replay.duration = this.#config.goalTimeline.replayDuration;
@@ -374,7 +377,8 @@ export class MatchEngine {
         resetForKickoff(this.#state, nextTeam, {
           kickoffDelay: this.#config.kickoffDelay,
           width: this.#config.width,
-          height: this.#config.height
+          height: this.#config.height,
+          scaleProfile: this.#config.scaleProfile
         });
         this.#snapshotDiscontinuity = true;
         continue;

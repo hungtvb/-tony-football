@@ -51,7 +51,8 @@ replace_between(
   const lowPowerDevice = visualTestMode || matchMedia("(pointer: coarse)").matches || (navigator.deviceMemory && navigator.deviceMemory <= 4);
   const cameraTarget = new THREE.Vector3();
   const cameraLook = new THREE.Vector3();
-  const cameraPosition = new THREE.Vector3(0, lowPowerDevice ? 54 : 45, lowPowerDevice ? 63 : 52);
+  const initialCameraView = cameraHudConfig.three.broadcast;
+  const cameraPosition = new THREE.Vector3(0, lowPowerDevice ? initialCameraView.lowPowerHeight : initialCameraView.height, lowPowerDevice ? initialCameraView.lowPowerDistance : initialCameraView.distance);
 
 ''',
     "presentation state",
@@ -153,14 +154,17 @@ replace_between(
       cameraTarget.set(worldX(scorer.x) - 9, 8.5, worldZ(scorer.y) + 12);
       cameraLook.set(worldX(scorer.x), 2.4, worldZ(scorer.y));
     } else if (game.cameraMode === "tactical") {
-      cameraTarget.set(targetX, (lowPowerDevice ? 66 : 60) * zoomScale, 30 * zoomScale + targetZ * 0.04);
-      cameraLook.set(targetX, 0, targetZ);
+      const view = cameraHudConfig.three.tactical;
+      cameraTarget.set(0, lowPowerDevice ? view.lowPowerHeight : view.height, lowPowerDevice ? view.lowPowerDistance : view.distance);
+      cameraLook.set(0, view.targetHeight, 0);
     } else if (game.cameraMode === "close") {
-      cameraTarget.set(targetX - 11, (lowPowerDevice ? 26 : 20) * zoomScale, (lowPowerDevice ? 38 : 31) * zoomScale + targetZ * 0.14);
-      cameraLook.set(targetX, 1.2, targetZ);
+      const view = cameraHudConfig.three.close;
+      cameraTarget.set(targetX + view.offsetX, (lowPowerDevice ? view.lowPowerHeight : view.height) * zoomScale, (lowPowerDevice ? view.lowPowerDistance : view.distance) * zoomScale + targetZ * view.zTracking);
+      cameraLook.set(targetX, view.targetHeight, targetZ);
     } else {
-      cameraTarget.set(targetX, (lowPowerDevice ? 54 : 47) * zoomScale, (lowPowerDevice ? 66 : 57) * zoomScale + targetZ * 0.06);
-      cameraLook.set(targetX, 0.7, targetZ);
+      const view = cameraHudConfig.three.broadcast;
+      cameraTarget.set(targetX, (lowPowerDevice ? view.lowPowerHeight : view.height) * zoomScale, (lowPowerDevice ? view.lowPowerDistance : view.distance) * zoomScale + targetZ * view.zTracking);
+      cameraLook.set(targetX, view.targetHeight, targetZ);
     }
     const cameraDt = Math.min(0.05, Math.max(0, (render3D.lastNow ? now - render3D.lastNow : 16.667) / 1000));
     render3D.lastNow = now;

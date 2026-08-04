@@ -181,15 +181,18 @@ function advanceLooseBall(state, deltaSeconds, config) {
 }
 
 function resolveFieldBoundary(ball, field) {
-  const inGoalMouth = ball.y > field.goalTop && ball.y < field.goalBottom;
-  if (inGoalMouth && ball.height < 3.25 && ball.x > field.right + 20) return HOME_TEAM;
-  if (inGoalMouth && ball.height < 3.25 && ball.x < field.left - 20) return 1;
-  if (inGoalMouth && ball.height >= 3.25 && ball.x > field.right - ball.radius) {
+  const insideGoalFrame = ball.y > field.goalTop && ball.y < field.goalBottom;
+  const insideScoringMouth = ball.y > field.scoringGoalTop && ball.y < field.scoringGoalBottom;
+  const belowCrossbar = ball.height <= field.goalScoringMaxBallHeight;
+  if (insideScoringMouth && belowCrossbar && ball.x > field.right + ball.radius) return HOME_TEAM;
+  if (insideScoringMouth && belowCrossbar && ball.x < field.left - ball.radius) return 1;
+  const blockedByGoalFrame = insideGoalFrame && (!insideScoringMouth || !belowCrossbar);
+  if (blockedByGoalFrame && ball.x > field.right - ball.radius) {
     ball.x = field.right - ball.radius;
     ball.vx = -Math.abs(ball.vx) * 0.58;
     ball.vz *= 0.72;
   }
-  if (inGoalMouth && ball.height >= 3.25 && ball.x < field.left + ball.radius) {
+  if (blockedByGoalFrame && ball.x < field.left + ball.radius) {
     ball.x = field.left + ball.radius;
     ball.vx = Math.abs(ball.vx) * 0.58;
     ball.vz *= 0.72;
@@ -202,11 +205,11 @@ function resolveFieldBoundary(ball, field) {
     ball.y = field.bottom - ball.radius;
     ball.vy = -Math.abs(ball.vy) * 0.74;
   }
-  if (!inGoalMouth && ball.x < field.left + ball.radius) {
+  if (!insideGoalFrame && ball.x < field.left + ball.radius) {
     ball.x = field.left + ball.radius;
     ball.vx = Math.abs(ball.vx) * 0.74;
   }
-  if (!inGoalMouth && ball.x > field.right - ball.radius) {
+  if (!insideGoalFrame && ball.x > field.right - ball.radius) {
     ball.x = field.right - ball.radius;
     ball.vx = -Math.abs(ball.vx) * 0.74;
   }

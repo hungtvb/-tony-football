@@ -1,9 +1,17 @@
 import * as THREE_NAMESPACE from "three";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+import {
+  DEFAULT_SIMULATION_SCALE_PROFILE,
+  representativeRigScale,
+} from "../config/simulationScaleProfile.js";
 
 const SKIN = Object.freeze([0xd89d78, 0xb97958, 0x8f5a3d, 0xe5b08b]);
 const HAIR = Object.freeze([0x231914, 0x38241b, 0x111413, 0x5a351f]);
 const SURFACES = Object.freeze(["kit", "shorts", "socks", "boots", "skin", "hair", "unknown"]);
+const PLAYER_HEIGHT = DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits;
+const PLAYER_RADIUS = DEFAULT_SIMULATION_SCALE_PROFILE.player.collisionRadiusMetres;
+const PROCEDURAL_SOURCE_HEIGHT = 6.61;
+const PROCEDURAL_SCALE = PLAYER_HEIGHT / PROCEDURAL_SOURCE_HEIGHT;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (from, to, alpha) => from + (to - from) * alpha;
 
@@ -116,7 +124,7 @@ function canvasLabel({ THREE, document, text, accent }) {
   paint.fillStyle = "rgba(4,8,7,.86)"; paint.roundRect(4, 6, 248, 50, 12); paint.fill(); paint.strokeStyle = accent; paint.lineWidth = 3; paint.stroke();
   paint.fillStyle = "white"; paint.font = "700 27px Inter"; paint.textAlign = "center"; paint.textBaseline = "middle"; paint.fillText(text, 128, 32);
   const material = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthTest: false, toneMapped: false });
-  const sprite = new THREE.Sprite(material); sprite.scale.set(5.2, 1.3, 1); sprite.position.y = 7; return sprite;
+  const sprite = new THREE.Sprite(material); sprite.scale.set(1.65, .42, 1); sprite.position.y = PLAYER_HEIGHT + .34; return sprite;
 }
 function limb(THREE, material, endMaterial, length, radius, lowPowerDevice) {
   const root = new THREE.Group(); const segments = lowPowerDevice ? 6 : 10;
@@ -143,7 +151,8 @@ function createProceduralPlayer({ THREE, document, player, lowPowerDevice }) {
   const leftLeg = limb(THREE, skin, socks, 1.9, .27, lowPowerDevice); const rightLeg = limb(THREE, skin, socks, 1.9, .27, lowPowerDevice); leftLeg.name = "TonySockLegLeft"; rightLeg.name = "TonySockLegRight"; leftLeg.position.set(-.48, 1.75, 0); rightLeg.position.set(.48, 1.75, 0);
   const leftBoot = boot(THREE, boots, "left", lowPowerDevice); const rightBoot = boot(THREE, boots, "right", lowPowerDevice); leftLeg.add(leftBoot); rightLeg.add(rightBoot); body.add(leftLeg, rightLeg);
   const leftArm = limb(THREE, jersey, skin, 1.58, .22, lowPowerDevice); const rightArm = limb(THREE, jersey, skin, 1.58, .22, lowPowerDevice); leftArm.position.set(-1, 4.42, 0); rightArm.position.set(1, 4.42, 0); leftArm.rotation.z = -.24; rightArm.rotation.z = .24; body.add(leftArm, rightArm);
-  const marker = new THREE.Mesh(new THREE.TorusGeometry(1.7, .09, 8, 36), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: .92, toneMapped: false })); marker.rotation.x = Math.PI / 2; marker.position.y = .08; root.add(marker);
+  body.scale.setScalar(PROCEDURAL_SCALE); body.position.y = .09;
+  const marker = new THREE.Mesh(new THREE.TorusGeometry(PLAYER_RADIUS * 1.22, .025, 8, 36), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: .92, toneMapped: false })); marker.rotation.x = Math.PI / 2; marker.position.y = .025; root.add(marker);
   const label = canvasLabel({ THREE, document, text: `${player.number} · ${player.name}`, accent: home ? "#e1bb58" : "#47c9d4" }); root.add(label);
   const appearance = freezeAppearance({ mode: "fallback", materialCount: 6, preservedMapCount: 0, tintedKitMaterialCount: 3, sharedTextureMaterialCount: 0, footwearNodeCount: 2, semanticCounts: { kit: 1, shorts: 1, socks: 2, boots: 2, skin: 3, hair: 1, unknown: 0 } });
   return { root, body, torso, head, leftLeg, rightLeg, leftArm, rightArm, leftBoot, rightBoot, marker, label, rig: null, appearance };
@@ -185,10 +194,26 @@ function countFootwearNodes(model) {
   model?.traverse?.((node) => { if (/(^|[^a-z])(boot|shoe|cleat|foot)([^a-z]|$)/i.test(node.name ?? "")) count += 1; });
   return count;
 }
+function measureAndNormalizeRig({ THREE, model, scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE }) {
+  model.scale.set(1, 1, 1);
+  model.updateMatrixWorld?.(true);
+  const bounds = new THREE.Box3().setFromObject(model, true);
+  const size = new THREE.Vector3();
+  bounds.getSize(size);
+  const measuredHeight = Number(size.y);
+  const scale = representativeRigScale(measuredHeight, scaleProfile);
+  model.scale.setScalar(scale);
+  model.updateMatrixWorld?.(true);
+  model.userData.tonyScaleProfileId = scaleProfile.id;
+  model.userData.tonyMeasuredRigHeight = measuredHeight;
+  model.userData.tonyRepresentativeHeight = scaleProfile.player.representativeHeightWorldUnits;
+  model.userData.tonyRigScale = scale;
+  return Object.freeze({ measuredHeight, targetHeight: scaleProfile.player.representativeHeightWorldUnits, scale });
+}
 function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }) {
   let model = null; let animationSet = null; const ownedMaterials = []; const appearance = createAppearance("asset");
   try {
-    model = cloneModel(characterScene); model.scale.set(2.96, 3.28, 2.96); model.rotation.y = 0;
+    model = cloneModel(characterScene); measureAndNormalizeRig({ THREE, model }); model.rotation.y = 0;
     model.traverse((node) => {
       if (!node.isMesh) return; node.castShadow = true; node.receiveShadow = true; node.frustumCulled = false; node.userData.tonySharedGeometry = true;
       const source = Array.isArray(node.material) ? node.material : [node.material];
@@ -218,6 +243,21 @@ function applyFootballActionPose(rig, player, progress, dt) {
   if (player.anim === "shoot" && rig.rightThigh) rig.rightThigh.rotation.x -= shoot * 1.36; if (player.anim === "shoot" && rig.rightCalf) rig.rightCalf.rotation.x += shoot * .48;
   if (player.anim === "pass" && rig.rightThigh) rig.rightThigh.rotation.x -= pass * .72; if (player.anim === "pass" && rig.rightFoot) rig.rightFoot.rotation.y += pass * .32;
   const roll = -(player.turnLean || 0) * .14 + (player.animPower < 0 ? -1 : 1) * tackle * .72; rig.model.rotation.z = lerp(rig.model.rotation.z, roll, 1 - Math.exp(-dt * 18)); rig.model.position.y = lerp(rig.model.position.y, -tackle * .32, 1 - Math.exp(-dt * 20));
+}
+
+function playerScaleEvidence(view) {
+  const model = view.rig?.model ?? null;
+  const measuredRigHeight = model ? Number(model.userData?.tonyMeasuredRigHeight) : null;
+  const uniformScale = model ? Number(model.userData?.tonyRigScale) : PROCEDURAL_SCALE;
+  const targetHeight = Number(model?.userData?.tonyRepresentativeHeight ?? PLAYER_HEIGHT);
+  return Object.freeze({
+    mode: model ? "measured-rig" : "procedural",
+    profileId: model?.userData?.tonyScaleProfileId ?? DEFAULT_SIMULATION_SCALE_PROFILE.id,
+    measuredRigHeight: Number.isFinite(measuredRigHeight) ? measuredRigHeight : null,
+    targetHeight,
+    uniformScale,
+    projectedHeight: Number.isFinite(measuredRigHeight) ? measuredRigHeight * uniformScale : PLAYER_HEIGHT,
+  });
 }
 
 export function createPlayerModelView({ player, scenePort, document, worldX, worldZ, lowPowerDevice = false, three = THREE_NAMESPACE, cloneModel = cloneSkeleton } = {}) {
@@ -304,7 +344,7 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     attach, installAsset, installAnimations, render, reset, teardown,
     diagnostics: () => Object.freeze({
       id: player.id, team: player.team, role: player.role, attached, rigged: Boolean(view.rig), disposed, terminating, installError,
-      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance, motion: motionDiagnostics,
+      retiredAnimationSetCount: retiredAnimationSets.length, currentAnimationReleased, rootDisposed, appearance: view.appearance, scale: playerScaleEvidence(view), motion: motionDiagnostics,
     }),
   });
 }

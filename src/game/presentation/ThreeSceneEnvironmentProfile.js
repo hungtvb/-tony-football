@@ -1,3 +1,5 @@
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../config/simulationScaleProfile.js";
+
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
@@ -57,14 +59,26 @@ function shadowBounds(value, name) {
   return value;
 }
 
+const SCALE_PROFILE = DEFAULT_SIMULATION_SCALE_PROFILE;
+
 const DEFAULT_PROFILE_INPUT = {
-  id: "tony-football-default-v1",
+  id: "tony-football-mini-6v6-v2",
   geometry: {
-    worldWidth: 1200,
-    worldHeight: 700,
-    worldScale: 0.1,
-    field: { left: 48, right: 1152, top: 42, bottom: 658 },
-    goal: { top: 265, bottom: 435, width: 17, height: 3.5, depth: 3 },
+    worldWidth: SCALE_PROFILE.simulation.worldWidth,
+    worldHeight: SCALE_PROFILE.simulation.worldHeight,
+    worldScale: SCALE_PROFILE.simulation.worldUnitsPerSimulationUnit,
+    field: { ...SCALE_PROFILE.field.bounds },
+    markings: { ...SCALE_PROFILE.field.markings },
+    goal: {
+      top: SCALE_PROFILE.goal.mouthTop,
+      bottom: SCALE_PROFILE.goal.mouthBottom,
+      mouthWidth: SCALE_PROFILE.goal.mouthWidthMetres,
+      width: SCALE_PROFILE.goal.frameWidthMetres,
+      height: SCALE_PROFILE.goal.crossbarHeightMetres,
+      depth: SCALE_PROFILE.goal.depthMetres,
+      postThickness: SCALE_PROFILE.goal.postThicknessMetres,
+      postRadius: SCALE_PROFILE.goal.postRadiusMetres,
+    },
   },
   renderer: {
     background: 0x050a09,
@@ -77,8 +91,8 @@ const DEFAULT_PROFILE_INPUT = {
     lowPowerFov: 43,
     near: 0.1,
     far: 260,
-    position: { x: 0, y: 45, z: 52 },
-    lowPowerPosition: { x: 0, y: 54, z: 63 },
+    position: { x: 0, y: 40, z: 41 },
+    lowPowerPosition: { x: 0, y: 45, z: 46 },
   },
   lighting: {
     hemisphere: { skyColor: 0xcfffe7, groundColor: 0x06120d, intensity: 1.45 },
@@ -126,6 +140,7 @@ function cloneProfile(input) {
       worldHeight: input.geometry.worldHeight,
       worldScale: input.geometry.worldScale,
       field: { ...input.geometry.field },
+      markings: { ...input.geometry.markings },
       goal: { ...input.geometry.goal },
     },
     renderer: { ...input.renderer },
@@ -160,14 +175,20 @@ export function createThreeSceneEnvironmentProfile(input = DEFAULT_PROFILE_INPUT
   positive(geometry.worldWidth, "geometry.worldWidth");
   positive(geometry.worldHeight, "geometry.worldHeight");
   positive(geometry.worldScale, "geometry.worldScale");
-  const { field, goal } = geometry;
+  const { field, markings, goal } = geometry;
   for (const [name, value] of Object.entries(field)) finite(value, `geometry.field.${name}`);
   if (!(field.left < field.right && field.top < field.bottom)) throw new RangeError("field bounds are invalid");
+  for (const [name, value] of Object.entries(markings)) positive(value, `geometry.markings.${name}`);
   for (const [name, value] of Object.entries(goal)) finite(value, `geometry.goal.${name}`);
   if (!(goal.top < goal.bottom)) throw new RangeError("goal mouth bounds are invalid");
+  positive(goal.mouthWidth, "geometry.goal.mouthWidth");
   positive(goal.width, "geometry.goal.width");
   positive(goal.height, "geometry.goal.height");
   positive(goal.depth, "geometry.goal.depth");
+  positive(goal.postThickness, "geometry.goal.postThickness");
+  positive(goal.postRadius, "geometry.goal.postRadius");
+  if (Math.abs(goal.postRadius * 2 - goal.postThickness) > 1e-9) throw new RangeError("goal post radius must be half the thickness");
+  if (Math.abs(goal.width - (goal.mouthWidth + goal.postThickness)) > 1e-9) throw new RangeError("goal frame width must include the mouth and one post thickness");
 
   color(profile.renderer.background, "renderer.background");
   color(profile.renderer.fogColor, "renderer.fogColor");

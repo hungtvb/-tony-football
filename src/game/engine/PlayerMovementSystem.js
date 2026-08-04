@@ -1,5 +1,9 @@
 import { locomotionConfig } from "../config/locomotionConfig.js";
 import {
+  assertSimulationWorldDimensions,
+  DEFAULT_SIMULATION_SCALE_PROFILE,
+} from "../config/simulationScaleProfile.js";
+import {
   chooseSprintTransitionResponse,
   chooseTurnResponse,
   dampVelocity,
@@ -12,15 +16,33 @@ import {
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, amount) => a + (b - a) * amount;
 
-export function createFieldBounds(width = 1200, height = 700) {
+export function createFieldBounds(
+  width,
+  height,
+  scaleProfile = DEFAULT_SIMULATION_SCALE_PROFILE,
+) {
+  const resolvedWidth = width ?? scaleProfile.simulation.worldWidth;
+  const resolvedHeight = height ?? scaleProfile.simulation.worldHeight;
+  assertSimulationWorldDimensions(resolvedWidth, resolvedHeight, scaleProfile);
+  const bounds = scaleProfile.field.bounds;
+  const centreY = scaleProfile.field.centre.y;
+  const mouthHalfHeight = scaleProfile.goal.mouthWidthSimulation / 2;
+  const ballRadiusY = scaleProfile.ball.radiusSimulation;
   return Object.freeze({
-    left: width * 0.04,
-    right: width * 0.96,
-    top: height * 0.06,
-    bottom: height * 0.94,
-    goalTop: height / 2 - height * (85 / 700),
-    goalBottom: height / 2 + height * (85 / 700),
-    goalkeeperDepth: width * (142 / 1200)
+    left: bounds.left,
+    right: bounds.right,
+    top: bounds.top,
+    bottom: bounds.bottom,
+    goalTop: centreY - mouthHalfHeight,
+    goalBottom: centreY + mouthHalfHeight,
+    scoringGoalTop: centreY - mouthHalfHeight + ballRadiusY,
+    scoringGoalBottom: centreY + mouthHalfHeight - ballRadiusY,
+    goalCrossbarHeight: scaleProfile.goal.crossbarHeightMetres,
+    goalScoringMaxBallHeight: scaleProfile.goal.scoringMaxBallHeightMetres,
+    goalDepth: scaleProfile.goal.depthSimulation,
+    goalPostThickness: scaleProfile.goal.postThicknessSimulation,
+    goalkeeperDepth: scaleProfile.field.markings.penaltyAreaDepthSimulation,
+    scaleProfileId: scaleProfile.id,
   });
 }
 
