@@ -1,0 +1,73 @@
+name: ChatGPT TON-193 Blob Upload
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chatgpt-ton193-blob-upload.yml
+      - .github/temporary/ton193-resolution.patch.gz.b64
+
+permissions:
+  contents: write
+
+jobs:
+  upload-reconciled-blobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout temporary publisher branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Preserve resolution payload and checkout exact TON-193 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .github/temporary/ton193-resolution.patch.gz.b64 | gzip -d > "$RUNNER_TEMP/ton193-resolution.patch"
+          echo "4273f80be62650065b4b7f6788450c7e92ea98dd8838682334e8d06a7c23b683  $RUNNER_TEMP/ton193-resolution.patch" | sha256sum -c -
+          git checkout --detach 576e382e320522a275715246c933d4214a45e007
+          git apply --check "$RUNNER_TEMP/ton193-resolution.patch"
+          git apply "$RUNNER_TEMP/ton193-resolution.patch"
+
+      - name: Verify exact reconciled file hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/expected-blobs.txt" <<'HASHES'
+          62e800ba43ab405e1aa21755c604f05853590ad3  scripts/validate-assets.mjs
+          9710e6c17606ecef2fd31daae9b7fafe3ae38906  src/game/presentation/BallModelView.js
+          5295dc4516f35ccb61fd18a4fd694db60beabae9  src/game/presentation/BrowserModelViewAdapter.js
+          a1d241750da510b78c96ec11061e3fd262a6a1c2  src/game/presentation/PlayerModelView.js
+          4163f7fc6c7111a082e050825cd6e72fcbed7663  tests/e2e/model-views.spec.mjs
+          HASHES
+          while read -r expected path; do
+            actual="$(git hash-object "$path")"
+            test "$actual" = "$expected" || { echo "$path: expected $expected, got $actual" >&2; exit 1; }
+          done < "$RUNNER_TEMP/expected-blobs.txt"
+
+      - name: Upload exact blobs without mutating a branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/blob-shas.txt"
+          while read -r expected path; do
+            payload="$RUNNER_TEMP/blob.json"
+            jq -n --arg content "$(base64 -w0 "$path")" '{content:$content,encoding:"base64"}' > "$payload"
+            actual="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input "$payload" --jq .sha)"
+            test "$actual" = "$expected" || { echo "$path: API returned $actual, expected $expected" >&2; exit 1; }
+            printf '%s  %s\n' "$actual" "$path" | tee -a "$RUNNER_TEMP/blob-shas.txt"
+          done < "$RUNNER_TEMP/expected-blobs.txt"
+
+      - name: Upload SHA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ton193-reconciled-blob-shas
+          path: ${{ runner.temp }}/blob-shas.txt
+          if-no-files-found: error
+          retention-days: 1
