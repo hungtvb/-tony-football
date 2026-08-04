@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "three";
 
 import { classifyPlayerSurface, createPlayerModelView, createSemanticPlayerMaterial } from "../../src/game/presentation/PlayerModelView.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE } from "../../src/game/config/simulationScaleProfile.js";
 
 function canvasContext() {
   return { fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "", textBaseline: "", roundRect() {}, fill() {}, stroke() {}, fillText() {} };
@@ -42,6 +43,18 @@ test("procedural fallback exposes two explicit boot meshes and appearance eviden
   const evidence = view.diagnostics().appearance;
   assert.equal(evidence.mode, "fallback"); assert.equal(evidence.bootCount, 2); assert.equal(evidence.semanticCounts.boots, 2);
   assert.equal(names.includes("TonyBootLeft"), true); assert.equal(names.includes("TonyBootRight"), true);
+  const marker = view.root.children.find((node) => node.geometry?.type === "TorusGeometry");
+  assert.ok(marker, "procedural fallback must expose a finite selection marker");
+  const expectedRadius = DEFAULT_SIMULATION_SCALE_PROFILE.player.collisionRadiusMetres
+    * DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerMetre
+    * 1.22;
+  assert.equal(marker.geometry.parameters.radius, expectedRadius);
+  const markerPositions = marker.geometry.getAttribute("position");
+  for (let index = 0; index < markerPositions.count; index += 1) {
+    assert.equal(Number.isFinite(markerPositions.getX(index)), true);
+    assert.equal(Number.isFinite(markerPositions.getY(index)), true);
+    assert.equal(Number.isFinite(markerPositions.getZ(index)), true);
+  }
   assert.equal(view.teardown(), true);
 });
 

@@ -13,7 +13,7 @@ const SURFACES = Object.freeze(["kit", "shorts", "socks", "boots", "skin", "hair
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (from, to, alpha) => from + (to - from) * alpha;
 const PLAYER_HEIGHT = DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits;
-const PLAYER_RADIUS = DEFAULT_SIMULATION_SCALE_PROFILE.player.collisionRadiusWorldUnits;
+const PLAYER_RADIUS = DEFAULT_SIMULATION_SCALE_PROFILE.player.collisionRadiusMetres * DEFAULT_SIMULATION_SCALE_PROFILE.simulation.worldUnitsPerMetre;
 const PROCEDURAL_SOURCE_HEIGHT = 6.61;
 const PROCEDURAL_SCALE = PLAYER_HEIGHT / PROCEDURAL_SOURCE_HEIGHT;
 
