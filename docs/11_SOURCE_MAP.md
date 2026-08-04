@@ -71,8 +71,8 @@ The deployed WebGL path uses one renderer, one scene, one camera and one compose
 
 | Source | Responsibility | Boundary |
 | --- | --- | --- |
-| `BrowserModelViewAdapter.js` | Snapshot interpolation, player reconciliation, shared character/animation loading, status/fallback lifecycle, reset and teardown | Receives immutable frames and frozen input presentation facts only |
-| `PlayerModelView.js` | Procedural fallback, cloned rig, kit materials, mixer/actions, action pose, marker and label | Mutates only its own Three.js projection; never gameplay state |
+| `BrowserModelViewAdapter.js` | Snapshot interpolation, player reconciliation, shared character/animation loading, detached appearance preparation, status/fallback lifecycle, reset and teardown | Receives immutable frames and frozen input presentation facts only; rejects non-conforming rig candidates before fallback retirement |
+| `PlayerModelView.js` | Procedural fallback, detached rig candidate, appearance-preparation hook, owned material/accessory disposal, mixer/actions, action pose, marker and label | Commits a rig only after model appearance and animation preparation succeed; mutates only its own Three.js projection |
 | `BallModelView.js` | Ball mesh/surface/style and charge indicator | Charge reads frozen active-charge facts; trail remains outside TON-81 |
 | `docs/14_MODEL_VIEW_CONTRACT.md` | Durable model ownership, asset fallback, facts and teardown rules | Architecture contract for TON-81 and successor slices |
 
