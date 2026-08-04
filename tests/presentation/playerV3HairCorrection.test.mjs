@@ -72,6 +72,13 @@ test("repairs Head-attached hair into body-rest skinned scalp and crown surfaces
     assert.equal(node.userData.tonyHairPlacementMode, "body-rest-skinned-v1");
     assert.equal(node.geometry.getAttribute("skinIndex")?.itemSize, 4);
     assert.equal(node.geometry.getAttribute("skinWeight")?.itemSize, 4);
+    const positions = node.geometry.getAttribute("position");
+    for (let index = 0; index < positions.count; index += 1) {
+      assert.equal(Number.isFinite(positions.getX(index)), true);
+      assert.equal(Number.isFinite(positions.getY(index)), true);
+      assert.equal(Number.isFinite(positions.getZ(index)), true);
+    }
+    assert.equal(node.geometry.boundingSphere, null);
     node.geometry.computeBoundingBox();
     assert.equal(node.geometry.boundingBox.max.y > .9, true);
   }

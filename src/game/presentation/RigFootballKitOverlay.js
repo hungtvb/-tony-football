@@ -593,6 +593,20 @@ function createHair({ THREE, root, body, metrics, palette, variant, variantIndex
   return meshes;
 }
 
+function assertFinitePositions(geometry, label) {
+  const position = geometry?.getAttribute?.("position");
+  if (!position || position.itemSize < 3 || position.count <= 0) throw new Error(`${label} requires finite position geometry`);
+  for (let index = 0; index < position.count; index += 1) {
+    const x = Number(position.getX(index));
+    const y = Number(position.getY(index));
+    const z = Number(position.getZ(index));
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      throw new Error(`${label} contains a non-finite position at vertex ${index}`);
+    }
+  }
+  return geometry;
+}
+
 function createFootballBootGeometry(THREE, bounds, toeCenter, footBoneIndex, toeBoneIndex, bodyHeight) {
   const width = Math.max(bounds.width * 1.14, bodyHeight * .044);
   const height = Math.max(bounds.height * 1.08, bodyHeight * .030);
@@ -639,9 +653,12 @@ function createFootballBootGeometry(THREE, bounds, toeCenter, footBoneIndex, toe
   }
   geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(skinIndices, 4));
   geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWeights, 4));
+  assertFinitePositions(geometry, "Player V3 footwear");
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+  // Footwear surfaces are explicitly excluded from frustum culling and are
+  // not raycast targets, so a pre-bind static bounding sphere is unnecessary.
+  geometry.boundingSphere = null;
   geometry.type = "TonyFootballBootGeometry";
   geometry.userData.tonyFootballBootGeometry = true;
   return geometry;

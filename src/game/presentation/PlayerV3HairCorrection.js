@@ -55,6 +55,20 @@ function validBounds(bounds) {
     && Number(bounds.depth) > 0;
 }
 
+function assertFinitePositions(geometry, label) {
+  const position = geometry?.getAttribute?.("position");
+  if (!position || position.itemSize < 3 || position.count <= 0) throw new Error(`${label} requires finite position geometry`);
+  for (let index = 0; index < position.count; index += 1) {
+    const x = Number(position.getX(index));
+    const y = Number(position.getY(index));
+    const z = Number(position.getZ(index));
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      throw new Error(`${label} contains a non-finite position at vertex ${index}`);
+    }
+  }
+  return geometry;
+}
+
 function transformedGeometry(THREE, geometry, position, scale, rotation = [0, 0, 0]) {
   const matrix = new THREE.Matrix4().compose(
     new THREE.Vector3(...position),
@@ -62,9 +76,13 @@ function transformedGeometry(THREE, geometry, position, scale, rotation = [0, 0,
     new THREE.Vector3(...scale),
   );
   geometry.applyMatrix4(matrix);
+  assertFinitePositions(geometry, "Player V3 hair");
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+  // Hair surfaces never participate in frustum culling or raycasting, so a
+  // static geometry sphere is unnecessary and can produce renderer warnings
+  // before the SkinnedMesh has been bound to its final skeleton.
+  geometry.boundingSphere = null;
   return geometry;
 }
 

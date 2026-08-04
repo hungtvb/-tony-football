@@ -121,6 +121,15 @@ test("Player V3 keeps one authoritative body and adds measured hair plus two ski
   assert.equal(boots.every((node) => node.geometry?.type === "TonyFootballBootGeometry"), true);
   assert.equal(boots.every((node) => node.skeleton === body.skeleton), true);
   assert.equal(boots.every((node) => Array.isArray(node.material) && node.material.length === 2), true);
+  for (const boot of boots) {
+    const positions = boot.geometry.getAttribute("position");
+    for (let index = 0; index < positions.count; index += 1) {
+      assert.equal(Number.isFinite(positions.getX(index)), true);
+      assert.equal(Number.isFinite(positions.getY(index)), true);
+      assert.equal(Number.isFinite(positions.getZ(index)), true);
+    }
+    assert.equal(boot.geometry.boundingSphere, null);
+  }
 
   const skinnedMeshes = [];
   root.traverse((node) => { if (node.isSkinnedMesh) skinnedMeshes.push(node); });
