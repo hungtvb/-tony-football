@@ -11,12 +11,30 @@ test("browser entry registers model views before scene rendering", async () => {
   assert.match(bootstrap, /const activeCharge = this\.#inputAdapter\.activeCharge/); assert.match(bootstrap, /const pressedCodes = this\.#inputAdapter\.pressedCodes/); assert.match(bootstrap, /activeCharge, pressedCodes/);
 });
 
-test("player appearance preserves source maps and requires explicit rig kit and boot meshes", async () => {
-  const [playerView, adapter, overlay] = await Promise.all([read("src/game/presentation/PlayerModelView.js"), read("src/game/presentation/BrowserModelViewAdapter.js"), read("src/game/presentation/RigFootballKitOverlay.js")]);
+test("Player V3 preserves source maps and uses one integrated body plus explicit hair", async () => {
+  const [playerView, adapter, appearance] = await Promise.all([read("src/game/presentation/PlayerModelView.js"), read("src/game/presentation/BrowserModelViewAdapter.js"), read("src/game/presentation/RigFootballKitOverlay.js")]);
   for (const contract of ["classifyPlayerSurface", "tonySourceMapPreserved", "tonySharedTextures", "TonyBootLeft", "TonyBootRight", "appearance: view.appearance"]) assert.equal(playerView.includes(contract), true, `PlayerModelView must retain ${contract}`);
   assert.equal(playerView.includes("material.map = null"), false);
-  for (const contract of ["TonyRigJersey", "TonyRigShorts", "TonyRigSockLeft", "TonyRigSockRight", "TonyRigBootLeft", "TonyRigBootRight", "tonyRigBootGeometry", "rigFootballKitEvidence"]) assert.equal(overlay.includes(contract), true, `RigFootballKitOverlay must retain ${contract}`);
-  assert.match(adapter, /ensureRigFootballKitOverlay/); assert.match(adapter, /visibleKitPlayers/); assert.match(adapter, /bootGeometryCount/); assert.match(adapter, /rigKitInstalled/);
+  for (const contract of [
+    "TonyPlayerV3IntegratedAppearanceMaterial",
+    "TonyRigFootballAppearanceV3",
+    "vTonyBodyPosition",
+    "tonyPlayerV3VariantIndex",
+    "tonyPlayerV3VariantName",
+    "tonyPlayerV3KitPattern",
+    "player-v3-integrated-body-material",
+    "TonyPlayerV3Hair",
+    "tonyRigHairGeometry",
+    "tonySourceMapPreserved",
+    "bootRegionCount",
+    "rigidPrimitiveCount",
+    "rigFootballKitEvidence",
+  ]) assert.equal(appearance.includes(contract), true, `Player V3 appearance must retain ${contract}`);
+  for (const removedPrimitive of ["TonyRigJersey", "TonyRigShorts", "TonyRigSockLeft", "TonyRigSockRight", "TonyRigBootLeft", "TonyRigBootRight", "tonyRigBootGeometry", "bone.add(mesh)"]) {
+    assert.equal(appearance.includes(removedPrimitive), false, `Player V3 must not restore rigid kit geometry: ${removedPrimitive}`);
+  }
+  for (const contract of ["integratedBodySurfaceCount", "bootRegionCount", "hairlessPlayers", "distinctVariants", "visibleKitPlayers"]) assert.equal(adapter.includes(contract), true, `BrowserModelViewAdapter must expose ${contract}`);
+  assert.match(adapter, /player-v3-integrated-body-material/);
   assert.equal(adapter.includes("footwearNodeCount"), false, "browser acceptance must not treat skeleton foot bones as boot geometry");
 });
 

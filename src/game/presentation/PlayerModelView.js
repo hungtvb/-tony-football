@@ -1,19 +1,21 @@
 import * as THREE_NAMESPACE from "three";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+import { DEFAULT_SIMULATION_SCALE_PROFILE, representativeRigScale } from "../config/simulationScaleProfile.js";
 import {
-  DEFAULT_SIMULATION_SCALE_PROFILE,
-  representativeRigScale,
-} from "../config/simulationScaleProfile.js";
+  createPlayerMotionPresentationState,
+  resetPlayerMotionPresentationState,
+  stepPlayerMotionPresentation,
+} from "./PlayerMotionPresentation.js";
 
 const SKIN = Object.freeze([0xd89d78, 0xb97958, 0x8f5a3d, 0xe5b08b]);
 const HAIR = Object.freeze([0x231914, 0x38241b, 0x111413, 0x5a351f]);
 const SURFACES = Object.freeze(["kit", "shorts", "socks", "boots", "skin", "hair", "unknown"]);
-const PLAYER_HEIGHT = DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits;
-const PLAYER_RADIUS = DEFAULT_SIMULATION_SCALE_PROFILE.player.collisionRadiusMetres;
-const PROCEDURAL_SOURCE_HEIGHT = 6.61;
-const PROCEDURAL_SCALE = PLAYER_HEIGHT / PROCEDURAL_SOURCE_HEIGHT;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (from, to, alpha) => from + (to - from) * alpha;
+const PLAYER_HEIGHT = DEFAULT_SIMULATION_SCALE_PROFILE.player.representativeHeightWorldUnits;
+const PLAYER_RADIUS = DEFAULT_SIMULATION_SCALE_PROFILE.player.collisionRadiusWorldUnits;
+const PROCEDURAL_SOURCE_HEIGHT = 6.61;
+const PROCEDURAL_SCALE = PLAYER_HEIGHT / PROCEDURAL_SOURCE_HEIGHT;
 
 function assertImmutable(value, name) {
   if (!value || typeof value !== "object" || !Object.isFrozen(value)) throw new TypeError(`${name} must be an immutable object`);
@@ -27,8 +29,17 @@ function disposeMaterial(material) {
   }
   material.dispose?.();
 }
-function disposeOwned(root) {
-  root?.traverse?.((node) => { if (!node.userData?.tonySharedGeometry) node.geometry?.dispose?.(); (Array.isArray(node.material) ? node.material : [node.material]).forEach(disposeMaterial); });
+function disposeOwned(root, additionalMaterials = []) {
+  const geometries = new Set();
+  const materials = new Set(additionalMaterials ?? []);
+  root?.traverse?.((node) => {
+    if (node.geometry && !node.userData?.tonySharedGeometry) geometries.add(node.geometry);
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+      if (material) materials.add(material);
+    }
+  });
+  for (const geometry of geometries) geometry.dispose?.();
+  for (const material of materials) disposeMaterial(material);
 }
 
 function normalizedSurfaceLabel(nodeName = "", materialName = "") {
@@ -187,7 +198,7 @@ function prepareAnimationSet({ THREE, model, animations = [] }) {
 }
 function releaseRigCandidate(rig, errors = null) {
   try { releaseAnimationSet(rig, errors); } catch (error) { if (errors) errors.push(error); }
-  disposeCandidateMaterials(rig?.ownedMaterials);
+  disposeOwned(rig?.model, rig?.ownedMaterials);
 }
 function countFootwearNodes(model) {
   let count = 0;
@@ -210,7 +221,7 @@ function measureAndNormalizeRig({ THREE, model, scaleProfile = DEFAULT_SIMULATIO
   model.userData.tonyRigScale = scale;
   return Object.freeze({ measuredHeight, targetHeight: scaleProfile.player.representativeHeightWorldUnits, scale });
 }
-function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }) {
+function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations, prepareModel = null }) {
   let model = null; let animationSet = null; const ownedMaterials = []; const appearance = createAppearance("asset");
   try {
     model = cloneModel(characterScene); measureAndNormalizeRig({ THREE, model }); model.rotation.y = 0;
@@ -221,11 +232,31 @@ function prepareRigCandidate({ THREE, cloneModel, player, characterScene, animat
       node.material = Array.isArray(node.material) ? mapped : mapped[0];
     });
     appearance.footwearNodeCount = countFootwearNodes(model);
+    if (prepareModel !== null) {
+      if (typeof prepareModel !== "function") throw new TypeError("player rig prepareModel must be a function");
+      prepareModel(Object.freeze({ root: model, player }));
+    }
     animationSet = prepareAnimationSet({ THREE, model, animations: animations ?? [] });
-    return { model, ...animationSet, ownedMaterials, appearance: freezeAppearance(appearance), lastTime: null, yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0), head: model.getObjectByName("Head"), spine: model.getObjectByName("spine_03"), pelvis: model.getObjectByName("pelvis"), rightThigh: model.getObjectByName("thigh_r"), rightCalf: model.getObjectByName("calf_r"), rightFoot: model.getObjectByName("foot_r") };
+    return {
+      model,
+      ...animationSet,
+      ownedMaterials,
+      appearance: freezeAppearance(appearance),
+      lastTime: null,
+      yaw: Math.atan2(player.dirX ?? 1, player.dirY ?? 0),
+      motionPresentation: createPlayerMotionPresentationState({ vx: player.vx, vy: player.vy }),
+      head: model.getObjectByName("Head"),
+      spine: model.getObjectByName("spine_03"),
+      pelvis: model.getObjectByName("pelvis"),
+      rightThigh: model.getObjectByName("thigh_r"),
+      rightCalf: model.getObjectByName("calf_r"),
+      rightFoot: model.getObjectByName("foot_r"),
+    };
   } catch (error) {
     if (animationSet) { try { releaseAnimationSet(animationSet); } catch {} }
-    disposeCandidateMaterials(ownedMaterials); throw error;
+    if (model) disposeOwned(model, ownedMaterials);
+    else disposeCandidateMaterials(ownedMaterials);
+    throw error;
   }
 }
 function commitRig(view, rig) {
@@ -238,11 +269,22 @@ function commitRig(view, rig) {
     releaseRigCandidate(rig); throw error;
   }
 }
-function applyFootballActionPose(rig, player, progress, dt) {
-  if (!rig.active) return; const shoot = motionPulse(progress, .24, 1); const pass = motionPulse(progress, .2, 1); const tackle = player.anim === "tackle" ? motionPulse(progress, 0, 1) : 0;
-  if (player.anim === "shoot" && rig.rightThigh) rig.rightThigh.rotation.x -= shoot * 1.36; if (player.anim === "shoot" && rig.rightCalf) rig.rightCalf.rotation.x += shoot * .48;
-  if (player.anim === "pass" && rig.rightThigh) rig.rightThigh.rotation.x -= pass * .72; if (player.anim === "pass" && rig.rightFoot) rig.rightFoot.rotation.y += pass * .32;
-  const roll = -(player.turnLean || 0) * .14 + (player.animPower < 0 ? -1 : 1) * tackle * .72; rig.model.rotation.z = lerp(rig.model.rotation.z, roll, 1 - Math.exp(-dt * 18)); rig.model.position.y = lerp(rig.model.position.y, -tackle * .32, 1 - Math.exp(-dt * 20));
+function applyFootballActionPose(rig, player, progress, dt, motion) {
+  if (!rig.active) return;
+  const shoot = motionPulse(progress, .24, 1);
+  const pass = motionPulse(progress, .2, 1);
+  const tackle = player.anim === "tackle" ? motionPulse(progress, 0, 1) : 0;
+  if (player.anim === "shoot" && rig.rightThigh) rig.rightThigh.rotation.x -= shoot * 1.36;
+  if (player.anim === "shoot" && rig.rightCalf) rig.rightCalf.rotation.x += shoot * .48;
+  if (player.anim === "pass" && rig.rightThigh) rig.rightThigh.rotation.x -= pass * .72;
+  if (player.anim === "pass" && rig.rightFoot) rig.rightFoot.rotation.y += pass * .32;
+  const poseResponse = 1 - Math.exp(-dt * 18);
+  const roll = (motion?.lateralLean ?? 0) + (player.animPower < 0 ? -1 : 1) * tackle * .72;
+  const pitch = (motion?.forwardLean ?? 0) + tackle * .54 - shoot * .035;
+  const compression = motion?.compression ?? 0;
+  rig.model.rotation.x = lerp(rig.model.rotation.x, pitch, poseResponse);
+  rig.model.rotation.z = lerp(rig.model.rotation.z, roll, poseResponse);
+  rig.model.position.y = lerp(rig.model.position.y, -tackle * .32 - compression, 1 - Math.exp(-dt * 20));
 }
 
 function playerScaleEvidence(view) {
@@ -267,7 +309,25 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   if (typeof worldX !== "function" || typeof worldZ !== "function") throw new TypeError("PlayerModelView requires world projection functions");
   const THREE = three; const view = createProceduralPlayer({ THREE, document, player, lowPowerDevice });
   let attached = false; let disposed = false; let terminating = false; let rootDisposed = false; let currentAnimationReleased = false; let installError = ""; const retiredAnimationSets = [];
-  let motionDiagnostics = Object.freeze({ speed: 0, sprinting: false, animationState: "Idle_Loop", animationTimeScale: 1, snapshotX: player.x, snapshotY: player.y, worldX: worldX(player.x), worldZ: worldZ(player.y) });
+  const fallbackMotionPresentation = createPlayerMotionPresentationState({ vx: player.vx, vy: player.vy });
+  let fallbackLastTime = null;
+  let motionDiagnostics = Object.freeze({
+    speed: 0,
+    sprinting: false,
+    animationState: "Idle_Loop",
+    animationTimeScale: 1,
+    forwardAcceleration: 0,
+    lateralAcceleration: 0,
+    forwardLean: 0,
+    lateralLean: 0,
+    compression: 0,
+    strideRate: 1,
+    braking: 0,
+    snapshotX: player.x,
+    snapshotY: player.y,
+    worldX: worldX(player.x),
+    worldZ: worldZ(player.y),
+  });
   function unavailable() { return disposed || terminating; }
   function attach() { if (attached || unavailable()) return false; if (scenePort.addObject(view.root) === false) return false; attached = true; return true; }
   function retryRetiredAnimationSets(errors = null) {
@@ -276,10 +336,18 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
       catch (error) { errors?.push(error); }
     }
   }
-  function installAsset({ characterScene, animations = [] } = {}) {
+  function installAsset({ characterScene, animations = [], prepareModel = null } = {}) {
     if (unavailable() || !characterScene || view.rig) return false;
-    try { const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations }); commitRig(view, candidate); currentAnimationReleased = false; installError = ""; return true; }
-    catch (error) { installError = error?.message ?? String(error); return false; }
+    try {
+      const candidate = prepareRigCandidate({ THREE, cloneModel, player, characterScene, animations, prepareModel });
+      commitRig(view, candidate);
+      currentAnimationReleased = false;
+      installError = "";
+      return true;
+    } catch (error) {
+      installError = error?.message ?? String(error);
+      return false;
+    }
   }
   function installAnimations(nextAnimations = []) {
     if (unavailable() || !view.rig || !Array.isArray(nextAnimations)) return false;
@@ -296,21 +364,40 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     assertImmutable(pose, "player render facts"); assertImmutable(ball, "ball render facts"); if (unavailable()) return false;
     const speed = Math.hypot(pose.vx || 0, pose.vy || 0); const running = speed > 30; const stride = running ? Math.sin(pose.stepPhase || 0) * clamp(speed / 185, .35, 1.25) : 0;
     view.root.position.set(worldX(pose.x), 0, worldZ(pose.y));
+    let frameMotion;
     if (view.rig) {
       const rig = view.rig; const dt = Math.min(.05, Math.max(0, (nowMilliseconds - (rig.lastTime ?? nowMilliseconds)) / 1000)); rig.lastTime = nowMilliseconds;
       const ballYaw = Math.atan2(ball.x - pose.x, ball.y - pose.y); const moveYaw = pose.motionYaw ?? Math.atan2(pose.vx || pose.dirX || 0, pose.vy || pose.dirY || 1); rig.yaw = smoothAngle(rig.yaw, running ? moveYaw : ballYaw, 1 - Math.exp(-dt * (pose.sprinting ? 8 : 11))); view.root.rotation.y = rig.yaw;
-      switchRigAnimation(THREE, rig, selectPlayerAnimationState(pose, speed, rig.state)); if (rig.active) rig.active.timeScale = rig.state === "Sprint_Loop" ? clamp(speed / 225, .82, 1.42) : rig.state === "Jog_Fwd_Loop" ? clamp(speed / 160, .78, 1.34) : 1; rig.mixer.update(dt);
-      applyFootballActionPose(rig, pose, pose.animDuration ? clamp(1 - pose.animTime / pose.animDuration, 0, 1) : 1, dt);
+      const animationState = selectPlayerAnimationState(pose, speed, rig.state);
+      switchRigAnimation(THREE, rig, animationState);
+      frameMotion = stepPlayerMotionPresentation({ state: rig.motionPresentation, pose, dt, yaw: rig.yaw, animationState });
+      if (rig.active) rig.active.timeScale = frameMotion.animationTimeScale;
+      rig.mixer.update(dt);
+      applyFootballActionPose(rig, pose, pose.animDuration ? clamp(1 - pose.animTime / pose.animDuration, 0, 1) : 1, dt, frameMotion);
       if (rig.head) rig.head.rotation.y += clamp(Math.atan2(Math.sin(ballYaw - rig.yaw), Math.cos(ballYaw - rig.yaw)), -.68, .68) * .62;
     } else {
-      view.root.rotation.y = pose.motionYaw ?? Math.atan2(pose.dirX || 0, pose.dirY || 1); const progress = pose.animDuration ? 1 - pose.animTime / pose.animDuration : 1; const wave = pose.animTime > 0 ? Math.sin(clamp(progress, 0, 1) * Math.PI) : 0; const kick = pose.anim === "shoot" || pose.anim === "pass" ? wave : 0; const tackle = pose.anim === "tackle" ? wave : 0;
-      view.body.position.y = running ? Math.abs(Math.sin(pose.stepPhase || 0)) * .12 : 0; view.body.rotation.z = stride * .025 - (pose.turnLean || 0) * .16; view.body.rotation.x = tackle * .6 - kick * .08; view.leftLeg.rotation.x = stride * .72 - tackle * 1.05; view.rightLeg.rotation.x = -stride * .72 - kick * (pose.anim === "shoot" ? 1.45 : 1.05); view.leftArm.rotation.x = -stride * .62 - kick * .45; view.rightArm.rotation.x = stride * .62 + kick * .72;
+      const dt = Math.min(.05, Math.max(0, (nowMilliseconds - (fallbackLastTime ?? nowMilliseconds)) / 1000)); fallbackLastTime = nowMilliseconds;
+      view.root.rotation.y = pose.motionYaw ?? Math.atan2(pose.dirX || 0, pose.dirY || 1);
+      const proceduralState = running ? (pose.sprinting ? "Sprint_Loop" : "Jog_Fwd_Loop") : "Idle_Loop";
+      frameMotion = stepPlayerMotionPresentation({ state: fallbackMotionPresentation, pose, dt, yaw: view.root.rotation.y, animationState: proceduralState });
+      const progress = pose.animDuration ? 1 - pose.animTime / pose.animDuration : 1; const wave = pose.animTime > 0 ? Math.sin(clamp(progress, 0, 1) * Math.PI) : 0; const kick = pose.anim === "shoot" || pose.anim === "pass" ? wave : 0; const tackle = pose.anim === "tackle" ? wave : 0;
+      view.body.position.y = (running ? Math.abs(Math.sin(pose.stepPhase || 0)) * .12 : 0) - frameMotion.compression;
+      view.body.rotation.z = stride * .025 + frameMotion.lateralLean;
+      view.body.rotation.x = frameMotion.forwardLean + tackle * .6 - kick * .08;
+      view.leftLeg.rotation.x = stride * .72 - tackle * 1.05; view.rightLeg.rotation.x = -stride * .72 - kick * (pose.anim === "shoot" ? 1.45 : 1.05); view.leftArm.rotation.x = -stride * .62 - kick * .45; view.rightArm.rotation.x = stride * .62 + kick * .72;
     }
     motionDiagnostics = Object.freeze({
       speed,
       sprinting: Boolean(pose.sprinting),
       animationState: view.rig?.state ?? (running ? "procedural-run" : "procedural-idle"),
-      animationTimeScale: Number(view.rig?.active?.timeScale ?? 1),
+      animationTimeScale: Number(frameMotion?.animationTimeScale ?? view.rig?.active?.timeScale ?? 1),
+      forwardAcceleration: Number(frameMotion?.forwardAcceleration ?? 0),
+      lateralAcceleration: Number(frameMotion?.lateralAcceleration ?? 0),
+      forwardLean: Number(frameMotion?.forwardLean ?? 0),
+      lateralLean: Number(frameMotion?.lateralLean ?? 0),
+      compression: Number(frameMotion?.compression ?? 0),
+      strideRate: Number(frameMotion?.strideRate ?? 1),
+      braking: Number(frameMotion?.braking ?? 0),
       snapshotX: pose.x,
       snapshotY: pose.y,
       worldX: view.root.position.x,
@@ -322,8 +409,14 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
   }
   function reset() {
     if (unavailable()) return false; view.root.position.set(0, 0, 0); view.root.rotation.set(0, 0, 0); retryRetiredAnimationSets();
+    fallbackLastTime = null;
+    resetPlayerMotionPresentationState(fallbackMotionPresentation);
     if (view.rig) {
       view.rig.lastTime = null;
+      resetPlayerMotionPresentationState(view.rig.motionPresentation);
+      view.rig.model.position.y = 0;
+      view.rig.model.rotation.x = 0;
+      view.rig.model.rotation.z = 0;
       try { view.rig.mixer.stopAllAction?.(); view.rig.state = ""; view.rig.active = null; switchRigAnimation(THREE, view.rig, "Idle_Loop", true); }
       catch (error) { installError = error?.message ?? String(error); return false; }
     }
@@ -335,7 +428,10 @@ export function createPlayerModelView({ player, scenePort, document, worldX, wor
     if (view.rig && !currentAnimationReleased) { try { releaseAnimationSet(view.rig); currentAnimationReleased = true; } catch (error) { errors.push(error); } }
     retryRetiredAnimationSets(errors);
     const animationOwnershipReleased = (!view.rig || currentAnimationReleased) && retiredAnimationSets.length === 0;
-    if (!attached && animationOwnershipReleased && !rootDisposed) { try { disposeOwned(view.root); rootDisposed = true; } catch (error) { errors.push(error); } }
+    if (!attached && animationOwnershipReleased && !rootDisposed) {
+      try { disposeOwned(view.root, view.rig?.ownedMaterials); rootDisposed = true; }
+      catch (error) { errors.push(error); }
+    }
     if (!attached && animationOwnershipReleased && rootDisposed) { view.rig = null; disposed = true; terminating = false; installError = ""; }
     if (errors.length === 1) throw errors[0]; if (errors.length > 1) throw new AggregateError(errors, `player model view ${player.id} teardown reported errors`); return disposed;
   }
