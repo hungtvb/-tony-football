@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/chatgpt-ton193-blob-upload.yml
       - .github/temporary/ton193-resolution.patch.gz.b64
+      - .github/temporary/ton193-browser-model-test.patch
 
 permissions:
   contents: write
@@ -23,15 +24,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Preserve resolution payload and checkout exact TON-193 head
+      - name: Preserve resolution payloads and checkout exact TON-193 head
         shell: bash
         run: |
           set -euo pipefail
           base64 -d .github/temporary/ton193-resolution.patch.gz.b64 | gzip -d > "$RUNNER_TEMP/ton193-resolution.patch"
+          cp .github/temporary/ton193-browser-model-test.patch "$RUNNER_TEMP/ton193-browser-model-test.patch"
           echo "4273f80be62650065b4b7f6788450c7e92ea98dd8838682334e8d06a7c23b683  $RUNNER_TEMP/ton193-resolution.patch" | sha256sum -c -
+          echo "67392f083aee65d91bec2cdd132b66f8fe48113c4f50cd94436d34504fcd861a  $RUNNER_TEMP/ton193-browser-model-test.patch" | sha256sum -c -
           git checkout --detach 576e382e320522a275715246c933d4214a45e007
           git apply --check "$RUNNER_TEMP/ton193-resolution.patch"
           git apply "$RUNNER_TEMP/ton193-resolution.patch"
+          git apply --check "$RUNNER_TEMP/ton193-browser-model-test.patch"
+          git apply "$RUNNER_TEMP/ton193-browser-model-test.patch"
 
       - name: Verify exact reconciled file hashes
         shell: bash
@@ -43,6 +48,7 @@ jobs:
           5295dc4516f35ccb61fd18a4fd694db60beabae9  src/game/presentation/BrowserModelViewAdapter.js
           a1d241750da510b78c96ec11061e3fd262a6a1c2  src/game/presentation/PlayerModelView.js
           4163f7fc6c7111a082e050825cd6e72fcbed7663  tests/e2e/model-views.spec.mjs
+          f6983b360974843c77b90febc8fb3dc2929d41dc  tests/presentation/browserModelViewAdapter.test.mjs
           HASHES
           while read -r expected path; do
             actual="$(git hash-object "$path")"
