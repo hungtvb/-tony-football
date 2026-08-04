@@ -40,8 +40,8 @@ jobs:
           cat > "$RUNNER_TEMP/expected-blobs.txt" <<'HASHES'
           99cada27aef1254e30107f78a15b545a2cc89c37  src/game/presentation/PlayerV3HairCorrection.js
           6f4880fa0b7ddfb8a28ff8dcaf2068789c5ae4fc  src/game/presentation/RigFootballKitOverlay.js
-          91e77e44221535e59fad6ecfe9ef759409d2deb5  tests/presentation/playerV3HairCorrection.test.mjs
-          9347a6153712ca7965267095db6aae24df559c36  tests/presentation/rigFootballKitOverlay.test.mjs
+          9347a6153712ca7965267095db6aae24df559c36  tests/presentation/playerV3HairCorrection.test.mjs
+          91e77e44221535e59fad6ecfe9ef759409d2deb5  tests/presentation/rigFootballKitOverlay.test.mjs
           HASHES
           while read -r expected path; do
             actual="$(git hash-object "$path")"
