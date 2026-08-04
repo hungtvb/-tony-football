@@ -1,0 +1,69 @@
+name: ChatGPT TON-193 Marker Radius Blobs
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chatgpt-ton193-marker-radius-blobs.yml
+      - .github/temporary/ton193-marker-radius.patch.b64
+
+permissions:
+  contents: write
+
+jobs:
+  upload-marker-radius-blobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout temporary publisher branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Preserve patch and checkout exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .github/temporary/ton193-marker-radius.patch.b64 > "$RUNNER_TEMP/ton193-marker-radius.patch"
+          echo "80fa2925046100219edee25bb94c351d8ad4e580ec827efd6fa51365e24b130a  $RUNNER_TEMP/ton193-marker-radius.patch" | sha256sum -c -
+          git checkout --detach e4ce181011a2fbe93590d694f59f30e8b4d86202
+          git apply --check "$RUNNER_TEMP/ton193-marker-radius.patch"
+          git apply "$RUNNER_TEMP/ton193-marker-radius.patch"
+
+      - name: Verify local Git blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/expected-blobs.txt" <<'HASHES'
+          3c1574a74abd16075aa0298b3124ab7503c45a89  src/game/presentation/PlayerModelView.js
+          a773447b02d5f60c2125310c877e64e3a295a37b  tests/presentation/playerAppearanceSemantics.test.mjs
+          HASHES
+          while read -r expected path; do
+            actual="$(git hash-object "$path")"
+            test "$actual" = "$expected" || { echo "$path: expected $expected, got $actual" >&2; exit 1; }
+          done < "$RUNNER_TEMP/expected-blobs.txt"
+
+      - name: Upload exact Git blobs without moving a branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/blob-shas.txt"
+          while read -r expected path; do
+            jq -n --arg content "$(base64 -w0 "$path")" '{content:$content,encoding:"base64"}' > "$RUNNER_TEMP/blob.json"
+            actual="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input "$RUNNER_TEMP/blob.json" --jq .sha)"
+            test "$actual" = "$expected" || { echo "$path: API returned $actual, expected $expected" >&2; exit 1; }
+            printf '%s  %s\n' "$actual" "$path" | tee -a "$RUNNER_TEMP/blob-shas.txt"
+          done < "$RUNNER_TEMP/expected-blobs.txt"
+
+      - name: Upload SHA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ton193-marker-radius-blob-shas
+          path: ${{ runner.temp }}/blob-shas.txt
+          if-no-files-found: error
+          retention-days: 1
