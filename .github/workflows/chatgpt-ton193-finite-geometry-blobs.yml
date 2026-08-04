@@ -1,0 +1,71 @@
+name: ChatGPT TON-193 Finite Geometry Blobs
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chatgpt-ton193-finite-geometry-blobs.yml
+      - .github/temporary/ton193-finite-geometry.patch.b64
+
+permissions:
+  contents: write
+
+jobs:
+  upload-finite-geometry-blobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout temporary publisher branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Preserve patch and checkout exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .github/temporary/ton193-finite-geometry.patch.b64 > "$RUNNER_TEMP/ton193-finite-geometry.patch"
+          echo "74207819571d82e532696a7a262766a0e7c5fc15b03e5219ba55feb8030d591b  $RUNNER_TEMP/ton193-finite-geometry.patch" | sha256sum -c -
+          git checkout --detach d25018f328df5801de35228c250860c10b5a590c
+          git apply --check "$RUNNER_TEMP/ton193-finite-geometry.patch"
+          git apply "$RUNNER_TEMP/ton193-finite-geometry.patch"
+
+      - name: Verify local Git blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/expected-blobs.txt" <<'HASHES'
+          99cada27aef1254e30107f78a15b545a2cc89c37  src/game/presentation/PlayerV3HairCorrection.js
+          6f4880fa0b7ddfb8a28ff8dcaf2068789c5ae4fc  src/game/presentation/RigFootballKitOverlay.js
+          91e77e44221535e59fad6ecfe9ef759409d2deb5  tests/presentation/playerV3HairCorrection.test.mjs
+          9347a6153712ca7965267095db6aae24df559c36  tests/presentation/rigFootballKitOverlay.test.mjs
+          HASHES
+          while read -r expected path; do
+            actual="$(git hash-object "$path")"
+            test "$actual" = "$expected" || { echo "$path: expected $expected, got $actual" >&2; exit 1; }
+          done < "$RUNNER_TEMP/expected-blobs.txt"
+
+      - name: Upload exact Git blobs without moving a branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/blob-shas.txt"
+          while read -r expected path; do
+            jq -n --arg content "$(base64 -w0 "$path")" '{content:$content,encoding:"base64"}' > "$RUNNER_TEMP/blob.json"
+            actual="$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input "$RUNNER_TEMP/blob.json" --jq .sha)"
+            test "$actual" = "$expected" || { echo "$path: API returned $actual, expected $expected" >&2; exit 1; }
+            printf '%s  %s\n' "$actual" "$path" | tee -a "$RUNNER_TEMP/blob-shas.txt"
+          done < "$RUNNER_TEMP/expected-blobs.txt"
+
+      - name: Upload SHA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ton193-finite-geometry-blob-shas
+          path: ${{ runner.temp }}/blob-shas.txt
+          if-no-files-found: error
+          retention-days: 1
