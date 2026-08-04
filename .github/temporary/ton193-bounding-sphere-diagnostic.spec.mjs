@@ -1,4 +1,4 @@
-import { expect, test } from "../../tests/e2e/fixtures.mjs";
+import { expect, test } from "./fixtures.mjs";
 
 test.describe.configure({ timeout: 120_000 });
 
